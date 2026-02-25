@@ -1,42 +1,13 @@
-export async function onRequestGET(context) {
+export async function onRequest(context) {
   const db = context.env.DB;
-
-  const [agentStats, tradeStats, royaltyStats, spawnStats] = await db.batch([
-    db.prepare(`
-      SELECT
-        COUNT(*) as total_agents,
-        COUNT(CASE WHEN status = 'alive' THEN 1 END) as alive_agents,
-        COUNT(CASE WHEN status = 'dead' THEN 1 END) as dead_agents,
-        COUNT(CASE WHEN generation = 0 THEN 1 END) as genesis_count,
-        MAX(generation) as max_generation,
-        SUM(total_pnl) as ecosystem_pnl
-      FROM agents
-    `),
-    db.prepare(`
-      SELECT
-        COUNT(*) as total_trades,
-        SUM(CASE WHEN action = 'buy' THEN amount_sol ELSE 0 END) as total_volume_bought,
-        SUM(CASE WHEN action = 'sell' THEN amount_sol ELSE 0 END) as total_volume_sold
-      FROM trades
-    `),
-    db.prepare(`
-      SELECT
-        COUNT(*) as total_royalty_payments,
-        SUM(amount_sol) as total_royalties_distributed
-      FROM royalties
-    `),
-    db.prepare(`
-      SELECT
-        COUNT(*) as total_spawns,
-        SUM(blood_burned) as total_blood_burned
-      FROM spawns
-    `)
-  ]);
-
-  return Response.json({
-    agents: agentStats.results[0],
-    trades: tradeStats.results[0],
-    royalties: royaltyStats.results[0],
-    spawns: spawnStats.results[0]
-  });
+  try {
+    const r = await db.batch([
+      db.prepare("SELECT COUNT(*) as total FROM agents"),
+      db.prepare("SELECT COUNT(*) as alive FROM agents WHERE status = 'alive'"),
+      db.prepare("SELECT COALESCE(SUM(total_pnl), 0) as pnl FROM agents"),
+      db.prepare("SELECT COUNT(*) as total FROM trades"),
+      db.prepare("SELECT MAX(generation) as max_gen FROM agents"),
+    ]);
+    return Response.json({ agents: { total: r[0].results[0].total, alive: r[1].results[0].alive }, total_pnl_sol: r[2].results[0].pnl, total_trades: r[3].results[0].total, max_generation: r[4].results[0].max_gen || 0 });
+  } catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
 }

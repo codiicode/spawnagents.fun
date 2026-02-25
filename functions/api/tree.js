@@ -1,50 +1,20 @@
-export async function onRequestGET(context) {
+export async function onRequest(context) {
   const db = context.env.DB;
   const url = new URL(context.request.url);
   const genesisId = url.searchParams.get("genesis");
-
-  if (!genesisId) {
-    // Return all genesis agents as roots
-    const roots = await db.prepare(
-      "SELECT id, owner_wallet, status, total_pnl, total_trades, born_at, dna FROM agents WHERE generation = 0 ORDER BY born_at ASC"
-    ).all();
-
-    return Response.json({
-      roots: roots.results.map(r => ({ ...r, dna: JSON.parse(r.dna) }))
-    });
-  }
-
-  // Full tree for a specific genesis
-  const allDescendants = await db.prepare(`
-    WITH RECURSIVE tree AS (
-      SELECT id, parent_id, generation, owner_wallet, status, total_pnl, total_trades, born_at, dna
-      FROM agents WHERE id = ?
-      UNION ALL
-      SELECT a.id, a.parent_id, a.generation, a.owner_wallet, a.status, a.total_pnl, a.total_trades, a.born_at, a.dna
-      FROM agents a
-      JOIN tree t ON a.parent_id = t.id
-    )
-    SELECT * FROM tree ORDER BY generation ASC, born_at ASC
-  `).bind(genesisId).all();
-
-  // Build nested tree
-  const nodes = allDescendants.results.map(a => ({
-    ...a,
-    dna: JSON.parse(a.dna),
-    children: []
-  }));
-
-  const map = {};
-  nodes.forEach(n => map[n.id] = n);
-
-  let root = null;
-  nodes.forEach(n => {
-    if (n.id === genesisId) {
-      root = n;
-    } else if (map[n.parent_id]) {
-      map[n.parent_id].children.push(n);
+  try {
+    if (!genesisId) {
+      const roots = await db.prepare("SELECT id, generation, status, total_pnl FROM agents WHERE parent_id IS NULL ORDER BY created_at").all();
+      return Response.json({ trees: roots.results });
     }
-  });
-
-  return Response.json({ tree: root });
+    const all = await db.prepare("WITH RECURSIVE tree AS (SELECT id, parent_id, generation, status, total_pnl, dna FROM agents WHERE id = ? UNION ALL SELECT a.id, a.parent_id, a.generation, a.status, a.total_pnl, a.dna FROM agents a JOIN tree t ON a.parent_id = t.id) SELECT * FROM tree").bind(genesisId).all();
+    function buildTree(pid) {
+      const node = all.results.find(a => a.id === pid);
+      if (!node) return null;
+      node.dna = JSON.parse(node.dna || "{}");
+      node.children = all.results.filter(a => a.parent_id === pid).map(c => buildTree(c.id)).filter(Boolean);
+      return node;
+    }
+    return Response.json({ tree: buildTree(genesisId) });
+  } catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
 }

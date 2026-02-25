@@ -69,21 +69,25 @@ pub mod bloodline {
             Pubkey::default()
         };
 
+        let agent_id_clone = vault.agent_id.clone();
+        let owner_key = vault.owner;
+
         // Transfer SOL from owner to vault PDA
+        let vault_info = vault.to_account_info();
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
                 system_program::Transfer {
                     from: ctx.accounts.owner.to_account_info(),
-                    to: ctx.accounts.vault.to_account_info(),
+                    to: vault_info,
                 },
             ),
             deposit_lamports,
         )?;
 
         emit!(AgentCreated {
-            agent_id: vault.agent_id.clone(),
-            owner: vault.owner,
+            agent_id: agent_id_clone,
+            owner: owner_key,
             generation,
             deposit: deposit_lamports,
         });
