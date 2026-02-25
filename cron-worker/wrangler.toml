@@ -1,0 +1,10 @@
+name = "bloodline-cron"
+main = "worker.js"
+compatibility_date = "2024-12-01"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+SITE_URL = ""
+# Set CRON_SECRET via: npx wrangler secret put CRON_SECRET

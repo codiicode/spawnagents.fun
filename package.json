@@ -1,0 +1,11 @@
+{
+  "name": "bloodline",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npx wrangler pages dev public --d1 DB=bloodline-db",
+    "deploy": "npx wrangler pages deploy public --project-name=bloodline",
+    "db:create": "npx wrangler d1 create bloodline-db",
+    "db:init": "npx wrangler d1 execute bloodline-db --file=schema.sql --remote",
+    "db:init:local": "npx wrangler d1 execute bloodline-db --local --file=schema.sql"
+  }
+}

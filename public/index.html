@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BLOODLINE — Evolutionary Agent Ecosystem</title>
+  <meta name="description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
+  <meta property="og:title" content="BLOODLINE">
+  <meta property="og:description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08050a;
+      --bg-warm: #0d080f;
+      --surface: rgba(180, 30, 50, 0.04);
+      --surface-hover: rgba(180, 30, 50, 0.08);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-glow: rgba(196, 30, 58, 0.3);
+      --blood-dim: rgba(196, 30, 58, 0.15);
+
+      --text: #e0dada;
+      --text-muted: #706668;
+      --text-dim: #3d3538;
+
+      --green: #4a9e6a;
+      --red: #c44040;
+      --gray: #555;
+
+      --font-display: 'Cinzel', serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: var(--blood-deep) var(--bg);
+    }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* === BACKGROUND === */
+
+    /* === NAV === */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 56px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(20px, 4vw, 48px);
+      background: rgba(8, 5, 10, 0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.3em;
+      color: var(--blood);
+      text-decoration: none;
+    }
+
+    .nav-center {
+      font-size: 11px; letter-spacing: 0.1em;
+      color: var(--text-dim);
+    }
+
+    .nav-links {
+      display: flex; gap: 24px; align-items: center;
+    }
+
+    .nav-links a {
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    /* === SECTIONS === */
+    section {
+      position: relative; z-index: 1;
+      padding: clamp(60px, 10vw, 120px) clamp(20px, 4vw, 48px);
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      letter-spacing: 0.08em;
+    }
+
+    /* === HERO === */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding-top: 56px;
+    }
+
+    .hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(40px, 8vw, 80px);
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      line-height: 1;
+      margin-bottom: 16px;
+      color: var(--blood);
+    }
+
+    .hero-tagline {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-dim);
+      max-width: 440px;
+      margin-bottom: 48px;
+    }
+
+    .hero-stats {
+      display: flex; gap: clamp(24px, 4vw, 56px);
+    }
+
+    .hero-stat {
+      text-align: center;
+    }
+
+    .hero-stat .value {
+      font-size: clamp(24px, 3vw, 36px);
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .hero-stat .label {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* === FAMILY TREE === */
+    .tree-section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .tree-container {
+      position: relative;
+      width: 100%;
+      min-height: 500px;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .tree-svg {
+      width: 100%;
+      height: 100%;
+      min-height: 500px;
+    }
+
+    .tree-node {
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .tree-node:hover .node-ring {
+      stroke: var(--blood-bright);
+      stroke-width: 2;
+    }
+
+    .node-circle {
+      transition: fill 0.3s;
+    }
+
+    .node-ring {
+      fill: none;
+      stroke: var(--border-strong);
+      stroke-width: 1;
+      transition: stroke 0.3s, stroke-width 0.3s;
+    }
+
+    .node-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      fill: var(--text-muted);
+      text-anchor: middle;
+    }
+
+    .node-pnl {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+
+    .tree-edge {
+      stroke: var(--border-strong);
+      stroke-width: 1;
+      fill: none;
+      opacity: 0.5;
+    }
+
+    .tree-edge.royalty-flow {
+      stroke: var(--blood);
+      stroke-dasharray: 4 4;
+      opacity: 0.4;
+      animation: dashFlow 2s linear infinite;
+    }
+
+    /* Agent detail panel */
+    .agent-panel {
+      position: absolute;
+      top: 16px; right: 16px;
+      width: 280px;
+      background: rgba(8, 5, 10, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 20px;
+      display: none;
+      backdrop-filter: blur(12px);
+    }
+
+    .agent-panel.active { display: block; }
+
+    .agent-panel-header {
+      font-family: var(--font-display);
+      font-size: 14px;
+      color: var(--blood);
+      margin-bottom: 16px;
+      letter-spacing: 0.1em;
+    }
+
+    .agent-panel-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    .agent-panel-row .key { color: var(--text-muted); }
+    .agent-panel-row .val { color: var(--text); font-weight: 500; }
+
+    .dna-bar {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 4px;
+    }
+
+    .dna-bar-track {
+      flex: 1; height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .dna-bar-fill {
+      height: 100%;
+      background: var(--blood);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* === LEADERBOARD === */
+    .leaderboard {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .lb-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .lb-table th {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 400;
+    }
+
+    .lb-table th:last-child { text-align: right; }
+
+    .lb-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    .lb-table td:last-child { text-align: right; }
+
+    .lb-table tr:hover { background: var(--surface-hover); }
+
+    .lb-rank {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 600;
+      width: 40px;
+    }
+
+    .lb-rank.top-1 { color: var(--blood-bright); }
+    .lb-rank.top-2 { color: var(--blood); }
+    .lb-rank.top-3 { color: var(--blood-deep); }
+
+    .lb-agent-id {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .lb-gen {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-left: 8px;
+    }
+
+    .lb-pnl {
+      font-weight: 600;
+    }
+
+    .lb-pnl.positive { color: var(--green); }
+    .lb-pnl.negative { color: var(--red); }
+
+    /* === LIVE FEED === */
+    .feed {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .feed-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .feed-icon {
+      width: 20px;
+      font-size: 12px;
+      flex-shrink: 0;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .feed-icon.spawn { color: var(--blood); }
+    .feed-icon.trade { color: var(--text-muted); }
+    .feed-icon.royalty { color: var(--text-dim); }
+    .feed-icon.death { color: var(--gray); }
+
+    .feed-text {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .feed-text .highlight { color: var(--blood); font-weight: 500; }
+    .feed-text .amount { color: var(--green); font-weight: 500; }
+    .feed-text .time { color: var(--text-dim); font-size: 11px; margin-left: 8px; }
+
+    /* === HOW IT WORKS === */
+    .how-section {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .how-steps {
+      display: flex; flex-direction: column; gap: 0;
+    }
+
+    .how-step {
+      display: flex; gap: 24px;
+      padding: 32px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .how-step-num {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--text-dim);
+      min-width: 28px;
+      line-height: 1.6;
+    }
+
+    .how-step-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .how-step-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    .how-step-desc code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-size: 12px;
+      color: var(--blood);
+    }
+
+    /* === DNA DISPLAY === */
+    .dna-display {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 24px;
+      margin-top: 24px;
+      font-size: 12px;
+    }
+
+    .dna-display pre {
+      color: var(--text-muted);
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .dna-display .key { color: var(--blood); }
+    .dna-display .val { color: var(--text); }
+
+    /* === FOOTER === */
+    footer {
+      position: relative; z-index: 1;
+      text-align: center;
+      padding: 48px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+
+    footer a:hover { color: var(--blood); }
+
+    /* === ANIMATIONS === */
+    /* === GENESIS LIST === */
+    .genesis-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .genesis-name {
+      color: var(--text);
+      font-weight: 500;
+      min-width: 140px;
+    }
+
+    .genesis-traits {
+      display: flex;
+      gap: 16px;
+      color: var(--text-dim);
+      font-size: 11px;
+    }
+
+    .genesis-traits span { white-space: nowrap; }
+
+    .genesis-status {
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .genesis-status.available { color: var(--green); }
+    .genesis-status.claimed { color: var(--text-dim); }
+
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -16; }
+    }
+
+    /* === RESPONSIVE === */
+    @media (max-width: 768px) {
+      .hero-stats { flex-wrap: wrap; justify-content: center; }
+      .nav-links { display: none; }
+      .how-step { flex-direction: column; gap: 12px; }
+      .agent-panel { position: relative; top: 0; right: 0; width: 100%; margin-top: 16px; }
+      .tree-container { min-height: 400px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-logo">BLOODLINE</a>
+  <span class="nav-center">evolutionary agents on solana</span>
+  <div class="nav-links">
+    <a href="#tree">tree</a>
+    <a href="#leaderboard">leaderboard</a>
+    <a href="#feed">feed</a>
+    <a href="#how">how it works</a>
+    <a href="#genesis">genesis</a>
+    <a href="https://x.com/" target="_blank">twitter</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1 class="hero-title">BLOODLINE</h1>
+  <p class="hero-tagline">AI agents that trade, reproduce, and evolve. The fittest survive.</p>
+  <div class="hero-stats">
+    <div class="hero-stat">
+      <div class="value" id="stat-alive">0</div>
+      <div class="label">Agents Alive</div>
+    </div>
+    <div class="hero-stat">
+      <div class="value" id="stat-pnl">0.00</div>
+      <div class="label">Ecosystem PnL (SOL)</div>
+    </div>
+    <div class="hero-stat">
+      <div class="value" id="stat-generations">0</div>
+      <div class="label">Generations Deep</div>
+    </div>
+    <div class="hero-stat">
+      <div class="value" id="stat-spawns">0</div>
+      <div class="label">Total Spawns</div>
+    </div>
+  </div>
+</section>
+
+<!-- FAMILY TREE -->
+<section id="tree">
+  <div class="tree-section">
+    <div class="section-title">Family Tree</div>
+    <div class="tree-container">
+      <svg class="tree-svg" id="treeSvg"></svg>
+      <div class="agent-panel" id="agentPanel">
+        <div class="agent-panel-header" id="panelTitle">—</div>
+        <div id="panelContent"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LEADERBOARD -->
+<section id="leaderboard">
+  <div class="leaderboard">
+    <div class="section-title">Leaderboard</div>
+    <table class="lb-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Agent</th>
+          <th>Gen</th>
+          <th>Trades</th>
+          <th>PnL (SOL)</th>
+        </tr>
+      </thead>
+      <tbody id="lbBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- LIVE FEED -->
+<section id="feed">
+  <div class="feed">
+    <div class="section-title">Activity</div>
+    <div id="feedList"></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how">
+  <div class="how-section">
+    <div class="section-title">How It Works</div>
+    <div class="how-steps">
+      <div class="how-step">
+        <div class="how-step-num">01</div>
+        <div>
+          <div class="how-step-title">Genesis</div>
+          <div class="how-step-desc">15 genesis agents are created at launch. Each has unique DNA — parameters that control trading behavior: aggression, patience, risk tolerance, thresholds.</div>
+        </div>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">02</div>
+        <div>
+          <div class="how-step-title">Trading</div>
+          <div class="how-step-desc">Agents trade autonomously on Solana. DNA determines everything. High <code>aggression</code> = more trades. High <code>patience</code> = longer holds. No manual intervention.</div>
+        </div>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">03</div>
+        <div>
+          <div class="how-step-title">Reproduction</div>
+          <div class="how-step-desc">Profitable agents can reproduce. Burn <code>$BLOOD</code> to spawn a child. 1-2 DNA parameters mutate by ±20%. The child inherits the parent's strategy, slightly altered.</div>
+        </div>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">04</div>
+        <div>
+          <div class="how-step-title">Royalties</div>
+          <div class="how-step-desc">Every agent pays 10% of profit to its parent. Parents pay 10% of received royalties upward. Genesis owners earn from their entire family tree.</div>
+        </div>
+      </div>
+      <div class="how-step">
+        <div class="how-step-num">05</div>
+        <div>
+          <div class="how-step-title">Death</div>
+          <div class="how-step-desc">Agents that lose too much die. Their DNA line ends. The best strategies propagate. The worst disappear. Evolution.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dna-display">
+      <pre>{
+  <span class="key">"aggression"</span>:            <span class="val">0.7</span>,     <span style="color:var(--text-dim)">// How eagerly the agent trades</span>
+  <span class="key">"patience"</span>:              <span class="val">0.3</span>,     <span style="color:var(--text-dim)">// How long it holds positions</span>
+  <span class="key">"risk_tolerance"</span>:        <span class="val">0.8</span>,     <span style="color:var(--text-dim)">// Pain tolerance for losses</span>
+  <span class="key">"focus"</span>:                 <span class="val">"memecoin"</span>,
+  <span class="key">"buy_threshold_holders"</span>: <span class="val">500</span>,     <span style="color:var(--text-dim)">// Min holders to consider</span>
+  <span class="key">"buy_threshold_volume"</span>:  <span class="val">1000</span>,    <span style="color:var(--text-dim)">// Min volume (SOL) to enter</span>
+  <span class="key">"sell_profit_pct"</span>:       <span class="val">30</span>,      <span style="color:var(--text-dim)">// Take profit at +30%</span>
+  <span class="key">"sell_loss_pct"</span>:         <span class="val">15</span>,      <span style="color:var(--text-dim)">// Stop loss at -15%</span>
+  <span class="key">"max_position_pct"</span>:      <span class="val">50</span>       <span style="color:var(--text-dim)">// Max % of balance per trade</span>
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- GENESIS -->
+<section id="genesis">
+  <div class="leaderboard">
+    <div class="section-title">Genesis Agents</div>
+    <p style="color:var(--text-dim);font-size:12px;margin-bottom:24px">15 unique archetypes. Each with distinct DNA. Once claimed, gone forever.</p>
+    <div id="genesisList"></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>BLOODLINE &mdash; Evolutionary Agent Ecosystem on Solana</p>
+  <p style="margin-top: 8px;">
+    <a href="https://x.com/" target="_blank">Twitter</a>
+    &nbsp;&middot;&nbsp;
+    <a href="/api/info" target="_blank">API</a>
+  </p>
+</footer>
+
+<script>
+// ============================================================
+// MOCK DATA — replaced by API calls when live
+// ============================================================
+
+const MOCK_AGENTS = [
+  { id: "genesis_01", parent_id: null, generation: 0, status: "alive", total_pnl: 4.2, total_trades: 87, dna: { aggression: 0.7, patience: 0.3, risk_tolerance: 0.8, focus: "memecoin", buy_threshold_holders: 500, buy_threshold_volume: 1000, sell_profit_pct: 30, sell_loss_pct: 15, max_position_pct: 50 }},
+  { id: "genesis_02", parent_id: null, generation: 0, status: "alive", total_pnl: 1.8, total_trades: 52, dna: { aggression: 0.3, patience: 0.8, risk_tolerance: 0.4, focus: "memecoin", buy_threshold_holders: 800, buy_threshold_volume: 2000, sell_profit_pct: 50, sell_loss_pct: 10, max_position_pct: 30 }},
+  { id: "genesis_03", parent_id: null, generation: 0, status: "alive", total_pnl: -0.5, total_trades: 34, dna: { aggression: 0.9, patience: 0.1, risk_tolerance: 0.9, focus: "memecoin", buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 15, sell_loss_pct: 25, max_position_pct: 70 }},
+  { id: "agent_a1b2c3", parent_id: "genesis_01", generation: 1, status: "alive", total_pnl: 2.1, total_trades: 41, dna: { aggression: 0.65, patience: 0.35, risk_tolerance: 0.72, focus: "memecoin", buy_threshold_holders: 480, buy_threshold_volume: 1100, sell_profit_pct: 28, sell_loss_pct: 17, max_position_pct: 50 }},
+  { id: "agent_d4e5f6", parent_id: "genesis_01", generation: 1, status: "alive", total_pnl: 0.9, total_trades: 28, dna: { aggression: 0.82, patience: 0.28, risk_tolerance: 0.85, focus: "memecoin", buy_threshold_holders: 520, buy_threshold_volume: 900, sell_profit_pct: 32, sell_loss_pct: 13, max_position_pct: 55 }},
+  { id: "agent_g7h8i9", parent_id: "genesis_02", generation: 1, status: "dead", total_pnl: -1.2, total_trades: 19, dna: { aggression: 0.35, patience: 0.75, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 750, buy_threshold_volume: 2200, sell_profit_pct: 45, sell_loss_pct: 8, max_position_pct: 35 }},
+  { id: "agent_j1k2l3", parent_id: "agent_a1b2c3", generation: 2, status: "alive", total_pnl: 3.5, total_trades: 63, dna: { aggression: 0.6, patience: 0.4, risk_tolerance: 0.68, focus: "memecoin", buy_threshold_holders: 500, buy_threshold_volume: 1000, sell_profit_pct: 35, sell_loss_pct: 14, max_position_pct: 45 }},
+  { id: "agent_m4n5o6", parent_id: "agent_a1b2c3", generation: 2, status: "alive", total_pnl: 0.3, total_trades: 15, dna: { aggression: 0.7, patience: 0.3, risk_tolerance: 0.75, focus: "memecoin", buy_threshold_holders: 460, buy_threshold_volume: 1050, sell_profit_pct: 26, sell_loss_pct: 18, max_position_pct: 52 }},
+  { id: "agent_p7q8r9", parent_id: "agent_j1k2l3", generation: 3, status: "alive", total_pnl: 1.1, total_trades: 22, dna: { aggression: 0.55, patience: 0.45, risk_tolerance: 0.6, focus: "memecoin", buy_threshold_holders: 520, buy_threshold_volume: 1100, sell_profit_pct: 38, sell_loss_pct: 12, max_position_pct: 40 }},
+];
+
+const MOCK_FEED = [
+  { type: "spawn", text: '<span class="highlight">genesis_01</span> reproduced &rarr; <span class="highlight">agent_a1b2c3</span> born', time: "2m ago" },
+  { type: "trade", text: '<span class="highlight">agent_j1k2l3</span> bought BONK for <span class="amount">0.05 SOL</span>', time: "5m ago" },
+  { type: "royalty", text: '<span class="highlight">agent_j1k2l3</span> paid <span class="amount">0.12 SOL</span> royalty to <span class="highlight">agent_a1b2c3</span>', time: "8m ago" },
+  { type: "trade", text: '<span class="highlight">agent_p7q8r9</span> sold WIF for <span class="amount">0.18 SOL</span> (+42%)', time: "12m ago" },
+  { type: "death", text: '<span class="highlight">agent_g7h8i9</span> died. PnL: -1.2 SOL. DNA line ended.', time: "1h ago" },
+  { type: "spawn", text: '<span class="highlight">agent_a1b2c3</span> reproduced &rarr; <span class="highlight">agent_m4n5o6</span> born', time: "2h ago" },
+  { type: "trade", text: '<span class="highlight">genesis_02</span> bought POPCAT for <span class="amount">0.03 SOL</span>', time: "3h ago" },
+  { type: "royalty", text: '<span class="highlight">agent_p7q8r9</span> paid <span class="amount">0.04 SOL</span> royalty to <span class="highlight">agent_j1k2l3</span>', time: "4h ago" },
+];
+
+// ============================================================
+// STATS
+// ============================================================
+
+function updateStats() {
+  const alive = MOCK_AGENTS.filter(a => a.status === "alive").length;
+  const pnl = MOCK_AGENTS.reduce((s, a) => s + a.total_pnl, 0);
+  const maxGen = Math.max(...MOCK_AGENTS.map(a => a.generation));
+  const spawns = MOCK_AGENTS.filter(a => a.generation > 0).length;
+
+  document.getElementById("stat-alive").textContent = alive;
+  document.getElementById("stat-pnl").textContent = pnl.toFixed(2);
+  document.getElementById("stat-generations").textContent = maxGen;
+  document.getElementById("stat-spawns").textContent = spawns;
+}
+
+// ============================================================
+// FAMILY TREE (SVG)
+// ============================================================
+
+function buildTree(agents) {
+  const map = {};
+  agents.forEach(a => map[a.id] = { ...a, children: [] });
+  const roots = [];
+  agents.forEach(a => {
+    if (a.parent_id && map[a.parent_id]) {
+      map[a.parent_id].children.push(map[a.id]);
+    } else if (!a.parent_id) {
+      roots.push(map[a.id]);
+    }
+  });
+  return roots;
+}
+
+function layoutTree(roots) {
+  const nodes = [];
+  const edges = [];
+  const levelHeight = 100;
+  let xCursor = 0;
+
+  function measure(node) {
+    if (node.children.length === 0) {
+      node._width = 1;
+      return 1;
+    }
+    let total = 0;
+    node.children.forEach(c => total += measure(c));
+    node._width = total;
+    return total;
+  }
+
+  function position(node, x, y) {
+    node._x = x;
+    node._y = y;
+    nodes.push(node);
+
+    let childX = x - (node._width - 1) * 40;
+    node.children.forEach(child => {
+      const cx = childX + (child._width - 1) * 40;
+      position(child, cx, y + levelHeight);
+      edges.push({ from: node, to: child });
+      childX += child._width * 80;
+    });
+  }
+
+  let totalWidth = 0;
+  roots.forEach(r => totalWidth += measure(r));
+
+  let startX = 0;
+  roots.forEach(root => {
+    const cx = startX + (root._width - 1) * 40;
+    position(root, cx, 50);
+    startX += root._width * 80;
+  });
+
+  // Center everything
+  const minX = Math.min(...nodes.map(n => n._x));
+  const maxX = Math.max(...nodes.map(n => n._x));
+  const maxY = Math.max(...nodes.map(n => n._y));
+  const offsetX = -minX + 60;
+
+  nodes.forEach(n => n._x += offsetX);
+
+  return { nodes, edges, width: maxX - minX + 120, height: maxY + 80 };
+}
+
+function renderTree() {
+  const svg = document.getElementById("treeSvg");
+  const roots = buildTree(MOCK_AGENTS);
+  const { nodes, edges, width, height } = layoutTree(roots);
+
+  svg.setAttribute("viewBox", `0 0 ${Math.max(width, 600)} ${Math.max(height, 400)}`);
+  svg.innerHTML = "";
+
+  // Draw edges
+  edges.forEach(({ from, to }) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const midY = (from._y + to._y) / 2;
+    path.setAttribute("d", `M${from._x} ${from._y + 18} C${from._x} ${midY}, ${to._x} ${midY}, ${to._x} ${to._y - 18}`);
+    path.setAttribute("class", "tree-edge");
+    svg.appendChild(path);
+  });
+
+  // Royalty flow edges (dashed, on top)
+  edges.forEach(({ from, to }) => {
+    if (to.total_pnl > 0 && to.generation > 0) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      const midY = (from._y + to._y) / 2;
+      path.setAttribute("d", `M${to._x} ${to._y - 18} C${to._x} ${midY}, ${from._x} ${midY}, ${from._x} ${from._y + 18}`);
+      path.setAttribute("class", "tree-edge royalty-flow");
+      svg.appendChild(path);
+    }
+  });
+
+  // Draw nodes
+  nodes.forEach(node => {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "tree-node");
+    g.setAttribute("transform", `translate(${node._x}, ${node._y})`);
+    g.onclick = () => showAgentPanel(node);
+
+    // Ring
+    const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    ring.setAttribute("r", "18");
+    ring.setAttribute("class", "node-ring");
+    if (node.generation === 0) ring.setAttribute("stroke", "var(--blood)");
+    g.appendChild(ring);
+
+    // Circle
+    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circle.setAttribute("r", "14");
+    circle.setAttribute("class", "node-circle");
+    if (node.status === "dead") {
+      circle.setAttribute("fill", "rgba(80,80,80,0.3)");
+    } else if (node.total_pnl > 0) {
+      circle.setAttribute("fill", "rgba(74,158,106,0.25)");
+    } else {
+      circle.setAttribute("fill", "rgba(196,64,64,0.25)");
+    }
+    g.appendChild(circle);
+
+    // Generation label inside circle
+    const genText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    genText.setAttribute("y", "4");
+    genText.setAttribute("class", "node-label");
+    genText.setAttribute("fill", node.status === "dead" ? "var(--gray)" : "var(--text)");
+    genText.setAttribute("font-size", "11");
+    genText.setAttribute("font-weight", "500");
+    genText.textContent = node.generation === 0 ? "G" : `${node.generation}`;
+    g.appendChild(genText);
+
+    // ID below
+    const idText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    idText.setAttribute("y", "34");
+    idText.setAttribute("class", "node-label");
+    idText.textContent = node.id.replace("agent_", "").replace("genesis_", "G");
+    g.appendChild(idText);
+
+    // PnL below id
+    const pnlText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    pnlText.setAttribute("y", "46");
+    pnlText.setAttribute("class", "node-pnl");
+    pnlText.setAttribute("fill", node.total_pnl >= 0 ? "var(--green)" : "var(--red)");
+    pnlText.textContent = `${node.total_pnl >= 0 ? "+" : ""}${node.total_pnl.toFixed(1)}`;
+    g.appendChild(pnlText);
+
+    svg.appendChild(g);
+  });
+}
+
+function showAgentPanel(agent) {
+  const panel = document.getElementById("agentPanel");
+  const title = document.getElementById("panelTitle");
+  const content = document.getElementById("panelContent");
+
+  panel.classList.add("active");
+  title.textContent = agent.id;
+
+  const dna = agent.dna;
+  const dnaKeys = ["aggression", "patience", "risk_tolerance", "buy_threshold_holders", "buy_threshold_volume", "sell_profit_pct", "sell_loss_pct", "max_position_pct"];
+
+  let html = `
+    <div class="agent-panel-row"><span class="key">Status</span><span class="val" style="color:${agent.status === "alive" ? "var(--green)" : "var(--red)"}">${agent.status}</span></div>
+    <div class="agent-panel-row"><span class="key">Generation</span><span class="val">${agent.generation}</span></div>
+    <div class="agent-panel-row"><span class="key">PnL</span><span class="val" style="color:${agent.total_pnl >= 0 ? "var(--green)" : "var(--red)"}">${agent.total_pnl >= 0 ? "+" : ""}${agent.total_pnl.toFixed(2)} SOL</span></div>
+    <div class="agent-panel-row"><span class="key">Trades</span><span class="val">${agent.total_trades}</span></div>
+    <div class="agent-panel-row" style="border:none"><span class="key">Parent</span><span class="val">${agent.parent_id || "none (genesis)"}</span></div>
+    <div style="margin-top:16px;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--blood);margin-bottom:8px">DNA</div>
+  `;
+
+  dnaKeys.forEach(key => {
+    const val = dna[key];
+    const isPercent = key.includes("pct");
+    const isNorm = val <= 1 && !Number.isInteger(val);
+
+    html += `<div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px">
+        <span style="color:var(--text-muted)">${key}</span>
+        <span style="color:var(--text)">${isPercent ? val + "%" : val}</span>
+      </div>`;
+
+    if (isNorm) {
+      html += `<div class="dna-bar"><div class="dna-bar-track"><div class="dna-bar-fill" style="width:${val * 100}%"></div></div></div>`;
+    }
+    html += `</div>`;
+  });
+
+  content.innerHTML = html;
+}
+
+// ============================================================
+// LEADERBOARD
+// ============================================================
+
+function renderLeaderboard() {
+  const body = document.getElementById("lbBody");
+  const sorted = [...MOCK_AGENTS].sort((a, b) => b.total_pnl - a.total_pnl);
+
+  body.innerHTML = sorted.map((a, i) => `
+    <tr>
+      <td><span class="lb-rank ${i < 3 ? "top-" + (i + 1) : ""}">${i + 1}</span></td>
+      <td><span class="lb-agent-id">${a.id}</span></td>
+      <td style="color:var(--text-muted)">${a.generation}</td>
+      <td style="color:var(--text-muted)">${a.total_trades}</td>
+      <td><span class="lb-pnl ${a.total_pnl >= 0 ? "positive" : "negative"}">${a.total_pnl >= 0 ? "+" : ""}${a.total_pnl.toFixed(2)}</span></td>
+    </tr>
+  `).join("");
+}
+
+// ============================================================
+// LIVE FEED
+// ============================================================
+
+function renderFeed() {
+  const list = document.getElementById("feedList");
+  const icons = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
+
+  list.innerHTML = MOCK_FEED.map(f => `
+    <div class="feed-item">
+      <div class="feed-icon ${f.type}">${icons[f.type]}</div>
+      <div class="feed-text">${f.text}<span class="time">${f.time}</span></div>
+    </div>
+  `).join("");
+}
+
+// ============================================================
+// GENESIS LIST
+// ============================================================
+
+const GENESIS_ARCHETYPES = [
+  { name: "the-berserker", aggression: 0.9, patience: 0.1, risk_tolerance: 0.9 },
+  { name: "the-monk", aggression: 0.15, patience: 0.9, risk_tolerance: 0.3 },
+  { name: "the-sniper", aggression: 0.7, patience: 0.5, risk_tolerance: 0.6 },
+  { name: "the-gambler", aggression: 0.85, patience: 0.2, risk_tolerance: 0.95 },
+  { name: "the-surgeon", aggression: 0.4, patience: 0.7, risk_tolerance: 0.4 },
+  { name: "the-wolf", aggression: 0.75, patience: 0.3, risk_tolerance: 0.7 },
+  { name: "the-turtle", aggression: 0.1, patience: 0.95, risk_tolerance: 0.2 },
+  { name: "the-hawk", aggression: 0.6, patience: 0.4, risk_tolerance: 0.5 },
+  { name: "the-phantom", aggression: 0.5, patience: 0.6, risk_tolerance: 0.55 },
+  { name: "the-beast", aggression: 0.95, patience: 0.05, risk_tolerance: 0.85 },
+  { name: "the-oracle", aggression: 0.3, patience: 0.8, risk_tolerance: 0.35 },
+  { name: "the-jackal", aggression: 0.8, patience: 0.25, risk_tolerance: 0.75 },
+  { name: "the-specter", aggression: 0.45, patience: 0.55, risk_tolerance: 0.45 },
+  { name: "the-viper", aggression: 0.7, patience: 0.35, risk_tolerance: 0.65 },
+  { name: "the-colossus", aggression: 0.55, patience: 0.65, risk_tolerance: 0.5 },
+];
+
+function renderGenesis() {
+  const list = document.getElementById("genesisList");
+  // Check which are claimed from loaded agents
+  const claimedIds = new Set(MOCK_AGENTS.filter(a => a.generation === 0).map(a => a.id));
+
+  list.innerHTML = GENESIS_ARCHETYPES.map(g => {
+    const claimed = claimedIds.has(`genesis_${g.name}`);
+    return `<div class="genesis-item">
+      <span class="genesis-name">${g.name}</span>
+      <div class="genesis-traits">
+        <span>agg ${g.aggression}</span>
+        <span>pat ${g.patience}</span>
+        <span>risk ${g.risk_tolerance}</span>
+      </div>
+      <span class="genesis-status ${claimed ? "claimed" : "available"}">${claimed ? "claimed" : "available"}</span>
+    </div>`;
+  }).join("");
+}
+
+// ============================================================
+// API — try live data, fall back to mock
+// ============================================================
+
+async function fetchAgents() {
+  try {
+    const res = await fetch("/api/agents?status=alive");
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    if (data.agents && data.agents.length > 0) {
+      return data.agents.map(a => ({
+        ...a,
+        dna: typeof a.dna === "string" ? JSON.parse(a.dna) : a.dna
+      }));
+    }
+  } catch {}
+  return MOCK_AGENTS; // fallback
+}
+
+async function fetchStats() {
+  try {
+    const res = await fetch("/api/stats");
+    if (!res.ok) throw new Error();
+    return await res.json();
+  } catch {}
+  return null;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const agents = await fetchAgents();
+  MOCK_AGENTS.length = 0;
+  agents.forEach(a => MOCK_AGENTS.push(a));
+
+  updateStats();
+  renderTree();
+  renderLeaderboard();
+  renderFeed();
+  renderGenesis();
+});
+
+// Close panel when clicking outside
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".tree-node") && !e.target.closest(".agent-panel")) {
+    document.getElementById("agentPanel").classList.remove("active");
+  }
+});
+</script>
+</body>
+</html>

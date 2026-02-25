@@ -1,0 +1,15 @@
+name = "bloodline"
+compatibility_date = "2024-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bloodline-db"
+database_id = "" # Fylls i efter: npx wrangler d1 create bloodline-db
+
+[vars]
+PROTOCOL_WALLET = "" # Fylls i med din wallet
+MIN_SPAWN_PNL = "0.5"
+ROYALTY_PCT = "0.1"
+PROTOCOL_FEE_PCT = "0.02"
+MAX_GENERATIONS = "5"
+GENESIS_COUNT = "15"
