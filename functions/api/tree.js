@@ -4,7 +4,7 @@ export async function onRequest(context) {
   const genesisId = url.searchParams.get("genesis");
   try {
     if (!genesisId) {
-      const roots = await db.prepare("SELECT id, generation, status, total_pnl FROM agents WHERE parent_id IS NULL ORDER BY created_at").all();
+      const roots = await db.prepare("SELECT id, generation, status, total_pnl FROM agents WHERE parent_id IS NULL ORDER BY born_at").all();
       return Response.json({ trees: roots.results });
     }
     const all = await db.prepare("WITH RECURSIVE tree AS (SELECT id, parent_id, generation, status, total_pnl, dna FROM agents WHERE id = ? UNION ALL SELECT a.id, a.parent_id, a.generation, a.status, a.total_pnl, a.dna FROM agents a JOIN tree t ON a.parent_id = t.id) SELECT * FROM tree").bind(genesisId).all();

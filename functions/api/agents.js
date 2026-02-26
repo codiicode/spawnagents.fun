@@ -11,8 +11,17 @@ export async function onRequest(context) {
       agent.dna = JSON.parse(agent.dna || "{}");
       return Response.json({ agent, trades: trades.results, children: children.results });
     }
-    const status = url.searchParams.get("status") || "alive";
-    const agents = await db.prepare("SELECT id, parent_id, generation, owner_wallet, status, total_pnl, created_at FROM agents WHERE status = ? ORDER BY created_at DESC LIMIT 100").bind(status).all();
+    const status = url.searchParams.get("status");
+    let query, params;
+    if (status) {
+      query = "SELECT id, parent_id, generation, owner_wallet, dna, status, total_pnl, total_trades, born_at FROM agents WHERE status = ? ORDER BY born_at DESC LIMIT 100";
+      params = [status];
+    } else {
+      query = "SELECT id, parent_id, generation, owner_wallet, dna, status, total_pnl, total_trades, born_at FROM agents ORDER BY born_at DESC LIMIT 100";
+      params = [];
+    }
+    const stmt = params.length ? db.prepare(query).bind(...params) : db.prepare(query);
+    const agents = await stmt.all();
     return Response.json({ agents: agents.results });
   } catch (e) { return Response.json({ error: e.message }, { status: 500 }); }
 }
