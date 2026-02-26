@@ -475,9 +475,7 @@
     /* === LIVE DATA (two columns) === */
     .data-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border);
+      grid-template-columns: 1fr;
       border-top: 1px solid var(--border);
       border-bottom: 1px solid var(--border);
     }
@@ -542,38 +540,6 @@
     .lb-pnl.pos { color: var(--green); }
     .lb-pnl.neg { color: var(--red); }
 
-    /* Feed */
-    .feed-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 11px 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .feed-icon {
-      font-size: 12px;
-      flex-shrink: 0;
-      line-height: 1.5;
-      width: 16px;
-      text-align: center;
-    }
-
-    .feed-icon.spawn { color: var(--blood); }
-    .feed-icon.trade { color: var(--text-muted); }
-    .feed-icon.royalty { color: var(--text-muted); }
-    .feed-icon.death { color: var(--text-dim); }
-
-    .feed-text {
-      font-size: 12px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    .feed-text .hl { color: var(--text); font-weight: 500; }
-    .feed-text .am { color: var(--green); font-weight: 500; }
-    .feed-text .tm { color: var(--text-dim); font-size: 10px; margin-left: 8px; }
-
     .empty-state {
       font-size: 12px;
       color: var(--text-dim);
@@ -604,7 +570,6 @@
     /* === RESPONSIVE === */
     @media (max-width: 768px) {
       .how-grid { grid-template-columns: 1fr; }
-      .data-grid { grid-template-columns: 1fr; }
       .hero-stats { flex-wrap: wrap; justify-content: center; }
     }
 
@@ -707,15 +672,11 @@
 
 <hr class="section-divider">
 
-<!-- LEADERBOARD + ACTIVITY -->
+<!-- LEADERBOARD -->
 <div class="data-grid">
   <div class="data-col">
     <div class="data-col-title">Leaderboard</div>
     <div id="lbList"><div class="empty-state">Loading...</div></div>
-  </div>
-  <div class="data-col">
-    <div class="data-col-title">Activity</div>
-    <div id="feedList"><div class="empty-state">Loading...</div></div>
   </div>
 </div>
 
@@ -746,14 +707,6 @@ const MOCK_AGENTS = [
   { id: "wolf-a1-x-z", parent_id: "wolf-a1-x", generation: 3, status: "alive", total_pnl: 1.1, total_trades: 22, dna: { aggression: 0.58, patience: 0.5, risk_tolerance: 0.55 }},
 ];
 
-const MOCK_FEED = [
-  { type: "spawn", text: '<span class="hl">genesis_01</span> reproduced &rarr; <span class="hl">agent_a1b2c3</span>', time: "2m" },
-  { type: "trade", text: '<span class="hl">agent_j1k2l3</span> bought BONK for <span class="am">0.05 SOL</span>', time: "5m" },
-  { type: "royalty", text: '<span class="hl">agent_j1k2l3</span> paid <span class="am">0.12 SOL</span> to <span class="hl">agent_a1b2c3</span>', time: "8m" },
-  { type: "trade", text: '<span class="hl">agent_p7q8r9</span> sold WIF <span class="am">+42%</span>', time: "12m" },
-  { type: "death", text: '<span class="hl">agent_g7h8i9</span> died. PnL: -1.2 SOL', time: "1h" },
-  { type: "spawn", text: '<span class="hl">agent_a1b2c3</span> reproduced &rarr; <span class="hl">agent_m4n5o6</span>', time: "2h" },
-];
 
 // ============================================================
 // STATS
@@ -789,48 +742,6 @@ function renderLeaderboard(agents) {
       <span class="lb-pnl ${a.total_pnl >= 0 ? "pos" : "neg"}">${a.total_pnl >= 0 ? "+" : ""}${a.total_pnl.toFixed(2)}</span>
     </div>
   `).join("");
-}
-
-// ============================================================
-// FEED
-// ============================================================
-
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr + "Z").getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "now";
-  if (m < 60) return m + "m";
-  const h = Math.floor(m / 60);
-  if (h < 24) return h + "h";
-  return Math.floor(h / 24) + "d";
-}
-
-function formatEvent(e) {
-  const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-  const ic = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
-  let text = "";
-  if (e.type === "trade" && d.action === "buy") {
-    text = `<span class="hl">${e.agent_id}</span> bought ${d.token} for <span class="am">${d.amount} SOL</span>`;
-  } else if (e.type === "trade" && d.action === "sell") {
-    text = `<span class="hl">${e.agent_id}</span> sold ${d.token} <span class="am">${d.pnl_pct > 0 ? "+" : ""}${(d.pnl_pct||0).toFixed(1)}%</span>`;
-  } else if (e.type === "spawn") {
-    text = `<span class="hl">${d.parent}</span> reproduced &rarr; <span class="hl">${e.agent_id}</span>`;
-  } else if (e.type === "royalty") {
-    text = `<span class="hl">${d.from}</span> paid <span class="am">${(d.amount||0).toFixed(3)} SOL</span> to <span class="hl">${d.to}</span>`;
-  } else {
-    text = `<span class="hl">${e.agent_id}</span> ${e.type}`;
-  }
-  return `<div class="feed-item"><div class="feed-icon ${e.type}">${ic[e.type] || "&#8226;"}</div><div class="feed-text">${text}<span class="tm">${timeAgo(e.created_at)}</span></div></div>`;
-}
-
-function renderFeed(events) {
-  const el = document.getElementById("feedList");
-  if (events && events.length > 0) {
-    el.innerHTML = events.map(formatEvent).join("");
-  } else {
-    const ic = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
-    el.innerHTML = MOCK_FEED.map(f => `<div class="feed-item"><div class="feed-icon ${f.type}">${ic[f.type]}</div><div class="feed-text">${f.text}<span class="tm">${f.time}</span></div></div>`).join("");
-  }
 }
 
 // ============================================================
@@ -1021,26 +932,15 @@ async function fetchAgents() {
   return MOCK_AGENTS;
 }
 
-async function fetchEvents() {
-  try {
-    const r = await fetch("/api/events?limit=20");
-    if (!r.ok) throw 0;
-    const d = await r.json();
-    return d.events || [];
-  } catch {}
-  return [];
-}
-
 // ============================================================
 // INIT
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const [agents, events] = await Promise.all([fetchAgents(), fetchEvents()]);
+  const agents = await fetchAgents();
   updateStats(agents);
   renderTree(agents);
   renderLeaderboard(agents);
-  renderFeed(events);
 });
 
 // Close tip on outside click
