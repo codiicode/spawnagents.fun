@@ -1,0 +1,132 @@
+import { decode } from '../_lib/base58.js';
+
+const GENESIS_DNA = {
+  "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, focus: "memecoin", buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
+  "the-jackal": { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, focus: "memecoin", buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 },
+  "the-viper": { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, focus: "memecoin", buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 },
+  "the-sniper": { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, focus: "memecoin", buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 },
+  "the-surgeon": { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 },
+  "the-oracle": { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, focus: "memecoin", buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 },
+  "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
+  "the-phantom": { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, focus: "memecoin", buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 },
+  "the-specter": { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 },
+  "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
+};
+
+export async function onRequest(context) {
+  if (context.request.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405 });
+  }
+
+  // Auth check
+  const cronSecret = context.request.headers.get('X-Cron-Secret');
+  if (cronSecret !== context.env.CRON_SECRET) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const db = context.env.DB;
+  const rpcUrl = context.env.RPC_URL;
+
+  if (!rpcUrl) {
+    return Response.json({ error: 'RPC_URL not configured' }, { status: 500 });
+  }
+
+  // Expire old pending payments (>30 min)
+  await db.prepare(
+    "UPDATE payment_requests SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')"
+  ).run();
+
+  // Get active pending payments
+  const pending = await db.prepare(
+    "SELECT id, agent_id, amount, reference, recipient FROM payment_requests WHERE status = 'pending'"
+  ).all();
+
+  let confirmed = 0;
+  let errors = 0;
+
+  for (const pr of pending.results) {
+    try {
+      // Convert base58 reference to check for signatures
+      const sigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [pr.reference, { limit: 1 }]);
+
+      if (!sigs || sigs.length === 0) continue;
+
+      const sig = sigs[0];
+      if (sig.err) continue; // Failed transaction
+
+      // Get transaction details to verify amount
+      const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+
+      if (!tx || !tx.meta) continue;
+
+      // Find SOL transfer to recipient
+      const preBalances = tx.meta.preBalances;
+      const postBalances = tx.meta.postBalances;
+      const accounts = tx.transaction.message.accountKeys;
+
+      let recipientIdx = -1;
+      for (let i = 0; i < accounts.length; i++) {
+        const pubkey = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+        if (pubkey === pr.recipient) {
+          recipientIdx = i;
+          break;
+        }
+      }
+
+      if (recipientIdx < 0) continue;
+
+      const lamportsReceived = postBalances[recipientIdx] - preBalances[recipientIdx];
+      const solReceived = lamportsReceived / 1_000_000_000;
+
+      // Allow 0.5% tolerance for fees
+      if (solReceived < pr.amount * 0.995) continue;
+
+      // Find buyer wallet (first signer)
+      const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+      // Update payment request
+      await db.prepare(
+        "UPDATE payment_requests SET status = 'confirmed', buyer_wallet = ?, tx_signature = ?, confirmed_at = datetime('now') WHERE id = ?"
+      ).bind(buyer, sig.signature, pr.id).run();
+
+      // Check if agent already claimed (race condition guard)
+      const existingAgent = await db.prepare('SELECT id FROM agents WHERE id = ?').bind(pr.agent_id).first();
+      if (existingAgent) continue;
+
+      // Claim agent
+      const dna = GENESIS_DNA[pr.agent_id];
+      if (!dna) continue;
+
+      await db.prepare(
+        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status) VALUES (?, NULL, 0, ?, ?, ?, 'alive')"
+      ).bind(pr.agent_id, buyer, buyer, JSON.stringify(dna)).run();
+
+      // Log event
+      await db.prepare(
+        "INSERT INTO events (agent_id, event_type, data) VALUES (?, 'genesis_claimed', ?)"
+      ).bind(pr.agent_id, JSON.stringify({ buyer, amount: pr.amount, tx: sig.signature })).run();
+
+      confirmed++;
+    } catch (e) {
+      console.error(`Error verifying payment ${pr.id}:`, e);
+      errors++;
+    }
+  }
+
+  return Response.json({
+    pending: pending.results.length,
+    confirmed,
+    errors,
+  });
+}
+
+async function rpcCall(url, method, params) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.result;
+}

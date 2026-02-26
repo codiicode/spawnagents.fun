@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Bloodline — BLOODLINE</title>
+  <meta name="description" content="Visualize the evolutionary tree of AI trading agents. Watch bloodlines grow, mutate, and compete on Solana.">
+  <meta property="og:title" content="The Bloodline — BLOODLINE">
+  <meta property="og:description" content="Evolutionary family trees of autonomous trading agents on Solana.">
+  <meta property="og:image" content="/bloodlineee.jpg">
+  <link rel="icon" href="/bloodlineee.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08050a;
+      --surface: rgba(180, 30, 50, 0.04);
+      --surface-hover: rgba(180, 30, 50, 0.08);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --text: #e8e3e5;
+      --text-muted: #908588;
+      --text-dim: #5e5257;
+      --green: #4a9e6a;
+      --green-dim: rgba(74, 158, 106, 0.15);
+      --red: #c44040;
+      --red-dim: rgba(196, 64, 64, 0.15);
+      --font-display: 'Cinzel', serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+      overflow: hidden;
+      height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* === AMBIENT BACKGROUND === */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse 800px 600px at 20% 50%, rgba(139, 21, 40, 0.04) 0%, transparent 70%),
+        radial-gradient(ellipse 600px 800px at 80% 30%, rgba(196, 30, 58, 0.03) 0%, transparent 70%),
+        radial-gradient(ellipse 400px 400px at 50% 80%, rgba(139, 21, 40, 0.025) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Subtle grid overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image:
+        linear-gradient(rgba(180, 30, 50, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(180, 30, 50, 0.02) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* === NAV === */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(20px, 4vw, 48px);
+      background: rgba(8, 5, 10, 0.92);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      color: var(--blood);
+      text-decoration: none;
+    }
+
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+
+    .nav-links a {
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); text-decoration: none; transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--text); }
+
+    .nav-links a.nav-blood {
+      color: var(--blood-deep);
+      border: 1px solid var(--border-strong);
+      padding: 4px 10px;
+    }
+    .nav-links a.nav-blood:hover { color: var(--blood); border-color: var(--blood); }
+
+    .nav-hamburger {
+      display: none; background: none; border: none; cursor: pointer; padding: 4px;
+    }
+    .nav-hamburger span {
+      display: block; width: 18px; height: 1px;
+      background: var(--text-muted); margin: 4px 0;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .nav-hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(3px, 3px); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(3px, -3px); }
+
+    .mobile-menu {
+      display: none; position: fixed; top: 52px; left: 0; right: 0;
+      background: rgba(8, 5, 10, 0.96); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px clamp(20px, 4vw, 48px); z-index: 99;
+      flex-direction: column; gap: 12px;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a {
+      font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); text-decoration: none; padding: 8px 0;
+    }
+
+    @media (max-width: 640px) {
+      .nav-hamburger { display: block; }
+      .nav-links { display: none; }
+    }
+
+    /* === MAIN LAYOUT === */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding-top: 52px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* === TOOLBAR === */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 0 clamp(16px, 3vw, 32px);
+      height: 44px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 5, 10, 0.6);
+      backdrop-filter: blur(12px);
+      flex-shrink: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .toolbar::-webkit-scrollbar { display: none; }
+
+    .toolbar-section {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 100%;
+    }
+
+    .toolbar-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 12px;
+      flex-shrink: 0;
+    }
+
+    .toolbar-label {
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-right: 10px;
+      flex-shrink: 0;
+    }
+
+    .genesis-btn {
+      height: 100%;
+      padding: 0 12px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .genesis-btn:hover { color: var(--text-muted); }
+    .genesis-btn.active {
+      color: var(--blood);
+      border-bottom-color: var(--blood);
+    }
+
+    /* Stats in toolbar */
+    .toolbar-stats {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .toolbar-stat {
+      font-size: 10px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+    .toolbar-stat strong {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* === TREE VIEWPORT === */
+    .tree-viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+    }
+    .tree-viewport:active { cursor: grabbing; }
+
+    .tree-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .tree-svg {
+      display: block;
+    }
+
+    /* === SVG TREE STYLES === */
+
+    /* Edges */
+    .edge-line {
+      fill: none;
+      stroke-width: 1;
+      transition: opacity 0.3s;
+    }
+
+    .edge-royalty {
+      fill: none;
+      stroke: var(--blood);
+      stroke-width: 1;
+      stroke-dasharray: 3 6;
+      opacity: 0.2;
+    }
+
+    @keyframes royalty-flow {
+      to { stroke-dashoffset: -18; }
+    }
+    .edge-royalty { animation: royalty-flow 4s linear infinite; }
+
+    /* Nodes */
+    .node-group {
+      cursor: pointer;
+    }
+    .node-group:hover .node-body { filter: brightness(1.2); }
+
+    .node-body {
+      transition: filter 0.2s;
+    }
+
+    .node-outer {
+      fill: none;
+      stroke-width: 1;
+      transition: stroke 0.2s;
+    }
+
+    .node-inner {
+      fill: rgba(8, 5, 10, 0.9);
+    }
+
+    .node-genesis .node-outer { stroke: var(--blood); }
+    .node-genesis .node-inner { fill: rgba(139, 21, 40, 0.08); }
+
+    .node-alive-profit .node-outer { stroke: rgba(74, 158, 106, 0.35); }
+    .node-alive-loss .node-outer { stroke: rgba(196, 64, 64, 0.3); }
+
+    .node-dead .node-outer { stroke: var(--text-dim); opacity: 0.4; }
+    .node-dead .node-inner { fill: rgba(20, 16, 22, 0.7); }
+
+    .node-selected .node-outer {
+      stroke: var(--blood-bright);
+      stroke-width: 1.5;
+      filter: drop-shadow(0 0 6px rgba(230, 57, 80, 0.3));
+    }
+
+    /* Alive pulse */
+    @keyframes node-pulse {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 1; }
+    }
+    .pulse-ring {
+      fill: none;
+      stroke-width: 0.5;
+      opacity: 0;
+      animation: node-pulse 3s ease-in-out infinite;
+    }
+    .node-genesis .pulse-ring { stroke: var(--blood); }
+    .node-alive-profit .pulse-ring { stroke: var(--green); }
+    .node-alive-loss .pulse-ring { stroke: var(--red); }
+
+    /* Node text */
+    .node-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      fill: var(--text);
+      text-anchor: middle;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .node-dead .node-label { fill: var(--text-dim); }
+
+    .node-gen-badge {
+      font-family: var(--font-mono);
+      font-size: 7.5px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-anchor: middle;
+    }
+
+    .node-pnl-text {
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 500;
+      text-anchor: middle;
+    }
+
+    /* === DETAIL PANEL === */
+    .detail-panel {
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 320px;
+      background: rgba(8, 5, 10, 0.96);
+      backdrop-filter: blur(24px);
+      border-left: 1px solid var(--border);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 10;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: var(--blood-deep) transparent;
+    }
+    .detail-panel.open { transform: translateX(0); }
+
+    .detail-close {
+      position: absolute;
+      top: 14px; right: 16px;
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 16px;
+      cursor: pointer;
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.2s;
+    }
+    .detail-close:hover { color: var(--text); }
+
+    .detail-header {
+      padding: 20px 24px 0;
+    }
+
+    .detail-lineage {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+
+    .lineage-crumb {
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .lineage-crumb:hover { color: var(--blood); }
+
+    .lineage-sep { color: var(--border-strong); margin: 0 3px; }
+
+    .detail-name {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+
+    .detail-status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .detail-gen {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border: 1px solid var(--border-strong);
+    }
+    .detail-gen.g0 { color: var(--blood); border-color: var(--blood-deep); }
+    .detail-gen.gN { color: var(--text-muted); }
+
+    .detail-alive {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .detail-alive.alive { color: var(--green); }
+    .detail-alive.dead { color: var(--text-dim); }
+
+    /* Detail sections */
+    .detail-section {
+      padding: 20px 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .detail-section-label {
+      font-size: 8px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--blood);
+      margin-bottom: 14px;
+    }
+
+    .detail-kv {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 11px;
+    }
+    .detail-kv + .detail-kv { border-top: 1px solid rgba(180, 30, 50, 0.06); }
+    .detail-kv .k { color: var(--text-dim); }
+    .detail-kv .v { color: var(--text); font-weight: 500; }
+    .detail-kv .v.pos { color: var(--green); }
+    .detail-kv .v.neg { color: var(--red); }
+
+    /* DNA bars */
+    .dna-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .dna-label {
+      font-size: 9px;
+      color: var(--text-dim);
+      width: 48px;
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+    }
+
+    .dna-track {
+      flex: 1;
+      height: 3px;
+      background: rgba(180, 30, 50, 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .dna-fill {
+      height: 100%;
+      background: var(--blood-deep);
+      transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+    .dna-fill::after {
+      content: '';
+      position: absolute;
+      right: 0; top: -1px; bottom: -1px;
+      width: 3px;
+      background: var(--blood);
+      box-shadow: 0 0 4px var(--blood);
+    }
+
+    .dna-val {
+      font-size: 10px;
+      color: var(--text);
+      width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+
+    /* Children list */
+    .child-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 0;
+      font-size: 11px;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .child-item + .child-item { border-top: 1px solid rgba(180, 30, 50, 0.06); }
+    .child-item:hover { color: var(--blood); }
+
+    .child-indicator {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .child-indicator.alive { background: var(--green); box-shadow: 0 0 4px var(--green-dim); }
+    .child-indicator.dead { background: var(--text-dim); }
+
+    .child-name { flex: 1; color: var(--text-muted); font-weight: 500; }
+    .child-item:hover .child-name { color: var(--blood); }
+    .child-pnl { font-weight: 500; font-size: 10px; }
+    .child-pnl.pos { color: var(--green); }
+    .child-pnl.neg { color: var(--red); }
+
+    /* === EMPTY STATE === */
+    .empty-state {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      max-width: 400px;
+      padding: 0 24px;
+    }
+
+    .empty-state-title {
+      font-family: var(--font-display);
+      font-size: clamp(22px, 4vw, 32px);
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: 0.08em;
+      margin-bottom: 14px;
+      line-height: 1.3;
+    }
+    .empty-state-title span { color: var(--blood); }
+
+    .empty-state-text {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 28px;
+      line-height: 1.8;
+    }
+
+    .empty-state-cta {
+      display: inline-block;
+      border: 1px solid var(--blood-deep);
+      color: var(--blood);
+      padding: 10px 28px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .empty-state-cta:hover {
+      background: var(--blood-deep);
+      color: var(--text);
+      border-color: var(--blood);
+    }
+
+    /* === ZOOM CONTROLS === */
+    .zoom-controls {
+      position: absolute;
+      bottom: 20px; right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      z-index: 5;
+    }
+
+    .zoom-btn {
+      width: 32px; height: 32px;
+      background: rgba(8, 5, 10, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-mono);
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .zoom-btn:hover { color: var(--text); border-color: var(--border-strong); }
+    .zoom-btn:first-child { border-bottom: none; }
+
+    .zoom-level {
+      font-size: 9px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-top: 6px;
+      letter-spacing: 0.05em;
+    }
+
+    /* === MINIMAP === */
+    .minimap {
+      position: absolute;
+      bottom: 20px; left: 20px;
+      width: 140px; height: 90px;
+      background: rgba(8, 5, 10, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      z-index: 5;
+      overflow: hidden;
+    }
+
+    .minimap svg {
+      width: 100%; height: 100%;
+    }
+
+    .minimap-viewport {
+      fill: none;
+      stroke: var(--blood);
+      stroke-width: 1;
+      opacity: 0.5;
+    }
+
+    .minimap-node {
+      r: 2;
+    }
+
+    /* === RESPONSIVE === */
+    @media (max-width: 768px) {
+      .detail-panel {
+        top: auto;
+        left: 0; right: 0; bottom: 0;
+        width: 100%;
+        height: 60vh;
+        max-height: 60vh;
+        transform: translateY(100%);
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 0;
+      }
+      .detail-panel.open { transform: translateY(0); }
+
+      .minimap { display: none; }
+
+      .toolbar-stats { display: none; }
+
+      .zoom-controls { bottom: 12px; right: 12px; }
+    }
+
+    @media (max-width: 480px) {
+      .detail-panel { height: 70vh; max-height: 70vh; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-logo">BLOODLINE</a>
+  <div class="nav-links">
+    <a href="/genesis.html">agents</a>
+    <a href="/bloodline.html" class="active">bloodline</a>
+    <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
+    <a href="#" class="nav-blood">$BLOOD</a>
+  </div>
+  <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/genesis.html">agents</a>
+  <a href="/bloodline.html">bloodline</a>
+  <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
+  <a href="#" class="nav-blood">$BLOOD</a>
+</div>
+
+<!-- APP -->
+<div class="app">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="toolbar-section">
+      <span class="toolbar-label">Lineage</span>
+      <button class="genesis-btn active" data-filter="all" onclick="filterLineage('all', this)">All</button>
+    </div>
+    <div class="toolbar-divider"></div>
+    <div class="toolbar-section" id="genesisFilters"></div>
+
+    <div class="toolbar-stats" id="toolbarStats"></div>
+  </div>
+
+  <!-- TREE VIEWPORT -->
+  <div class="tree-viewport" id="treeViewport">
+    <div class="tree-canvas" id="treeCanvas">
+      <svg class="tree-svg" id="treeSvg"></svg>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detailPanel">
+      <button class="detail-close" onclick="closeDetail()">&times;</button>
+      <div id="detailContent"></div>
+    </div>
+
+    <!-- Zoom Controls -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()">+</button>
+      <button class="zoom-btn" onclick="zoomOut()">&minus;</button>
+      <div class="zoom-level" id="zoomLevel">100%</div>
+    </div>
+
+    <!-- Minimap -->
+    <div class="minimap" id="minimap">
+      <svg id="minimapSvg"></svg>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+
+const MOCK_AGENTS = [
+  { id: "the-wolf", parent_id: null, generation: 0, status: "alive", total_pnl: 4.2, total_trades: 87, owner_wallet: "7xKX...9mPq", dna: { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 }},
+  { id: "the-sniper", parent_id: null, generation: 0, status: "alive", total_pnl: 1.8, total_trades: 52, owner_wallet: "3bNc...kR2d", dna: { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 }},
+  { id: "the-berserker", parent_id: null, generation: 0, status: "alive", total_pnl: -0.5, total_trades: 34, owner_wallet: "9pLm...xV4a", dna: { aggression: 0.92, patience: 0.1, risk_tolerance: 0.9, sell_profit_pct: 15, sell_loss_pct: 8, max_position_pct: 75, check_interval_min: 2 }},
+  { id: "wolf-alpha", parent_id: "the-wolf", generation: 1, status: "alive", total_pnl: 2.1, total_trades: 41, owner_wallet: "5tHj...nQ8w", dna: { aggression: 0.68, patience: 0.4, risk_tolerance: 0.65, sell_profit_pct: 35, sell_loss_pct: 12, max_position_pct: 55, check_interval_min: 4 }},
+  { id: "wolf-beta", parent_id: "the-wolf", generation: 1, status: "alive", total_pnl: 0.9, total_trades: 28, owner_wallet: "2mRk...jD6e", dna: { aggression: 0.8, patience: 0.3, risk_tolerance: 0.72, sell_profit_pct: 42, sell_loss_pct: 18, max_position_pct: 62, check_interval_min: 3 }},
+  { id: "sniper-echo", parent_id: "the-sniper", generation: 1, status: "dead", total_pnl: -1.2, total_trades: 19, owner_wallet: "8vCx...pM3f", dna: { aggression: 0.35, patience: 0.78, risk_tolerance: 0.5, sell_profit_pct: 45, sell_loss_pct: 10, max_position_pct: 38, check_interval_min: 8 }},
+  { id: "wolf-alpha-prime", parent_id: "wolf-alpha", generation: 2, status: "alive", total_pnl: 3.5, total_trades: 63, owner_wallet: "4nWq...sK7b", dna: { aggression: 0.62, patience: 0.44, risk_tolerance: 0.6, sell_profit_pct: 32, sell_loss_pct: 11, max_position_pct: 50, check_interval_min: 5 }},
+  { id: "wolf-alpha-x", parent_id: "wolf-alpha", generation: 2, status: "alive", total_pnl: 0.3, total_trades: 15, owner_wallet: "6jFp...tR1c", dna: { aggression: 0.71, patience: 0.38, risk_tolerance: 0.68, sell_profit_pct: 38, sell_loss_pct: 14, max_position_pct: 58, check_interval_min: 4 }},
+  { id: "prime-omega", parent_id: "wolf-alpha-prime", generation: 3, status: "alive", total_pnl: 1.1, total_trades: 22, owner_wallet: "1xAz...uH9g", dna: { aggression: 0.58, patience: 0.5, risk_tolerance: 0.55, sell_profit_pct: 30, sell_loss_pct: 10, max_position_pct: 48, check_interval_min: 5 }},
+];
+
+let allAgents = [];
+let treeNodes = [];
+let treeEdges = [];
+let selectedNode = null;
+let currentFilter = 'all';
+
+// ============================================================
+// TREE BUILDING
+// ============================================================
+
+function buildForest(agents) {
+  const map = {};
+  agents.forEach(a => {
+    map[a.id] = { ...a, dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : (a.dna || {}), children: [] };
+  });
+  const roots = [];
+  agents.forEach(a => {
+    if (a.parent_id && map[a.parent_id]) {
+      map[a.parent_id].children.push(map[a.id]);
+    } else if (!a.parent_id) {
+      roots.push(map[a.id]);
+    }
+  });
+  return { roots, map };
+}
+
+// ============================================================
+// LAYOUT ENGINE
+// ============================================================
+
+const NODE_W = 120;
+const NODE_H = 52;
+const H_GAP = 24;
+const V_GAP = 72;
+
+function layoutForest(roots) {
+  const nodes = [];
+  const edges = [];
+
+  // Measure subtree widths
+  function measure(node) {
+    if (!node.children.length) { node._leafCount = 1; return 1; }
+    let total = 0;
+    node.children.forEach(c => total += measure(c));
+    node._leafCount = total;
+    return total;
+  }
+
+  // Position nodes
+  function position(node, x, y) {
+    node._x = x;
+    node._y = y;
+    nodes.push(node);
+
+    const totalWidth = node._leafCount * (NODE_W + H_GAP) - H_GAP;
+    let childX = x - totalWidth / 2;
+
+    node.children.forEach(child => {
+      const childWidth = child._leafCount * (NODE_W + H_GAP) - H_GAP;
+      const cx = childX + childWidth / 2;
+      position(child, cx, y + NODE_H + V_GAP);
+      edges.push({ from: node, to: child });
+      childX += childWidth + H_GAP;
+    });
+  }
+
+  // Layout each root
+  roots.forEach(r => measure(r));
+  let totalForestWidth = 0;
+  roots.forEach(r => {
+    totalForestWidth += r._leafCount * (NODE_W + H_GAP) - H_GAP;
+  });
+  totalForestWidth += (roots.length - 1) * (NODE_W + H_GAP);
+
+  let startX = 0;
+  roots.forEach(r => {
+    const subtreeWidth = r._leafCount * (NODE_W + H_GAP) - H_GAP;
+    position(r, startX + subtreeWidth / 2, 40);
+    startX += subtreeWidth + NODE_W + H_GAP;
+  });
+
+  // Normalize positions (center everything)
+  if (nodes.length) {
+    const minX = Math.min(...nodes.map(n => n._x)) - NODE_W / 2;
+    const offset = -minX + 60;
+    nodes.forEach(n => n._x += offset);
+  }
+
+  return { nodes, edges };
+}
+
+// ============================================================
+// SVG RENDERING
+// ============================================================
+
+function getNodeClass(node) {
+  if (node.status === 'dead') return 'node-dead';
+  if (node.generation === 0) return 'node-genesis';
+  if (node.total_pnl >= 0) return 'node-alive-profit';
+  return 'node-alive-loss';
+}
+
+function getEdgeColor(from, to) {
+  if (to.status === 'dead') return 'var(--text-dim)';
+  if (from.generation === 0) return 'var(--blood-deep)';
+  if (to.total_pnl >= 0) return 'rgba(74, 158, 106, 0.25)';
+  return 'rgba(196, 64, 64, 0.2)';
+}
+
+function formatName(id) {
+  return id.replace('the-', '').replace(/-/g, ' ');
+}
+
+function renderTree(nodes, edges) {
+  const svg = document.getElementById('treeSvg');
+
+  if (!nodes.length) {
+    svg.innerHTML = '';
+    svg.style.width = '0';
+    svg.style.height = '0';
+    showEmptyState();
+    return;
+  }
+
+  hideEmptyState();
+
+  const maxX = Math.max(...nodes.map(n => n._x)) + NODE_W / 2 + 60;
+  const maxY = Math.max(...nodes.map(n => n._y)) + NODE_H + 80;
+
+  svg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+  svg.style.width = maxX + 'px';
+  svg.style.height = maxY + 'px';
+
+  // Build SVG content
+  let html = '';
+
+  // Defs for gradients
+  html += '<defs>';
+  edges.forEach((e, i) => {
+    const fromColor = e.from.generation === 0 ? 'rgba(196, 30, 58, 0.3)' : 'rgba(180, 30, 50, 0.15)';
+    const toColor = e.to.status === 'dead' ? 'rgba(94, 82, 87, 0.15)' : fromColor;
+    html += `<linearGradient id="eg${i}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${fromColor}"/>
+      <stop offset="100%" stop-color="${toColor}"/>
+    </linearGradient>`;
+  });
+  html += '</defs>';
+
+  // Edges
+  edges.forEach((e, i) => {
+    const x1 = e.from._x, y1 = e.from._y + NODE_H / 2;
+    const x2 = e.to._x, y2 = e.to._y - NODE_H / 2;
+    const midY = (y1 + y2) / 2;
+
+    html += `<path class="edge-line" d="M${x1} ${y1} C${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}"
+      stroke="url(#eg${i})" opacity="${e.to.status === 'dead' ? 0.3 : 0.6}"/>`;
+
+    // Royalty flow (from profitable child upward)
+    if (e.to.total_pnl > 0 && e.to.status === 'alive' && e.to.generation > 0) {
+      html += `<path class="edge-royalty" d="M${x2} ${y2} C${x2} ${midY}, ${x1} ${midY}, ${x1} ${y1}"/>`;
+    }
+  });
+
+  // Nodes
+  nodes.forEach(node => {
+    const cls = getNodeClass(node);
+    const x = node._x - NODE_W / 2;
+    const y = node._y - NODE_H / 2;
+    const isSelected = selectedNode && selectedNode.id === node.id;
+
+    html += `<g class="node-group ${cls} ${isSelected ? 'node-selected' : ''}"
+      data-id="${node.id}" onclick="selectNode('${node.id}')"
+      transform="translate(${node._x}, ${node._y})">`;
+
+    // Body group
+    html += '<g class="node-body">';
+
+    // Pulse ring for alive agents
+    if (node.status === 'alive') {
+      html += `<rect class="pulse-ring" x="${-NODE_W/2 - 3}" y="${-NODE_H/2 - 3}"
+        width="${NODE_W + 6}" height="${NODE_H + 6}" rx="3"
+        style="animation-delay: ${Math.random() * 3}s"/>`;
+    }
+
+    // Outer rect
+    html += `<rect class="node-outer" x="${-NODE_W/2}" y="${-NODE_H/2}"
+      width="${NODE_W}" height="${NODE_H}" rx="2"/>`;
+
+    // Inner rect
+    html += `<rect class="node-inner" x="${-NODE_W/2 + 0.5}" y="${-NODE_H/2 + 0.5}"
+      width="${NODE_W - 1}" height="${NODE_H - 1}" rx="1.5"/>`;
+
+    // Gen badge
+    const genText = node.generation === 0 ? 'GENESIS' : 'GEN ' + node.generation;
+    const genColor = node.generation === 0 ? 'var(--blood)' : 'var(--text-dim)';
+    html += `<text class="node-gen-badge" y="-8" fill="${genColor}">${genText}</text>`;
+
+    // Name
+    html += `<text class="node-label" y="5">${formatName(node.id)}</text>`;
+
+    // PnL
+    if (node.status === 'dead') {
+      html += `<text class="node-pnl-text" y="18" fill="var(--text-dim)">EXTINCT</text>`;
+    } else {
+      const pnlColor = node.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const pnlSign = node.total_pnl >= 0 ? '+' : '';
+      html += `<text class="node-pnl-text" y="18" fill="${pnlColor}">${pnlSign}${node.total_pnl.toFixed(1)} SOL</text>`;
+    }
+
+    html += '</g></g>';
+  });
+
+  svg.innerHTML = html;
+
+  // Store for later use
+  treeNodes = nodes;
+  treeEdges = edges;
+
+  // Update minimap
+  renderMinimap(nodes);
+}
+
+// ============================================================
+// DETAIL PANEL
+// ============================================================
+
+function selectNode(id) {
+  const { map } = buildForest(allAgents);
+  const node = map[id];
+  if (!node) return;
+
+  selectedNode = node;
+
+  // Rebuild SVG to update selection styling
+  const filteredAgents = currentFilter === 'all' ? allAgents :
+    allAgents.filter(a => {
+      let current = map[a.id];
+      while (current) {
+        if (current.id === currentFilter) return true;
+        current = current.parent_id ? map[current.parent_id] : null;
+      }
+      return false;
+    });
+  const forest = buildForest(filteredAgents);
+  const { nodes, edges } = layoutForest(forest.roots);
+  renderTree(nodes, edges);
+
+  // Build lineage
+  let lineage = [];
+  let current = node;
+  while (current) {
+    lineage.unshift(current);
+    current = current.parent_id ? map[current.parent_id] : null;
+  }
+
+  const dna = node.dna || {};
+  const dnaKeys = [
+    { key: 'aggression', label: 'aggr' },
+    { key: 'patience', label: 'patience' },
+    { key: 'risk_tolerance', label: 'risk' },
+  ];
+  const statKeys = [
+    { key: 'sell_profit_pct', label: 'take profit', fmt: v => v + '%' },
+    { key: 'sell_loss_pct', label: 'stop loss', fmt: v => v + '%' },
+    { key: 'max_position_pct', label: 'max position', fmt: v => v + '%' },
+    { key: 'check_interval_min', label: 'interval', fmt: v => v + 'm' },
+  ];
+
+  let html = '';
+
+  // Header
+  html += '<div class="detail-header">';
+  html += '<div class="detail-lineage">';
+  lineage.forEach((l, i) => {
+    if (i > 0) html += '<span class="lineage-sep">/</span>';
+    html += `<span class="lineage-crumb" onclick="selectNode('${l.id}')">${formatName(l.id)}</span>`;
+  });
+  html += '</div>';
+  html += `<div class="detail-name">${formatName(node.id)}</div>`;
+  html += '<div class="detail-status-row">';
+  html += `<span class="detail-gen ${node.generation === 0 ? 'g0' : 'gN'}">${node.generation === 0 ? 'Genesis' : 'Gen ' + node.generation}</span>`;
+  html += `<span class="detail-alive ${node.status}">${node.status}</span>`;
+  html += '</div></div>';
+
+  // Performance
+  html += '<div class="detail-section">';
+  html += '<div class="detail-section-label">Performance</div>';
+  const pnlClass = node.total_pnl >= 0 ? 'pos' : 'neg';
+  const pnlSign = node.total_pnl >= 0 ? '+' : '';
+  html += `<div class="detail-kv"><span class="k">PnL</span><span class="v ${pnlClass}">${pnlSign}${node.total_pnl.toFixed(2)} SOL</span></div>`;
+  html += `<div class="detail-kv"><span class="k">Trades</span><span class="v">${node.total_trades || 0}</span></div>`;
+  html += `<div class="detail-kv"><span class="k">Children</span><span class="v">${node.children ? node.children.length : 0}</span></div>`;
+  if (node.owner_wallet) {
+    const wallet = node.owner_wallet.length > 10 ? node.owner_wallet.slice(0, 4) + '...' + node.owner_wallet.slice(-4) : node.owner_wallet;
+    html += `<div class="detail-kv"><span class="k">Owner</span><span class="v">${wallet}</span></div>`;
+  }
+  html += '</div>';
+
+  // DNA
+  html += '<div class="detail-section">';
+  html += '<div class="detail-section-label">Core DNA</div>';
+  dnaKeys.forEach(({ key, label }) => {
+    const v = dna[key];
+    if (v === undefined) return;
+    html += `<div class="dna-row">
+      <span class="dna-label">${label}</span>
+      <div class="dna-track"><div class="dna-fill" style="width:${v * 100}%"></div></div>
+      <span class="dna-val">${v.toFixed(2)}</span>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Trading params
+  if (statKeys.some(({ key }) => dna[key] !== undefined)) {
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-label">Parameters</div>';
+    statKeys.forEach(({ key, label, fmt }) => {
+      const v = dna[key];
+      if (v === undefined) return;
+      html += `<div class="detail-kv"><span class="k">${label}</span><span class="v">${fmt(v)}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  // Children
+  if (node.children && node.children.length > 0) {
+    html += '<div class="detail-section">';
+    html += '<div class="detail-section-label">Descendants</div>';
+    node.children.forEach(child => {
+      const cPnlClass = child.total_pnl >= 0 ? 'pos' : 'neg';
+      const cPnlSign = child.total_pnl >= 0 ? '+' : '';
+      html += `<div class="child-item" onclick="selectNode('${child.id}')">
+        <div class="child-indicator ${child.status}"></div>
+        <span class="child-name">${formatName(child.id)}</span>
+        <span class="child-pnl ${cPnlClass}">${cPnlSign}${child.total_pnl.toFixed(1)}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('detailContent').innerHTML = html;
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  selectedNode = null;
+  // Re-render to clear selection highlight
+  const filtered = getFilteredAgents();
+  const forest = buildForest(filtered);
+  const { nodes, edges } = layoutForest(forest.roots);
+  renderTree(nodes, edges);
+}
+
+// ============================================================
+// FILTERING
+// ============================================================
+
+function getFilteredAgents() {
+  if (currentFilter === 'all') return allAgents;
+  const { map } = buildForest(allAgents);
+  return allAgents.filter(a => {
+    let current = map[a.id];
+    while (current) {
+      if (current.id === currentFilter) return true;
+      current = current.parent_id ? map[current.parent_id] : null;
+    }
+    return false;
+  });
+}
+
+function filterLineage(filter, btn) {
+  currentFilter = filter;
+
+  // Update button states
+  document.querySelectorAll('.genesis-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // Close detail if open
+  closeDetail();
+
+  // Re-render
+  const filtered = getFilteredAgents();
+  const forest = buildForest(filtered);
+  const { nodes, edges } = layoutForest(forest.roots);
+  renderTree(nodes, edges);
+
+  // Center view
+  centerTree();
+}
+
+// ============================================================
+// PAN & ZOOM
+// ============================================================
+
+let scale = 1;
+let panX = 0, panY = 0;
+let isDragging = false;
+let dragStartX, dragStartY;
+
+function updateTransform() {
+  const canvas = document.getElementById('treeCanvas');
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+  updateMinimapViewport();
+}
+
+function centerTree() {
+  const viewport = document.getElementById('treeViewport');
+  const svg = document.getElementById('treeSvg');
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  const sw = parseFloat(svg.style.width) || 800;
+  const sh = parseFloat(svg.style.height) || 400;
+
+  // Fit to viewport with padding
+  const padding = 80;
+  const scaleX = (vw - padding * 2) / sw;
+  const scaleY = (vh - padding * 2) / sh;
+  scale = Math.min(scaleX, scaleY, 1.2);
+  scale = Math.max(scale, 0.3);
+
+  panX = (vw - sw * scale) / 2;
+  panY = padding;
+
+  updateTransform();
+}
+
+function zoomIn() {
+  const viewport = document.getElementById('treeViewport');
+  const cx = viewport.clientWidth / 2;
+  const cy = viewport.clientHeight / 2;
+  zoomAt(cx, cy, 1.25);
+}
+
+function zoomOut() {
+  const viewport = document.getElementById('treeViewport');
+  const cx = viewport.clientWidth / 2;
+  const cy = viewport.clientHeight / 2;
+  zoomAt(cx, cy, 0.8);
+}
+
+function zoomAt(cx, cy, factor) {
+  const newScale = Math.max(0.2, Math.min(3, scale * factor));
+  const ratio = newScale / scale;
+  panX = cx - ratio * (cx - panX);
+  panY = cy - ratio * (cy - panY);
+  scale = newScale;
+  updateTransform();
+}
+
+// Mouse events
+const viewport = document.getElementById('treeViewport');
+
+viewport.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.detail-panel') || e.target.closest('.zoom-controls') || e.target.closest('.minimap')) return;
+  isDragging = true;
+  dragStartX = e.clientX - panX;
+  dragStartY = e.clientY - panY;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  panX = e.clientX - dragStartX;
+  panY = e.clientY - dragStartY;
+  updateTransform();
+});
+
+window.addEventListener('mouseup', () => { isDragging = false; });
+
+viewport.addEventListener('wheel', (e) => {
+  if (e.target.closest('.detail-panel')) return;
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const factor = e.deltaY > 0 ? 0.92 : 1.08;
+  zoomAt(cx, cy, factor);
+}, { passive: false });
+
+// Touch events
+let lastTouchDist = 0;
+let lastTouchX = 0, lastTouchY = 0;
+
+viewport.addEventListener('touchstart', (e) => {
+  if (e.target.closest('.detail-panel') || e.target.closest('.zoom-controls')) return;
+  if (e.touches.length === 1) {
+    isDragging = true;
+    dragStartX = e.touches[0].clientX - panX;
+    dragStartY = e.touches[0].clientY - panY;
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    lastTouchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    lastTouchX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    lastTouchY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  }
+}, { passive: true });
+
+viewport.addEventListener('touchmove', (e) => {
+  if (e.target.closest('.detail-panel')) return;
+  e.preventDefault();
+  if (e.touches.length === 1 && isDragging) {
+    panX = e.touches[0].clientX - dragStartX;
+    panY = e.touches[0].clientY - dragStartY;
+    updateTransform();
+  } else if (e.touches.length === 2) {
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const factor = dist / lastTouchDist;
+    const rect = viewport.getBoundingClientRect();
+    zoomAt(cx - rect.left, cy - rect.top, factor);
+    lastTouchDist = dist;
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchend', () => { isDragging = false; });
+
+// ============================================================
+// MINIMAP
+// ============================================================
+
+function renderMinimap(nodes) {
+  if (!nodes.length) return;
+
+  const mmSvg = document.getElementById('minimapSvg');
+  const maxX = Math.max(...nodes.map(n => n._x)) + NODE_W / 2 + 60;
+  const maxY = Math.max(...nodes.map(n => n._y)) + NODE_H + 60;
+
+  mmSvg.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+
+  let html = '';
+  // Edges
+  treeEdges.forEach(e => {
+    html += `<line x1="${e.from._x}" y1="${e.from._y}" x2="${e.to._x}" y2="${e.to._y}"
+      stroke="var(--border-strong)" stroke-width="2" opacity="0.3"/>`;
+  });
+  // Nodes
+  nodes.forEach(n => {
+    let color = 'var(--text-dim)';
+    if (n.generation === 0) color = 'var(--blood)';
+    else if (n.status === 'alive' && n.total_pnl >= 0) color = 'var(--green)';
+    else if (n.status === 'alive') color = 'var(--red)';
+    html += `<circle cx="${n._x}" cy="${n._y}" class="minimap-node" fill="${color}"
+      opacity="${n.status === 'dead' ? 0.3 : 0.7}"/>`;
+  });
+
+  // Viewport rect
+  html += '<rect class="minimap-viewport" id="mmViewport" x="0" y="0" width="100" height="100"/>';
+
+  mmSvg.innerHTML = html;
+  updateMinimapViewport();
+}
+
+function updateMinimapViewport() {
+  const vp = document.getElementById('mmViewport');
+  if (!vp || !treeNodes.length) return;
+
+  const viewportEl = document.getElementById('treeViewport');
+  const vw = viewportEl.clientWidth;
+  const vh = viewportEl.clientHeight;
+
+  // Convert viewport bounds to tree coordinates
+  const x = -panX / scale;
+  const y = -panY / scale;
+  const w = vw / scale;
+  const h = vh / scale;
+
+  vp.setAttribute('x', x);
+  vp.setAttribute('y', y);
+  vp.setAttribute('width', w);
+  vp.setAttribute('height', h);
+}
+
+// ============================================================
+// EMPTY STATE
+// ============================================================
+
+let emptyEl = null;
+
+function showEmptyState() {
+  if (emptyEl) return;
+  emptyEl = document.createElement('div');
+  emptyEl.className = 'empty-state';
+  emptyEl.innerHTML = `
+    <div class="empty-state-title">The <span>bloodline</span> awaits</div>
+    <div class="empty-state-text">No agents have been claimed yet. The evolutionary tree will grow here as genesis agents are purchased and begin to reproduce.</div>
+    <a href="/genesis.html" class="empty-state-cta">Claim a Genesis Agent</a>
+  `;
+  document.getElementById('treeViewport').appendChild(emptyEl);
+  document.getElementById('minimap').style.display = 'none';
+}
+
+function hideEmptyState() {
+  if (emptyEl) { emptyEl.remove(); emptyEl = null; }
+  document.getElementById('minimap').style.display = '';
+}
+
+// ============================================================
+// STATS
+// ============================================================
+
+function updateStats(agents) {
+  const alive = agents.filter(a => a.status === 'alive').length;
+  const dead = agents.filter(a => a.status === 'dead').length;
+  const maxGen = agents.length ? Math.max(...agents.map(a => a.generation)) : 0;
+  const descendants = agents.filter(a => a.generation > 0).length;
+
+  const el = document.getElementById('toolbarStats');
+  el.innerHTML = `
+    <div class="toolbar-stat"><strong>${agents.length}</strong> total</div>
+    <div class="toolbar-stat"><strong>${alive}</strong> alive</div>
+    <div class="toolbar-stat"><strong>${dead}</strong> extinct</div>
+    <div class="toolbar-stat"><strong>${maxGen}</strong> deepest gen</div>
+    <div class="toolbar-stat"><strong>${descendants}</strong> descendants</div>
+  `;
+}
+
+// ============================================================
+// GENESIS FILTER BUTTONS
+// ============================================================
+
+function buildGenesisFilters(agents) {
+  const genesis = agents.filter(a => a.generation === 0);
+  const container = document.getElementById('genesisFilters');
+  container.innerHTML = genesis.map(g =>
+    `<button class="genesis-btn" data-filter="${g.id}" onclick="filterLineage('${g.id}', this)">${formatName(g.id)}</button>`
+  ).join('');
+}
+
+// ============================================================
+// API
+// ============================================================
+
+async function fetchAgents() {
+  try {
+    const r = await fetch('/api/agents');
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    if (d.agents?.length > 0) {
+      return d.agents.map(a => ({
+        ...a,
+        dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : a.dna,
+        total_pnl: parseFloat(a.total_pnl) || 0,
+        total_trades: parseInt(a.total_trades) || 0,
+      }));
+    }
+  } catch {}
+  return MOCK_AGENTS;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+
+document.addEventListener('DOMContentLoaded', async () => {
+  allAgents = await fetchAgents();
+
+  updateStats(allAgents);
+  buildGenesisFilters(allAgents);
+
+  const forest = buildForest(allAgents);
+  const { nodes, edges } = layoutForest(forest.roots);
+  renderTree(nodes, edges);
+
+  // Center after a tick to allow layout
+  requestAnimationFrame(() => {
+    centerTree();
+  });
+});
+
+// Handle resize
+window.addEventListener('resize', () => {
+  updateMinimapViewport();
+});
+
+// ============================================================
+// MOBILE MENU
+// ============================================================
+
+function toggleMobileMenu() {
+  document.getElementById('mobileMenu').classList.toggle('open');
+  document.getElementById('hamburgerBtn').classList.toggle('open');
+}
+</script>
+</body>
+</html>

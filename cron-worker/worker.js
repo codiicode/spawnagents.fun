@@ -36,5 +36,19 @@ export default {
     } catch (e) {
       console.error("Failed to distribute royalties:", e);
     }
+
+    // 3. Verify pending payments (Solana Pay)
+    try {
+      const payRes = await fetch(`${siteUrl}/api/verify-payments`, {
+        method: "POST",
+        headers,
+      });
+      const payData = await payRes.json();
+      if (payData.confirmed > 0) {
+        console.log(`Verified ${payData.confirmed} payments (${payData.pending} were pending)`);
+      }
+    } catch (e) {
+      console.error("Failed to verify payments:", e);
+    }
   },
 };
