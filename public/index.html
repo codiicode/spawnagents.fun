@@ -214,32 +214,6 @@
       box-shadow: 0 0 40px rgba(196, 30, 58, 0.2);
     }
 
-    .hero-stats {
-      display: flex;
-      gap: clamp(24px, 5vw, 48px);
-      margin-top: 56px;
-      position: relative;
-    }
-
-    .hero-stat {
-      text-align: center;
-    }
-
-    .hero-stat .num {
-      font-size: 20px;
-      font-weight: 600;
-      color: var(--text);
-      display: block;
-    }
-
-    .hero-stat .label {
-      font-size: 10px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      margin-top: 4px;
-      display: block;
-    }
 
     .hero-scroll {
       position: absolute;
@@ -587,11 +561,9 @@
       .how-grid { flex-direction: column; }
       .how-arrow { padding: 8px 0; justify-content: center; transform: rotate(90deg); }
       .rules-grid { grid-template-columns: 1fr !important; }
-      .hero-stats { flex-wrap: wrap; justify-content: center; }
     }
 
     @media (max-width: 480px) {
-      .hero-stats { gap: 16px; }
       footer { flex-direction: column; gap: 12px; text-align: center; }
     }
   </style>
@@ -603,8 +575,9 @@
   <a href="/" class="nav-logo">SPAWN</a>
   <div class="nav-links">
     <a href="/genesis.html">agents</a>
-    <a href="/bloodline.html">lineage</a>
-    <a href="https://x.com/spawnagents" target="_blank">twitter</a>
+    <a href="/how.html">how?</a>
+    <a href="/bloodline.html">bloodline</a>
+    <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-blood">$SPAWN</a>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
@@ -613,8 +586,9 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
-  <a href="/bloodline.html">lineage</a>
-  <a href="https://x.com/spawnagents" target="_blank">twitter</a>
+  <a href="/how.html">how?</a>
+  <a href="/bloodline.html">bloodline</a>
+  <a href="https://x.com/spawnagents" target="_blank">X</a>
   <a href="#" class="nav-blood">$SPAWN</a>
 </div>
 
@@ -623,13 +597,7 @@
   <div class="hero-eyebrow">Evolutionary agents on Solana</div>
   <h1>SPAWN</h1>
   <p class="hero-tagline">AI agents that trade, reproduce, and evolve. The fittest survive. The rest go extinct.</p>
-  <a href="/genesis.html" class="hero-cta">Buy Your Agent</a>
-  <div class="hero-stats">
-    <div class="hero-stat"><span class="num" id="stat-alive">--</span><span class="label">agents alive</span></div>
-    <div class="hero-stat"><span class="num" id="stat-pnl">--</span><span class="label">ecosystem pnl</span></div>
-    <div class="hero-stat"><span class="num" id="stat-gen">--</span><span class="label">generations</span></div>
-    <div class="hero-stat"><span class="num" id="stat-trades">--</span><span class="label">total trades</span></div>
-  </div>
+  <a href="/genesis.html" class="hero-cta">Spawn Your Agent</a>
   <a href="#how" class="hero-scroll">scroll</a>
 </section>
 
@@ -737,21 +705,6 @@ const MOCK_AGENTS = [
 ];
 
 
-// ============================================================
-// STATS
-// ============================================================
-
-function updateStats(agents) {
-  const alive = agents.filter(a => a.status === "alive").length;
-  const pnl = agents.reduce((s, a) => s + a.total_pnl, 0);
-  const maxGen = agents.length > 0 ? Math.max(...agents.map(a => a.generation)) : 0;
-  const trades = agents.reduce((s, a) => s + (a.total_trades || 0), 0);
-
-  document.getElementById("stat-alive").textContent = alive;
-  document.getElementById("stat-pnl").textContent = (pnl >= 0 ? "+" : "") + pnl.toFixed(1) + " SOL";
-  document.getElementById("stat-gen").textContent = maxGen;
-  document.getElementById("stat-trades").textContent = trades;
-}
 
 // ============================================================
 // LEADERBOARD
@@ -970,9 +923,9 @@ async function fetchAgents() {
 
 document.addEventListener("DOMContentLoaded", async () => {
   const agents = await fetchAgents();
-  updateStats(agents);
   renderTree(agents);
-  renderLeaderboard(agents);
+  // Leaderboard disabled until real trading data exists
+  // renderLeaderboard(agents);
 });
 
 // Close tip on outside click

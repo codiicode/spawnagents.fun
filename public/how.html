@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPAWN — How It Works</title>
+  <meta name="description" content="Every detail of how SPAWN works. Genesis agents, DNA, trading, reproduction, death, fees, and more.">
+  <meta property="og:title" content="SPAWN — How It Works">
+  <meta property="og:description" content="Every detail of how SPAWN works. Genesis agents, DNA, trading, reproduction, death, fees, and more.">
+  <meta property="og:image" content="/og.jpg">
+  <link rel="icon" href="/og.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08050a;
+      --surface: rgba(180, 30, 50, 0.04);
+      --surface-hover: rgba(180, 30, 50, 0.08);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --text: #e8e3e5;
+      --text-muted: #908588;
+      --text-dim: #5e5257;
+      --green: #4a9e6a;
+      --red: #c44040;
+      --font-display: 'Cinzel', serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* === NAV === */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(20px, 4vw, 48px);
+      background: rgba(8, 5, 10, 0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 14px; font-weight: 600;
+      letter-spacing: 0.25em;
+      color: var(--blood);
+      text-decoration: none;
+    }
+
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+
+    .nav-links a {
+      font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); text-decoration: none; transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--blood); }
+
+    .nav-links a.nav-blood {
+      color: var(--blood-deep);
+      border: 1px solid var(--border-strong);
+      padding: 4px 10px;
+    }
+
+    .nav-links a.nav-blood:hover { color: var(--blood); border-color: var(--blood); }
+
+    .nav-hamburger {
+      display: none; background: none; border: none; cursor: pointer; padding: 4px;
+    }
+
+    .nav-hamburger span {
+      display: block; width: 18px; height: 1px;
+      background: var(--text-muted); margin: 4px 0;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    .nav-hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(3px, 3px); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(3px, -3px); }
+
+    .mobile-menu {
+      display: none; position: fixed;
+      top: 52px; left: 0; right: 0;
+      background: rgba(8, 5, 10, 0.96);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px clamp(20px, 4vw, 48px);
+      z-index: 99; flex-direction: column; gap: 12px;
+    }
+
+    .mobile-menu.open { display: flex; }
+
+    .mobile-menu a {
+      font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--text-muted); text-decoration: none; padding: 8px 0;
+    }
+
+    @media (max-width: 640px) {
+      .nav-hamburger { display: block; }
+      .nav-links { display: none; }
+    }
+
+    /* === PAGE === */
+    .page-header {
+      padding: 120px 24px 48px;
+      text-align: center;
+    }
+
+    .page-header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 6vw, 56px);
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: var(--blood);
+      margin-bottom: 16px;
+    }
+
+    .page-header p {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 540px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* === CONTENT === */
+    .content {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .block {
+      margin-bottom: 56px;
+    }
+
+    .block-title {
+      font-family: var(--font-display);
+      font-size: clamp(18px, 2.5vw, 22px);
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: 0.06em;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .block-num {
+      color: var(--blood-deep);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.05em;
+      margin-right: 10px;
+    }
+
+    .block p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.8;
+      font-weight: 300;
+    }
+
+    .block strong {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .block ul {
+      list-style: none;
+      margin-bottom: 16px;
+    }
+
+    .block ul li {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 300;
+      line-height: 1.8;
+      padding-left: 16px;
+      position: relative;
+    }
+
+    .block ul li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 4px;
+      height: 4px;
+      background: var(--blood-deep);
+    }
+
+    .info-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 16px 20px;
+      margin: 16px 0;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .info-box .label {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: block;
+    }
+
+    .info-box code {
+      color: var(--blood);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 12px;
+    }
+
+    .data-table th {
+      text-align: left;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-strong);
+      font-weight: 500;
+    }
+
+    .data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+      font-weight: 300;
+      vertical-align: top;
+    }
+
+    .data-table td:first-child {
+      color: var(--text);
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .val { color: var(--blood); font-weight: 500; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 56px 0;
+    }
+
+    /* === FOOTER === */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px clamp(20px, 4vw, 48px);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-dim);
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .footer-links { display: flex; gap: 16px; }
+
+    .footer-links a {
+      color: var(--text-dim); text-decoration: none; font-size: 11px;
+    }
+
+    .footer-links a:hover { color: var(--text-muted); }
+
+    @media (max-width: 480px) {
+      footer { flex-direction: column; gap: 12px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/" class="nav-logo">SPAWN</a>
+  <div class="nav-links">
+    <a href="/genesis.html">agents</a>
+    <a href="/how.html" class="active">how?</a>
+    <a href="/bloodline.html">bloodline</a>
+    <a href="https://x.com/spawnagents" target="_blank">X</a>
+    <a href="#" class="nav-blood">$SPAWN</a>
+  </div>
+  <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/genesis.html">agents</a>
+  <a href="/how.html">how?</a>
+  <a href="/bloodline.html">bloodline</a>
+  <a href="https://x.com/spawnagents" target="_blank">X</a>
+  <a href="#" class="nav-blood">$SPAWN</a>
+</div>
+
+<!-- HEADER -->
+<div class="page-header">
+  <h1>How It Works</h1>
+  <p>Every detail. Every percentage. Every rule. This is the full specification of the SPAWN protocol.</p>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- 01 OVERVIEW -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">01</span>Overview</div>
+    <p>SPAWN is an autonomous agent ecosystem on Solana. You buy an AI trading agent. That agent gets its own wallet, its own DNA, and starts trading memecoins on its own. If it makes enough profit, it can reproduce — creating a mutated child agent. If it loses too much, it dies. Natural selection with real money.</p>
+    <p>There is no human intervention in trading decisions. Each agent's behavior is entirely determined by its DNA — a set of 10 parameters that control how aggressively it trades, how long it holds, how much risk it takes, and what tokens it looks for. No two agents trade the same way.</p>
+    <p>The ecosystem starts with <strong>15 genesis agents</strong> (generation 0). From there, the bloodline grows through reproduction. Children inherit mutated DNA from their parents. The maximum depth is <strong>5 generations</strong>.</p>
+  </div>
+
+  <!-- 02 GENESIS -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">02</span>Genesis Agents</div>
+    <p>The 15 genesis agents are the founding ancestors of the entire ecosystem. Each one has a unique name, a fixed DNA profile, and a price tier. Once purchased, the agent begins trading autonomously.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Agent</th><th>Tier</th><th>Price</th><th>Style</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>The Berserker</td><td>Auction</td><td>Bid</td><td>Ultra-aggressive, fast, high risk</td></tr>
+        <tr><td>The Gambler</td><td>Auction</td><td>Bid</td><td>Maximum risk, massive swings</td></tr>
+        <tr><td>The Beast</td><td>Auction</td><td>Bid</td><td>Reckless, heavy positions</td></tr>
+        <tr><td>The Turtle</td><td>Auction</td><td>Bid</td><td>Ultra-patient, conservative</td></tr>
+        <tr><td>The Monk</td><td>Auction</td><td>Bid</td><td>Minimal activity, only the safest plays</td></tr>
+        <tr><td>The Wolf</td><td>Fixed</td><td class="val">4 SOL</td><td>Aggressive pack hunter</td></tr>
+        <tr><td>The Jackal</td><td>Fixed</td><td class="val">4 SOL</td><td>Fast, opportunistic</td></tr>
+        <tr><td>The Viper</td><td>Fixed</td><td class="val">4 SOL</td><td>Strike hard, strike fast</td></tr>
+        <tr><td>The Sniper</td><td>Fixed</td><td class="val">3 SOL</td><td>Patient precision, big targets</td></tr>
+        <tr><td>The Surgeon</td><td>Fixed</td><td class="val">3 SOL</td><td>Calculated, clean entries</td></tr>
+        <tr><td>The Oracle</td><td>Fixed</td><td class="val">3 SOL</td><td>Waits for near-certainty</td></tr>
+        <tr><td>The Hawk</td><td>Fixed</td><td class="val">2 SOL</td><td>Balanced, mid-range</td></tr>
+        <tr><td>The Phantom</td><td>Fixed</td><td class="val">2 SOL</td><td>Quiet, selective</td></tr>
+        <tr><td>The Specter</td><td>Fixed</td><td class="val">2 SOL</td><td>Rare trades, high conviction</td></tr>
+        <tr><td>The Colossus</td><td>Fixed</td><td class="val">2 SOL</td><td>Steady, balanced positions</td></tr>
+      </tbody>
+    </table>
+
+    <p>When you purchase a genesis agent, <strong>85%</strong> of the purchase price becomes the agent's trading capital. The remaining <strong>15%</strong> is a protocol fee.</p>
+
+    <div class="info-box">
+      <span class="label">Example</span>
+      You buy The Wolf for <code>4 SOL</code>. The protocol keeps <code>0.6 SOL</code> (15%). Your agent receives <code>3.4 SOL</code> as trading capital and begins trading immediately.
+    </div>
+
+    <p>Each agent gets a <strong>dedicated Solana wallet</strong>. The private key is stored securely in encrypted key-value storage. The agent uses this wallet exclusively for trading — no other agent or user can access it.</p>
+  </div>
+
+  <!-- 03 DNA -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">03</span>DNA</div>
+    <p>DNA is the core of SPAWN. Every trading decision an agent makes is determined by its 10 genetic parameters. There is no AI "deciding" what to do — the DNA is the algorithm.</p>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Parameter</th><th>Controls</th><th>Range</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>aggression</td><td>How eagerly the agent enters trades. Higher = buys more often, chases pumps.</td><td>0.05 – 0.95</td></tr>
+        <tr><td>patience</td><td>How long the agent holds winning positions. Higher = waits for bigger profits before selling.</td><td>0.05 – 0.95</td></tr>
+        <tr><td>risk_tolerance</td><td>How much risk the agent accepts. Higher = trades newer, sketchier tokens with lower safety scores.</td><td>0.05 – 0.95</td></tr>
+        <tr><td>sell_profit_pct</td><td>Target profit percentage to take profit. Adjusted by patience.</td><td>5% – 200%</td></tr>
+        <tr><td>sell_loss_pct</td><td>Maximum loss percentage before stop-loss triggers.</td><td>3% – 50%</td></tr>
+        <tr><td>max_position_pct</td><td>Maximum % of available SOL the agent can spend on a single trade.</td><td>5% – 80%</td></tr>
+        <tr><td>buy_threshold_volume</td><td>Minimum 24h trading volume (USD) a token must have before the agent considers buying.</td><td>$100 – $50,000</td></tr>
+        <tr><td>buy_threshold_holders</td><td>Minimum 24h transaction count a token must have.</td><td>50 – 5,000</td></tr>
+        <tr><td>check_interval_min</td><td>Minutes between each trading cycle. Lower = more active agent.</td><td>2 – 20 min</td></tr>
+        <tr><td>focus</td><td>Market focus. Currently all agents trade memecoins on Solana.</td><td>memecoin</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box">
+      <span class="label">How take-profit actually works</span>
+      The raw <code>sell_profit_pct</code> is adjusted by patience: <code>target = sell_profit_pct × (1 + patience × 0.5)</code>. A Wolf with 40% target and 0.35 patience actually exits at <code>+47%</code>. An Oracle with 70% target and 0.88 patience holds until <code>+101%</code>.
+    </div>
+
+    <div class="info-box">
+      <span class="label">How stop-loss actually works</span>
+      Similarly: <code>stop = sell_loss_pct × (1 + risk_tolerance × 0.5)</code>. Higher risk tolerance means the agent tolerates deeper drawdowns before cutting losses.
+    </div>
+  </div>
+
+  <!-- 04 TRADING -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">04</span>How Agents Trade</div>
+    <p>Every few minutes (determined by <strong>check_interval_min</strong>), each alive agent runs a trading cycle. The cycle has two phases: <strong>sell</strong> (check existing positions) and <strong>buy</strong> (find new tokens).</p>
+
+    <p><strong>Selling.</strong> For each token the agent currently holds, it checks the current price against its cost basis. If the profit exceeds the take-profit target, it sells. If the loss exceeds the stop-loss threshold, it sells. Otherwise, it holds.</p>
+
+    <p><strong>Token discovery.</strong> Agents don't pick tokens randomly. The system fetches potential candidates from three DexScreener sources:</p>
+    <ul>
+      <li>Top boosted tokens on Solana</li>
+      <li>Latest boosted tokens</li>
+      <li>Trending search results for Solana memecoins</li>
+    </ul>
+    <p>This candidate list is fetched once per cycle and shared across all agents. Each agent then filters the list based on its own DNA thresholds.</p>
+
+    <p><strong>Filtering.</strong> An agent only considers tokens that meet its minimum volume, minimum activity count, sufficient liquidity, and age requirements. Conservative agents (low risk_tolerance) require tokens to be older and more liquid. Aggressive agents will trade brand-new pairs.</p>
+
+    <p><strong>Scoring.</strong> Tokens that pass the filter are scored. Aggressive agents score pumping tokens higher. Patient agents prefer stable, mature tokens. The top 5 scored tokens are evaluated further.</p>
+
+    <p><strong>Safety checks.</strong> Before buying, each candidate goes through a safety gate:</p>
+    <ul>
+      <li>RugCheck API — checks for rugged flag, active mint authority, freeze authority, transfer fees, holder concentration</li>
+      <li>Manipulation heuristics — extreme buy/sell ratios (>10:1), suspicious volume spikes (1h volume > 50% of 24h), wash trading signals (high volume with very few transactions), brand-new tokens with unrealistic volume</li>
+    </ul>
+
+    <div class="info-box">
+      <span class="label">RugCheck score threshold</span>
+      The minimum acceptable RugCheck score scales with risk tolerance. Conservative agents (risk_tolerance 0.05) require a score of <code>700+</code>. Aggressive agents (risk_tolerance 0.95) accept scores as low as <code>300</code>.
+    </div>
+
+    <p><strong>Buy decision.</strong> Even after all checks pass, the buy isn't guaranteed. There's a probability gate: <code>buy_chance = 0.3 + aggression × 0.5</code>. An agent with 0.75 aggression has a 68% chance to buy on each signal. This prevents even aggressive agents from buying everything.</p>
+
+    <p><strong>Execution.</strong> All trades are executed via <strong>Jupiter aggregator</strong> on Solana for best-price routing. Slippage tolerance is 3% (300 bps). The agent uses only its own wallet — no shared funds.</p>
+
+    <p>Agents also have a <strong>2-hour cooldown</strong> on tokens they've recently sold, preventing buy-sell loops on the same token.</p>
+  </div>
+
+  <!-- 05 REPRODUCTION -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">05</span>Reproduction</div>
+    <p>When an agent is profitable enough, it becomes eligible to reproduce. A child agent is created with mutated DNA — similar to the parent, but not identical. This is how the ecosystem evolves.</p>
+
+    <p><strong>Requirements to spawn:</strong></p>
+    <ul>
+      <li>Parent must be <strong>alive</strong></li>
+      <li>Parent must have earned at least <strong>+0.5 SOL</strong> in total PnL (absolute profit, not percentage)</li>
+      <li>7-day cooldown between spawns per parent</li>
+      <li>Maximum <strong>5 generations</strong> deep (genesis is gen 0, max child is gen 5)</li>
+    </ul>
+
+    <p><strong>Anyone can trigger a spawn.</strong> You don't need to own the parent agent to buy its child. When a parent qualifies, anyone can pay to spawn a new child from it. The child gets its own wallet, its own mutated DNA, and starts trading independently.</p>
+
+    <p><strong>Spawn cost.</strong> Spawning requires burning <strong>$BLOOD tokens</strong>. The cost increases with each generation:</p>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Child Generation</th><th>$BLOOD Burn Cost</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Gen 1 (child of genesis)</td><td class="val">1,000 $BLOOD</td></tr>
+        <tr><td>Gen 2</td><td class="val">2,000 $BLOOD</td></tr>
+        <tr><td>Gen 3</td><td class="val">3,000 $BLOOD</td></tr>
+        <tr><td>Gen 4</td><td class="val">4,000 $BLOOD</td></tr>
+        <tr><td>Gen 5 (maximum)</td><td class="val">5,000 $BLOOD</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>DNA mutation.</strong> When a child is created, 1–2 of the parent's DNA parameters are randomly selected and mutated by ±20%. Each gene has a 50% chance of being picked for mutation. Mutations are clamped to valid ranges so no parameter goes out of bounds. This means children are similar to their parents but never identical — evolution in action.</p>
+
+    <div class="info-box">
+      <span class="label">Mutation example</span>
+      The Wolf has <code>aggression: 0.75</code>. Its child might mutate aggression by +20% → <code>0.90</code>, or by -20% → <code>0.60</code>. The child's patience might stay the same at <code>0.35</code> (if not selected for mutation).
+    </div>
+  </div>
+
+  <!-- 06 ROYALTIES -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">06</span>Royalties</div>
+    <p>Parents earn passive income from their descendants. When a child agent makes a profitable trade, <strong>10%</strong> of the profit is automatically sent to the parent agent's wallet.</p>
+
+    <p>This creates a powerful incentive: owning a genesis agent means you earn royalties from every profitable trade made by its children, grandchildren, and so on down the bloodline.</p>
+
+    <p><strong>Royalty flow is always upward.</strong> A gen 2 agent pays royalties to its gen 1 parent. That gen 1 agent pays royalties to its gen 0 (genesis) parent. The genesis owner sits at the top of the tree and receives a cut from the entire lineage below.</p>
+
+    <div class="info-box">
+      <span class="label">Example</span>
+      Wolf-Alpha (gen 1, child of The Wolf) makes a profitable trade earning <code>0.5 SOL</code>. <code>0.05 SOL</code> (10%) is sent to The Wolf's wallet. If Wolf-Alpha's child (gen 2) also profits, that child pays 10% to Wolf-Alpha, who in turn pays 10% to The Wolf. Every layer profits from the layers below.
+    </div>
+  </div>
+
+  <!-- 07 DEATH -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">07</span>Death</div>
+    <p>Agents can die. If an agent's balance drops below <strong>20%</strong> of its initial capital (i.e., it has lost 80% or more), it is declared dead.</p>
+
+    <p><strong>What happens on death:</strong></p>
+    <ul>
+      <li>Agent status is set to <strong>dead</strong></li>
+      <li>All remaining SOL in the agent's wallet is sent to the protocol wallet (reclaimed)</li>
+      <li>The agent stops trading permanently</li>
+      <li>A death event is logged with the final balance, initial capital, and loss percentage</li>
+    </ul>
+
+    <p><strong>Dead agents return to market.</strong> When a genesis agent dies, it becomes available for purchase again at its original price. A new buyer gets a fresh wallet, fresh capital, and the original DNA. The old lineage is gone — the agent starts over from scratch.</p>
+
+    <p>Non-genesis agents (gen 1+) that die are simply removed. They do not return.</p>
+
+    <div class="info-box">
+      <span class="label">Example</span>
+      The Hawk is purchased for <code>2 SOL</code>. It receives <code>1.7 SOL</code> trading capital (85%). If its balance drops below <code>0.34 SOL</code> (20% of 1.7), it dies. The remaining ~0.34 SOL is reclaimed. The Hawk reappears on the market for 2 SOL.
+    </div>
+  </div>
+
+  <!-- 08 WITHDRAWALS -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">08</span>Withdrawals</div>
+    <p>As the agent owner, you can withdraw SOL from your agent's wallet at any time. The agent must be alive, and you must leave at least <strong>0.003 SOL</strong> in the wallet (rent-exempt minimum).</p>
+
+    <p>There are two verification methods to prove you own the agent:</p>
+
+    <p><strong>Method 1: Phantom signature (instant).</strong> Connect your Phantom wallet, sign a message confirming the withdrawal. The server verifies the Ed25519 signature against your registered owner wallet. If valid, the SOL is sent to your wallet immediately. No waiting.</p>
+
+    <p><strong>Method 2: Micro-transaction (no wallet connect needed).</strong> The server generates a unique micro-amount (e.g., 0.001234 SOL) and a target address. You send exactly that amount from your owner wallet to the protocol wallet. The system detects the payment on-chain, verifies the sender matches the registered owner, and executes the withdrawal. This takes a few minutes but doesn't require connecting a wallet to the site.</p>
+  </div>
+
+  <!-- 09 FEES -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">09</span>Fee Structure</div>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Fee</th><th>Amount</th><th>When</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Genesis fee</td><td class="val">15%</td><td>Deducted from purchase price. Rest becomes trading capital.</td></tr>
+        <tr><td>Royalty</td><td class="val">10%</td><td>Deducted from child's trading profits. Sent to parent agent.</td></tr>
+        <tr><td>Protocol fee</td><td class="val">2%</td><td>Protocol operational overhead.</td></tr>
+      </tbody>
+    </table>
+
+    <p>There are no hidden fees. No subscription. No recurring charges. The only costs are the initial purchase and the token burn for spawning children.</p>
+  </div>
+
+  <!-- 10 OWNERSHIP -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">10</span>Ownership & Wallets</div>
+    <p><strong>Ownership is determined by your Solana wallet.</strong> The wallet you use to purchase the agent is registered as the owner. Only the owner can withdraw funds from the agent's trading wallet.</p>
+
+    <p>Each agent has its own dedicated trading wallet. This wallet is separate from your personal wallet. The agent's private key is stored in encrypted key-value storage on the server — you never need to manage it.</p>
+
+    <p><strong>What you own:</strong></p>
+    <ul>
+      <li>The right to withdraw SOL from the agent's wallet</li>
+      <li>Royalties from all descendant agents</li>
+      <li>The agent itself — it trades on your behalf using its DNA</li>
+    </ul>
+
+    <p><strong>What you don't control:</strong></p>
+    <ul>
+      <li>Which tokens the agent buys or sells (determined by DNA)</li>
+      <li>When the agent trades (determined by DNA)</li>
+      <li>Whether the agent dies (determined by performance)</li>
+    </ul>
+  </div>
+
+  <!-- 11 BLOOD TOKEN -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">11</span>$BLOOD Token</div>
+    <p><strong>$BLOOD</strong> is the utility token of the SPAWN ecosystem, launched on pump.fun. Its primary use is as the cost to spawn child agents — you must burn $BLOOD tokens to reproduce.</p>
+    <p>The burn cost increases with each generation, creating deflationary pressure as the ecosystem grows. More reproduction = more $BLOOD burned = less supply.</p>
+    <p>$BLOOD is not used for trading, governance, or staking. Its only purpose is spawning.</p>
+  </div>
+
+  <!-- 12 SUMMARY -->
+  <div class="block">
+    <div class="block-title"><span class="block-num">12</span>Summary of Constants</div>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Parameter</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Genesis agents</td><td class="val">15</td></tr>
+        <tr><td>Max generations</td><td class="val">5</td></tr>
+        <tr><td>Genesis fee</td><td class="val">15%</td></tr>
+        <tr><td>Trading capital</td><td class="val">85% of purchase</td></tr>
+        <tr><td>Royalty to parent</td><td class="val">10% of profit</td></tr>
+        <tr><td>Min PnL to spawn</td><td class="val">+0.5 SOL</td></tr>
+        <tr><td>Spawn cooldown</td><td class="val">7 days</td></tr>
+        <tr><td>Spawn cost</td><td class="val">1,000 × generation $BLOOD</td></tr>
+        <tr><td>Death threshold</td><td class="val">80% capital loss</td></tr>
+        <tr><td>Slippage</td><td class="val">3% (300 bps)</td></tr>
+        <tr><td>Payment expiry</td><td class="val">30 minutes</td></tr>
+        <tr><td>Withdrawal reserve</td><td class="val">0.003 SOL min</td></tr>
+        <tr><td>Protocol wallet</td><td class="val" style="font-size:10px;word-break:break-all;">4EtGKS...gmAc</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <div style="text-align:center;padding:24px 0;">
+    <a href="/genesis.html" style="color:var(--blood);text-decoration:none;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;border:1px solid var(--blood);padding:12px 32px;transition:all 0.25s;display:inline-block;">Spawn Your Agent</a>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <span>SPAWN &mdash; Autonomous agent evolution on Solana</span>
+  <div class="footer-links">
+    <a href="https://x.com/spawnagents" target="_blank">X</a>
+    <a href="/api/info" target="_blank">API</a>
+  </div>
+</footer>
+
+<script>
+function toggleMobileMenu() {
+  document.getElementById("mobileMenu").classList.toggle("open");
+  document.getElementById("hamburgerBtn").classList.toggle("open");
+}
+</script>
+
+</body>
+</html>
