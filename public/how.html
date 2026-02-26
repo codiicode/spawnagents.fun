@@ -9,7 +9,7 @@
   <meta property="og:description" content="Every detail of how SPAWN works. Genesis agents, DNA, trading, reproduction, death, fees, and more.">
   <meta property="og:image" content="/og.jpg">
   <link rel="icon" href="/og.jpg" type="image/jpeg">
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #08050a;
@@ -21,12 +21,13 @@
       --blood-bright: #e63950;
       --blood-deep: #8b1528;
       --blood-dim: rgba(196, 30, 58, 0.15);
-      --text: #e8e3e5;
-      --text-muted: #908588;
-      --text-dim: #5e5257;
+      --text: #ede8ea;
+      --text-muted: #9e9396;
+      --text-dim: #6b5f63;
       --green: #4a9e6a;
       --red: #c44040;
       --font-display: 'Cinzel', serif;
+      --font-body: 'Sora', sans-serif;
       --font-mono: 'JetBrains Mono', monospace;
     }
 
@@ -34,7 +35,7 @@
     html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
 
     body {
-      font-family: var(--font-mono);
+      font-family: var(--font-body);
       background: var(--bg);
       color: var(--text);
       font-size: 14px;
@@ -65,6 +66,7 @@
     .nav-links { display: flex; gap: 20px; align-items: center; }
 
     .nav-links a {
+      font-family: var(--font-mono);
       font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
       color: var(--text-muted); text-decoration: none; transition: color 0.2s;
     }
@@ -107,6 +109,7 @@
     .mobile-menu.open { display: flex; }
 
     .mobile-menu a {
+      font-family: var(--font-mono);
       font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
       color: var(--text-muted); text-decoration: none; padding: 8px 0;
     }
