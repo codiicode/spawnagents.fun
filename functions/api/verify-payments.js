@@ -123,8 +123,8 @@ export async function onRequest(context) {
       }
 
       await db.prepare(
-        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status) VALUES (?, NULL, 0, ?, ?, ?, 'alive')"
-      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna)).run();
+        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
 
       // Log event
       await db.prepare(

@@ -1,5 +1,6 @@
 import { processAgent } from "../_lib/engine.js";
 import { discoverTokens } from "../_lib/market-data.js";
+import { getBalance, sendSol } from "../_lib/solana.js";
 
 export async function onRequest(context) {
   if (context.request.method !== "POST") return new Response("Method not allowed", { status: 405 });
@@ -85,5 +86,51 @@ export async function onRequest(context) {
     }
   }
 
-  return Response.json({ processed: agents.results.length, results });
+  // === DEATH CHECK: kill agents that lost 80%+ of capital ===
+  const deathPct = parseFloat(context.env.DEATH_LOSS_PCT || "0.8");
+  let deaths = 0;
+
+  for (const agent of agents.results) {
+    if (agent.initial_capital <= 0) continue; // no capital info, skip
+
+    try {
+      const balance = await getBalance(agent.agent_wallet, rpcUrl);
+      const threshold = agent.initial_capital * (1 - deathPct);
+
+      if (balance < threshold) {
+        // Agent is dead — send remaining SOL to protocol wallet
+        const protocolWallet = context.env.PROTOCOL_WALLET;
+        const agentSecret = await kv.get(`agent:${agent.id}:secret`);
+        let deathTx = null;
+
+        if (agentSecret && protocolWallet && balance > 0.002) {
+          try {
+            const sendAmount = balance - 0.001; // keep dust for rent
+            deathTx = await sendSol(agentSecret, protocolWallet, sendAmount, rpcUrl);
+          } catch (e) {
+            console.error(`Failed to reclaim ${agent.id} funds:`, e.message);
+          }
+        }
+
+        await db.batch([
+          db.prepare("UPDATE agents SET status = 'dead' WHERE id = ?").bind(agent.id),
+          db.prepare(
+            "INSERT INTO events (type, agent_id, data) VALUES ('death', ?, ?)"
+          ).bind(agent.id, JSON.stringify({
+            balance,
+            initial_capital: agent.initial_capital,
+            loss_pct: ((1 - balance / agent.initial_capital) * 100).toFixed(1),
+            reclaim_tx: deathTx,
+          })),
+        ]);
+
+        console.log(`Agent ${agent.id} died: ${balance.toFixed(4)} SOL remaining (started with ${agent.initial_capital})`);
+        deaths++;
+      }
+    } catch (e) {
+      console.error(`Death check failed for ${agent.id}:`, e.message);
+    }
+  }
+
+  return Response.json({ processed: agents.results.length, results, deaths });
 }

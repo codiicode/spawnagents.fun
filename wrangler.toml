@@ -15,6 +15,7 @@ PROTOCOL_FEE_PCT = "0.02"
 MAX_GENERATIONS = "5"
 GENESIS_COUNT = "15"
 GENESIS_FEE_PCT = "0.15"
+DEATH_LOSS_PCT = "0.8"
 
 [[kv_namespaces]]
 binding = "AGENT_KEYS"

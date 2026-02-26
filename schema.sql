@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS agents (
   status TEXT DEFAULT 'alive',
   born_at TEXT DEFAULT (datetime('now')),
   last_trade_at TEXT,
+  initial_capital REAL DEFAULT 0,
   spawn_cost_blood INTEGER DEFAULT 0,
   FOREIGN KEY (parent_id) REFERENCES agents(id)
 );
