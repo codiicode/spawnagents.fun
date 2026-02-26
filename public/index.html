@@ -83,22 +83,6 @@
 
     .nav-links a.nav-blood:hover { color: var(--blood); border-color: var(--blood); }
 
-    /* Wallet button */
-    .nav-wallet {
-      font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 0.08em;
-      color: var(--blood);
-      background: none;
-      border: 1px solid var(--blood-deep);
-      padding: 4px 10px;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-    }
-
-    .nav-wallet:hover { border-color: var(--blood); color: var(--blood-bright); }
-    .nav-wallet.connected { color: var(--green); border-color: rgba(74,158,106,0.3); }
-
     /* Hamburger menu */
     .nav-hamburger {
       display: none;
@@ -413,24 +397,6 @@
       font-weight: 500;
     }
 
-    .genesis-buy-btn {
-      display: inline-block;
-      font-family: var(--font-mono);
-      font-size: 9px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--blood);
-      background: none;
-      border: 1px solid var(--blood-deep);
-      padding: 4px 10px;
-      cursor: pointer;
-      float: right;
-      transition: border-color 0.2s, color 0.2s;
-    }
-
-    .genesis-buy-btn:hover { border-color: var(--blood); color: var(--blood-bright); }
-    .genesis-buy-btn:disabled { color: var(--text-dim); border-color: var(--border); cursor: default; }
-    .genesis-buy-btn.buying { color: var(--text-dim); }
 
     /* === HOW IT WORKS (expandable) === */
     .how-item {
@@ -624,7 +590,6 @@
     <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
     <a href="https://github.com/codiicode/bloodline" target="_blank">github</a>
     <a href="#" class="nav-blood">$BLOOD</a>
-    <button class="nav-wallet" id="walletBtn" onclick="connectWallet()">connect wallet</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -636,7 +601,6 @@
   <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
   <a href="https://github.com/codiicode/bloodline" target="_blank">github</a>
   <a href="#" class="nav-blood">$BLOOD</a>
-  <button class="nav-wallet" onclick="connectWallet()">connect wallet</button>
 </div>
 
 <!-- HERO: TREE FILLS VIEWPORT -->
@@ -1064,12 +1028,9 @@ function renderGenesis(data) {
   const t3 = fixed.filter(g => FIXED_TIERS[g.id] === 3);
   const t2 = fixed.filter(g => FIXED_TIERS[g.id] === 2);
 
-  function card(g, price, priceSol) {
+  function card(g, price) {
     const a = g.dna.aggression, p = g.dna.patience, r = g.dna.risk_tolerance;
     const st = g.available ? "available" : "claimed";
-    const buyBtn = g.available
-      ? `<button class="genesis-buy-btn" onclick="buyGenesis('${g.id}', ${priceSol || 0})">buy</button>`
-      : '';
     return `<div class="genesis-card">
       <div class="genesis-card-top">
         <span class="genesis-card-name">${g.name || g.id}</span>
@@ -1078,23 +1039,23 @@ function renderGenesis(data) {
       <div class="dna-mini"><span class="dna-mini-label">agg</span><div class="dna-mini-track"><div class="dna-mini-fill" style="width:${a * 100}%"></div></div><span class="dna-mini-val">${a}</span></div>
       <div class="dna-mini"><span class="dna-mini-label">pat</span><div class="dna-mini-track"><div class="dna-mini-fill" style="width:${p * 100}%"></div></div><span class="dna-mini-val">${p}</span></div>
       <div class="dna-mini"><span class="dna-mini-label">risk</span><div class="dna-mini-track"><div class="dna-mini-fill" style="width:${r * 100}%"></div></div><span class="dna-mini-val">${r}</span></div>
-      <div class="genesis-card-price">${price} ${buyBtn}</div>
+      <div class="genesis-card-price">${price}</div>
     </div>`;
   }
 
   let html = '<div class="genesis-group-label">Auction &mdash; 5 Extreme Archetypes</div>';
-  html += '<div class="genesis-cards">' + auction.map(g => card(g, '<span class="price-val">auction</span>', 0)).join("") + '</div>';
+  html += '<div class="genesis-cards">' + auction.map(g => card(g, '<span class="price-val">auction</span>')).join("") + '</div>';
 
   html += '<div class="genesis-group-label">Fixed Price</div>';
 
   html += '<div class="genesis-tier-label">Tier III &mdash; 4 SOL</div>';
-  html += '<div class="genesis-cards">' + t4.map(g => card(g, '<span class="price-val">4 SOL</span>', 4)).join("") + '</div>';
+  html += '<div class="genesis-cards">' + t4.map(g => card(g, '<span class="price-val">4 SOL</span>')).join("") + '</div>';
 
   html += '<div class="genesis-tier-label">Tier II &mdash; 3 SOL</div>';
-  html += '<div class="genesis-cards">' + t3.map(g => card(g, '<span class="price-val">3 SOL</span>', 3)).join("") + '</div>';
+  html += '<div class="genesis-cards">' + t3.map(g => card(g, '<span class="price-val">3 SOL</span>')).join("") + '</div>';
 
   html += '<div class="genesis-tier-label">Tier I &mdash; 2 SOL</div>';
-  html += '<div class="genesis-cards">' + t2.map(g => card(g, '<span class="price-val">2 SOL</span>', 2)).join("") + '</div>';
+  html += '<div class="genesis-cards">' + t2.map(g => card(g, '<span class="price-val">2 SOL</span>')).join("") + '</div>';
 
   el.innerHTML = html;
 }
@@ -1178,106 +1139,7 @@ function closeMobileMenu() {
   document.getElementById("hamburgerBtn").classList.remove("open");
 }
 
-// ============================================================
-// WALLET CONNECT (Phantom direct)
-// ============================================================
 
-const PROGRAM_ID = "7xw1KP6agd8wKfKbr7EyVpR4CrAmk1Zqcm57jipEBw9h";
-const NETWORK = "devnet";
-const RPC_URL = "https://api.devnet.solana.com";
-let walletPublicKey = null;
-
-function getProvider() {
-  if (window.solana?.isPhantom) return window.solana;
-  if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
-  return null;
-}
-
-async function connectWallet() {
-  const provider = getProvider();
-  if (!provider) {
-    window.open("https://phantom.app/", "_blank");
-    return;
-  }
-  try {
-    const resp = await provider.connect();
-    walletPublicKey = resp.publicKey.toString();
-    const btn = document.getElementById("walletBtn");
-    btn.textContent = walletPublicKey.slice(0, 4) + ".." + walletPublicKey.slice(-4);
-    btn.classList.add("connected");
-    // Update mobile menu wallet button too
-    document.querySelectorAll(".mobile-menu .nav-wallet").forEach(b => {
-      b.textContent = btn.textContent;
-      b.classList.add("connected");
-    });
-  } catch (e) {
-    console.error("Wallet connect failed:", e);
-  }
-}
-
-// Auto-reconnect if previously connected
-(async () => {
-  const provider = getProvider();
-  if (provider?.isConnected) {
-    try {
-      const resp = await provider.connect({ onlyIfTrusted: true });
-      walletPublicKey = resp.publicKey.toString();
-      const btn = document.getElementById("walletBtn");
-      btn.textContent = walletPublicKey.slice(0, 4) + ".." + walletPublicKey.slice(-4);
-      btn.classList.add("connected");
-    } catch {}
-  }
-})();
-
-// Genesis buy function
-async function buyGenesis(agentId, priceSol) {
-  if (!walletPublicKey) {
-    await connectWallet();
-    if (!walletPublicKey) return;
-  }
-
-  const btn = event.target;
-  btn.textContent = "signing...";
-  btn.classList.add("buying");
-  btn.disabled = true;
-
-  try {
-    // For devnet: simple SOL transfer to treasury as proof-of-concept
-    // In production: this will call the Anchor create_agent instruction
-    const provider = getProvider();
-    const connection = { rpcUrl: RPC_URL };
-
-    // Use Solana web3.js via Phantom's built-in
-    const { PublicKey, Transaction, SystemProgram, Connection } = window.solanaWeb3 || {};
-
-    if (!window.solanaWeb3) {
-      // Fallback: record intent via API, actual on-chain later
-      const res = await fetch("/api/create-genesis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          archetype_id: agentId,
-          owner_wallet: walletPublicKey,
-          agent_wallet: walletPublicKey, // placeholder
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        btn.textContent = "claimed";
-        btn.disabled = true;
-        return;
-      } else {
-        btn.textContent = data.error || "error";
-        setTimeout(() => { btn.textContent = "buy"; btn.disabled = false; btn.classList.remove("buying"); }, 2000);
-        return;
-      }
-    }
-  } catch (e) {
-    console.error("Buy failed:", e);
-    btn.textContent = "error";
-    setTimeout(() => { btn.textContent = "buy"; btn.disabled = false; btn.classList.remove("buying"); }, 2000);
-  }
-}
 </script>
 </body>
 </html>
