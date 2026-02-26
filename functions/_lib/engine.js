@@ -1,4 +1,4 @@
-import { getTokenData } from './market-data.js';
+import { getTokenData, checkTokenSafety } from './market-data.js';
 import {
   SOL_MINT,
   getBalance,
@@ -93,11 +93,25 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     .map(t => ({ ...t, score: scoreToken(t, dna) }))
     .sort((a, b) => b.score - a.score);
 
-  // Try top 3 candidates
-  for (const t of scored.slice(0, 3)) {
+  // Try top 5 scored candidates, safety check before buying
+  for (const t of scored.slice(0, 5)) {
     // Aggressive agents buy more readily
     const buyChance = 0.3 + dna.aggression * 0.5; // 30-80%
     if (Math.random() > buyChance) continue;
+
+    // Safety check via RugCheck + heuristics
+    const safety = await checkTokenSafety(t.address, t);
+    if (!safety.safe) {
+      console.log(`${agent.id} skipped ${t.symbol}: ${safety.reasons.join(', ')}`);
+      continue;
+    }
+
+    // Risk-tolerant agents accept lower RugCheck scores
+    const minScore = Math.round(300 + (1 - dna.risk_tolerance) * 400); // 300-700
+    if (safety.score > 0 && safety.score < minScore) {
+      console.log(`${agent.id} skipped ${t.symbol}: rugcheck score ${safety.score} < ${minScore}`);
+      continue;
+    }
 
     const buyQuote = await getJupiterQuote(SOL_MINT, t.address, tradeAmountLamports);
     if (!buyQuote) continue;
@@ -111,7 +125,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         action: 'buy',
         token: t.address,
         symbol: t.symbol,
-        reason: `score ${t.score.toFixed(1)} | vol $${(t.volume_24h / 1000).toFixed(0)}k | liq $${(t.liquidity_usd / 1000).toFixed(0)}k`,
+        reason: `score ${t.score.toFixed(1)} | safety ${safety.score} | vol $${(t.volume_24h / 1000).toFixed(0)}k`,
         amount_sol: tradeAmountSol,
         token_amount: parseInt(buyQuote.outAmount) / 1e6,
         tx_signature: txSig,

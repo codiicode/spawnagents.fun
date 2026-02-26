@@ -133,6 +133,115 @@ export async function getTokenData(tokenMint) {
 }
 
 // ============================================================
+// SAFETY CHECK — RugCheck API + heuristics to avoid scams
+// ============================================================
+
+const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
+
+// Check if a token is safe to buy. Returns { safe, reasons[] }
+export async function checkTokenSafety(tokenAddress, dexData) {
+  const reasons = [];
+
+  // --- Heuristic checks on DexScreener data (free, instant) ---
+
+  // Wash trading: extreme buy/sell ratio in 5 min
+  if (dexData) {
+    const m5 = dexData.txns_5m || 0;
+    const r1h = dexData.buy_sell_ratio_1h || 0;
+
+    // >10:1 buy/sell ratio in last hour = likely manipulation
+    if (r1h > 10) {
+      reasons.push('suspicious buy/sell ratio');
+    }
+
+    // Volume spike: 5min volume > 40% of 24h volume = coordinated pump
+    if (dexData.volume_1h > 0 && dexData.volume_24h > 0) {
+      if (dexData.volume_1h / dexData.volume_24h > 0.5) {
+        reasons.push('volume spike (1h > 50% of 24h)');
+      }
+    }
+
+    // Very high volume but very few transactions = few wallets faking volume
+    if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) {
+      reasons.push('high volume with few txns (likely wash trading)');
+    }
+
+    // Extremely new with huge volume = likely coordinated launch/rug
+    if (dexData.pair_age_hours < 1 && dexData.volume_24h > 200000) {
+      reasons.push('brand new with suspicious volume');
+    }
+  }
+
+  // --- RugCheck API (comprehensive on-chain analysis) ---
+  try {
+    const res = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report/summary`);
+    if (res.ok) {
+      const report = await res.json();
+
+      // Rugged flag
+      if (report.rugged) {
+        reasons.push('flagged as rugged');
+        return { safe: false, reasons, score: 0 };
+      }
+
+      // Mint authority still active = can print more tokens
+      if (report.mintAuthority && report.mintAuthority !== '' && report.mintAuthority !== null) {
+        reasons.push('mint authority active');
+      }
+
+      // Freeze authority = can freeze your wallet
+      if (report.freezeAuthority && report.freezeAuthority !== '' && report.freezeAuthority !== null) {
+        reasons.push('freeze authority active');
+      }
+
+      // Transfer fee = tax token
+      if (report.transferFee && report.transferFee.pct > 0) {
+        reasons.push(`transfer fee ${report.transferFee.pct}%`);
+      }
+
+      // RugCheck risk flags
+      if (report.risks && report.risks.length > 0) {
+        const dangers = report.risks.filter(r => r.level === 'danger');
+        for (const d of dangers) {
+          reasons.push(d.name || d.description || 'danger flag');
+        }
+      }
+
+      // Low holder count
+      if (report.totalHolders !== undefined && report.totalHolders < 30) {
+        reasons.push(`only ${report.totalHolders} holders`);
+      }
+
+      // Top holder concentration (from topHolders if available)
+      if (report.topHolders && Array.isArray(report.topHolders)) {
+        const top10Pct = report.topHolders
+          .slice(0, 10)
+          .reduce((sum, h) => sum + (h.pct || 0), 0);
+        if (top10Pct > 80) {
+          reasons.push(`top 10 holders own ${top10Pct.toFixed(0)}%`);
+        }
+      }
+
+      // Score threshold — RugCheck score (higher = safer)
+      const score = report.score || 0;
+      return {
+        safe: reasons.length === 0,
+        reasons,
+        score,
+        holders: report.totalHolders,
+      };
+    }
+  } catch {}
+
+  // If RugCheck fails, rely on heuristics only
+  return {
+    safe: reasons.length === 0,
+    reasons,
+    score: reasons.length === 0 ? 500 : 0,
+  };
+}
+
+// ============================================================
 // JUPITER QUOTE
 // ============================================================
 
