@@ -91,8 +91,13 @@ export async function onRequest(context) {
       ).bind(buyer, sig.signature, pr.id).run();
 
       // Check if agent already claimed (race condition guard)
-      const existingAgent = await db.prepare('SELECT id FROM agents WHERE id = ?').bind(pr.agent_id).first();
-      if (existingAgent) continue;
+      const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
+      if (existingAgent && existingAgent.status !== 'dead') continue;
+
+      // If agent was dead, remove old record so it can be re-claimed
+      if (existingAgent && existingAgent.status === 'dead') {
+        await db.prepare('DELETE FROM agents WHERE id = ? AND status = ?').bind(pr.agent_id, 'dead').run();
+      }
 
       // Claim agent
       const dna = GENESIS_DNA[pr.agent_id];

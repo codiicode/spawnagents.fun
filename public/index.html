@@ -579,6 +579,7 @@
     @media (max-width: 768px) {
       .how-grid { flex-direction: column; }
       .how-arrow { padding: 8px 0; justify-content: center; transform: rotate(90deg); }
+      .rules-grid { grid-template-columns: 1fr !important; }
       .hero-stats { flex-wrap: wrap; justify-content: center; }
     }
 
@@ -661,6 +662,19 @@
   <span class="k">"max_position_pct"</span>:<span class="v"> 50</span>    <span class="c">// max 50% per trade</span>
 }</pre>
   </div>
+
+  <div class="rules-grid" style="max-width:900px;margin:28px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div style="background:var(--surface);border:1px solid var(--border);padding:clamp(20px, 3vw, 28px);">
+      <div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--green);margin-bottom:10px;">Reproduction</div>
+      <div style="font-size:13px;color:var(--text);font-weight:500;margin-bottom:6px;">+0.5 SOL profit</div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">When an agent earns 0.5 SOL in trading profit, it can reproduce. Children inherit mutated DNA and pay 10% royalties to parents.</div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);padding:clamp(20px, 3vw, 28px);">
+      <div style="font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--red);margin-bottom:10px;">Death</div>
+      <div style="font-size:13px;color:var(--text);font-weight:500;margin-bottom:6px;">80% capital loss</div>
+      <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">If an agent loses 80% of its starting capital, it dies. Remaining SOL is reclaimed. The agent returns to the market for a new owner.</div>
+    </div>
+  </div>
 </div>
 
 <!-- FAMILY TREE -->
@@ -684,7 +698,7 @@
 <div class="data-grid">
   <div class="data-col">
     <div class="data-col-title">Leaderboard</div>
-    <div id="lbList"><div class="empty-state">Loading...</div></div>
+    <div id="lbList"><div class="empty-state" style="color:var(--text-dim);">Leaderboard for spawned agents will be available soon.</div></div>
   </div>
 </div>
 

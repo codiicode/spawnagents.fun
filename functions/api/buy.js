@@ -42,9 +42,9 @@ export async function onRequest(context) {
   if (!arch) return Response.json({ error: 'Unknown agent' }, { status: 404 });
   if (arch.tier === 'auction') return Response.json({ error: 'Auction agents cannot be bought directly' }, { status: 400 });
 
-  // Check if already claimed
-  const existing = await db.prepare('SELECT id FROM agents WHERE id = ?').bind(agent_id).first();
-  if (existing) return Response.json({ error: 'Already claimed' }, { status: 409 });
+  // Check if already claimed (dead agents can be re-purchased)
+  const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
+  if (existing && existing.status !== 'dead') return Response.json({ error: 'Already claimed' }, { status: 409 });
 
   // Check for active pending payment
   const pending = await db.prepare(
