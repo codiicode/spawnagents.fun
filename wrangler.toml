@@ -9,7 +9,6 @@ database_id = "3ded19e6-a992-440a-91a4-90ad10d95930"
 
 [vars]
 PROTOCOL_WALLET = "4EtGKSvtteZNafiYTnxRggjMsmazCY5iZEikqTbGgmAc"
-RPC_URL = "" # Set via: wrangler pages secret put RPC_URL
 MIN_SPAWN_PNL = "0.5"
 ROYALTY_PCT = "0.1"
 PROTOCOL_FEE_PCT = "0.02"
