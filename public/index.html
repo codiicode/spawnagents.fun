@@ -146,12 +146,19 @@
     .hero::before {
       content: '';
       position: absolute;
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 600px;
-      height: 600px;
-      background: radial-gradient(circle, rgba(196, 30, 58, 0.06) 0%, transparent 70%);
+      inset: 0;
+      background: url('/banner1.jpg') center center / cover no-repeat;
+      opacity: 0.08;
+      pointer-events: none;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at center, transparent 30%, var(--bg) 75%),
+        linear-gradient(to bottom, var(--bg) 0%, transparent 15%, transparent 70%, var(--bg) 100%);
       pointer-events: none;
     }
 
@@ -752,10 +759,13 @@ function updateStats(agents) {
 
 function renderLeaderboard(agents) {
   const el = document.getElementById("lbList");
-  const sorted = [...agents].sort((a, b) => b.total_pnl - a.total_pnl).slice(0, 10);
-
-  if (!sorted.length) { el.innerHTML = '<div class="empty-state">No agents yet</div>'; return; }
-
+  // Only show real agents from API, not mock data
+  const real = agents.filter(a => a._real);
+  if (!real.length) {
+    el.innerHTML = '<div class="empty-state" style="color:var(--text-dim);">Leaderboard for spawned agents will be available soon.</div>';
+    return;
+  }
+  const sorted = [...real].sort((a, b) => b.total_pnl - a.total_pnl).slice(0, 10);
   el.innerHTML = sorted.map((a, i) => `
     <div class="lb-item">
       <span class="lb-rank ${i < 3 ? "r" + (i + 1) : ""}">${i + 1}</span>
@@ -949,7 +959,7 @@ async function fetchAgents() {
     const r = await fetch("/api/agents");
     if (!r.ok) throw 0;
     const d = await r.json();
-    if (d.agents?.length > 0) return d.agents.map(a => ({ ...a, dna: typeof a.dna === "string" ? JSON.parse(a.dna) : a.dna }));
+    if (d.agents?.length > 0) return d.agents.map(a => ({ ...a, _real: true, dna: typeof a.dna === "string" ? JSON.parse(a.dna) : a.dna }));
   } catch {}
   return MOCK_AGENTS;
 }
