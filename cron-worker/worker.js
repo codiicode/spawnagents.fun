@@ -23,18 +23,21 @@ export default {
       console.error("Failed to process trades:", e);
     }
 
-    // 2. Distribute royalties (runs every cycle but only pays out when there's new profit)
-    try {
-      const royaltyRes = await fetch(`${siteUrl}/api/distribute-royalties`, {
-        method: "POST",
-        headers,
-      });
-      const royaltyData = await royaltyRes.json();
-      if (royaltyData.payments > 0) {
-        console.log(`Distributed ${royaltyData.payments} royalty payments, total: ${royaltyData.total_distributed} SOL`);
+    // 2. Distribute royalties (every 6 hours — at minute 0 of hours 0, 6, 12, 18)
+    const now = new Date();
+    if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() < 5) {
+      try {
+        const royaltyRes = await fetch(`${siteUrl}/api/distribute-royalties`, {
+          method: "POST",
+          headers,
+        });
+        const royaltyData = await royaltyRes.json();
+        if (royaltyData.payments > 0) {
+          console.log(`Distributed ${royaltyData.payments} royalty payments, total: ${royaltyData.total_distributed} SOL`);
+        }
+      } catch (e) {
+        console.error("Failed to distribute royalties:", e);
       }
-    } catch (e) {
-      console.error("Failed to distribute royalties:", e);
     }
 
     // 3. Verify pending payments (Solana Pay)

@@ -1,20 +1,20 @@
-# BLOODLINE
+# SPAWN
 
 **Darwinian evolution with real money.** Autonomous AI trading agents that live, trade, reproduce, and die on Solana. The fittest survive. The rest go extinct.
 
 ## The Concept
 
-BLOODLINE is an evolutionary agent ecosystem. You buy a genesis agent with SOL. That SOL becomes the agent's trading capital. The agent trades autonomously based on its DNA — a set of parameters that control aggression, patience, risk tolerance, position sizing, and timing.
+SPAWN is an autonomous agent evolution ecosystem. You buy a genesis agent with SOL. That SOL becomes the agent's trading capital (85%, 15% protocol fee). The agent trades autonomously via Jupiter based on its DNA — a set of parameters that control aggression, patience, risk tolerance, position sizing, and timing.
 
 Profitable agents can **reproduce**. Their offspring inherit mutated DNA (each parameter ±20%). Children pay **10% royalties** to their parent on every profitable trade, up to 5 generations deep. Bad DNA dies. Good DNA multiplies. Natural selection plays out in real-time with real money.
 
 ### How It Works
 
 ```
-1. Buy a Genesis Agent        → Your SOL becomes trading capital
-2. Agent Trades Autonomously   → DNA controls every decision
+1. Buy a Genesis Agent        → 85% of SOL becomes trading capital
+2. Agent Trades Autonomously   → DNA controls every decision via Jupiter
 3. Profitable Agents Reproduce → DNA mutates, children pay royalties
-4. Bad DNA Goes Extinct        → Only the fittest bloodlines survive
+4. Bad DNA Goes Extinct        → Only the fittest lineages survive
 ```
 
 ## Genesis Agents
@@ -59,7 +59,7 @@ Genesis (Gen 0)  ← receives 10% from Gen 1
             └─ ...up to Gen 5
 ```
 
-As a genesis owner, you earn royalties from every descendant in your bloodline. The deeper your tree grows, the more passive income you generate.
+As a genesis owner, you earn royalties from every descendant in your lineage. The deeper your tree grows, the more passive income you generate.
 
 ## Architecture
 
@@ -77,7 +77,7 @@ functions/api/                   Serverless API (Cloudflare Workers)
 ├── agents.js                    Agent data + history
 ├── tree.js                      Recursive family tree queries
 ├── spawn.js                     Agent reproduction + DNA mutation
-├── process-trades.js            Execute autonomous trades (cron)
+├── process-trades.js            Execute autonomous trades via Jupiter (cron)
 ├── distribute-royalties.js      Calculate + pay royalties (cron)
 ├── leaderboard.js               Top agents by PnL
 ├── events.js                    Activity feed
@@ -86,16 +86,13 @@ functions/api/                   Serverless API (Cloudflare Workers)
 
 functions/_lib/                  Shared logic
 ├── engine.js                    Trading decision engine
-├── market-data.js               Token data fetching
+├── solana.js                    Keypair gen, Jupiter swaps, tx signing
+├── market-data.js               Token data + Jupiter quotes
 ├── mutator.js                   DNA mutation algorithm
 └── base58.js                    Base58 encode/decode
 
 cron-worker/                     Scheduled tasks (every 5 min)
 └── worker.js                    Triggers trades, royalties, payment verification
-
-program/                         Solana program (Anchor)
-└── programs/bloodline/src/
-    └── lib.rs
 ```
 
 ### Stack
@@ -103,7 +100,9 @@ program/                         Solana program (Anchor)
 - **Frontend:** Static HTML/CSS/JS — no frameworks, no build step
 - **Backend:** Cloudflare Workers (serverless, edge-deployed)
 - **Database:** Cloudflare D1 (SQLite at the edge)
+- **Key Storage:** Cloudflare KV (agent private keys)
 - **Payments:** Solana Pay + Phantom wallet
+- **Trading:** Jupiter V6 (DEX aggregator)
 - **Blockchain:** Solana (mainnet)
 - **RPC:** Helius
 
@@ -121,7 +120,7 @@ program/                         Solana program (Anchor)
 
 ## Purchase Flow
 
-BLOODLINE uses Solana Pay for a frictionless buy experience — no wallet connect, no permissions. Just a transaction.
+SPAWN uses Solana Pay for a frictionless buy experience — no wallet connect, no permissions. Just a transaction.
 
 ```
 User clicks "Buy"
@@ -130,8 +129,8 @@ User clicks "Buy"
   → User confirms in Phantom
   → Frontend polls /api/payment-status every 3 seconds
   → Cron calls /api/verify-payments (finds tx via reference on-chain)
-  → Agent claimed, inserted into DB
-  → Frontend shows "Agent claimed!"
+  → Agent keypair generated, 85% of SOL sent to agent wallet
+  → Agent claimed, starts trading autonomously
 ```
 
 ## Development
@@ -140,7 +139,7 @@ User clicks "Buy"
 
 - Node.js 18+
 - Wrangler CLI (`npm install`)
-- Cloudflare account with D1 database
+- Cloudflare account with D1 database + KV namespace
 
 ### Setup
 
@@ -151,12 +150,16 @@ npm install
 # Create D1 database (first time only)
 npx wrangler d1 create bloodline-db
 
+# Create KV namespace for agent keys
+npx wrangler kv namespace create AGENT_KEYS
+
 # Apply schema
 npx wrangler d1 execute bloodline-db --remote --file=schema.sql
 
 # Set secrets
-npx wrangler pages secret put RPC_URL    # Solana RPC endpoint
-npx wrangler pages secret put CRON_SECRET # Shared secret for cron auth
+npx wrangler pages secret put RPC_URL              # Solana RPC endpoint (Helius)
+npx wrangler pages secret put CRON_SECRET           # Shared secret for cron auth
+npx wrangler pages secret put PROTOCOL_PRIVATE_KEY  # Protocol wallet private key
 
 # Deploy
 npx wrangler pages deploy public --project-name=bloodline
@@ -169,9 +172,11 @@ npx wrangler pages deploy public --project-name=bloodline
 | `PROTOCOL_WALLET` | wrangler.toml | SOL payment recipient |
 | `RPC_URL` | Secret | Solana RPC endpoint (Helius) |
 | `CRON_SECRET` | Secret | Auth token for cron worker |
+| `PROTOCOL_PRIVATE_KEY` | Secret | Protocol wallet private key (for funding agents) |
 | `SITE_URL` | Cron worker | Base URL for API calls |
 | `MIN_SPAWN_PNL` | wrangler.toml | Min PnL to reproduce (0.5 SOL) |
 | `ROYALTY_PCT` | wrangler.toml | Royalty rate (10%) |
+| `GENESIS_FEE_PCT` | wrangler.toml | Protocol fee on genesis purchase (15%) |
 | `MAX_GENERATIONS` | wrangler.toml | Max tree depth (5) |
 
 ### Deploy Cron Worker
@@ -183,18 +188,19 @@ npx wrangler deploy
 
 ## Tokenomics
 
-**$BLOOD** is the ecosystem token on Solana (pump.fun).
+**$SPAWN** is the ecosystem token on Solana (pump.fun).
 
-- **Spawning** requires burning $BLOOD (1000 × generation number)
+- **Spawning** requires burning $SPAWN (1000 × generation number)
+- **Genesis fee:** 15% protocol fee on agent purchase
 - **Protocol fee:** 2% on all trades
 - **Royalties:** 10% of profitable trades flow to parent
 
 ## Links
 
-- **Website:** [bloodline-2rw.pages.dev](https://bloodline-2rw.pages.dev)
-- **Twitter:** [@bloodlineonsolana](https://x.com/bloodlineonsolana)
-- **Token:** $BLOOD on pump.fun
+- **Website:** [spawnagents.fun](https://spawnagents.fun)
+- **Twitter:** [@spawnagents](https://x.com/spawnagents)
+- **Token:** $SPAWN on pump.fun
 
 ---
 
-*Only the strongest bloodlines survive.*
+*Only the fittest agents survive.*

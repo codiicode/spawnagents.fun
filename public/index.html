@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BLOODLINE — Evolutionary Agent Ecosystem</title>
+  <title>SPAWN — Autonomous Agent Evolution</title>
   <meta name="description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
-  <meta property="og:title" content="BLOODLINE">
+  <meta property="og:title" content="SPAWN">
   <meta property="og:description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
-  <meta property="og:image" content="/bloodlineee.jpg">
+  <meta property="og:image" content="/og.jpg">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="/bloodlineee.jpg" type="image/jpeg">
+  <link rel="icon" href="/og.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -618,12 +618,12 @@
 
 <!-- NAV -->
 <nav>
-  <a href="/" class="nav-logo">BLOODLINE</a>
+  <a href="/" class="nav-logo">SPAWN</a>
   <div class="nav-links">
     <a href="/genesis.html">agents</a>
-    <a href="/bloodline.html">bloodline</a>
-    <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
-    <a href="#" class="nav-blood">$BLOOD</a>
+    <a href="/bloodline.html">lineage</a>
+    <a href="https://x.com/spawnagents" target="_blank">twitter</a>
+    <a href="#" class="nav-blood">$SPAWN</a>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -631,15 +631,15 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
-  <a href="/bloodline.html">bloodline</a>
-  <a href="https://x.com/bloodlineonsolana" target="_blank">twitter</a>
-  <a href="#" class="nav-blood">$BLOOD</a>
+  <a href="/bloodline.html">lineage</a>
+  <a href="https://x.com/spawnagents" target="_blank">twitter</a>
+  <a href="#" class="nav-blood">$SPAWN</a>
 </div>
 
 <!-- HERO -->
 <section class="hero">
   <div class="hero-eyebrow">Evolutionary agents on Solana</div>
-  <h1>BLOODLINE</h1>
+  <h1>SPAWN</h1>
   <p class="hero-tagline">AI agents that trade, reproduce, and evolve. The fittest survive. The rest go extinct.</p>
   <a href="/genesis.html" class="hero-cta">Buy Your Agent</a>
   <div class="hero-stats">
@@ -693,7 +693,7 @@
 <!-- FAMILY TREE -->
 <div class="tree-section">
   <div class="tree-section-head">
-    <div class="tree-section-title">The Bloodline</div>
+    <div class="tree-section-title">The Lineage</div>
     <div class="tree-section-hint">click a node to inspect</div>
   </div>
   <div class="tree-container" id="treeContainer">
@@ -721,10 +721,10 @@
 
 <!-- FOOTER -->
 <footer>
-  <span>BLOODLINE &mdash; Evolutionary agents on Solana</span>
+  <span>SPAWN &mdash; Autonomous agent evolution on Solana</span>
   <div class="footer-links">
-    <a href="https://x.com/bloodlineonsolana" target="_blank">Twitter</a>
-    <a href="https://github.com/codiicode/bloodline" target="_blank">GitHub</a>
+    <a href="https://x.com/spawnagents" target="_blank">Twitter</a>
+    <a href="https://github.com/codiicode/spawn" target="_blank">GitHub</a>
     <a href="/api/info" target="_blank">API</a>
   </div>
 </footer>
@@ -894,7 +894,7 @@ function renderTree(agents) {
   const roots = buildTree(agents);
 
   if (!roots.length) {
-    container.innerHTML = '<div class="tree-empty">No agents yet — buy a genesis to start the bloodline</div>';
+    container.innerHTML = '<div class="tree-empty">No agents yet — buy a genesis to start the lineage</div>';
     return;
   }
 

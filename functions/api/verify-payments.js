@@ -1,4 +1,5 @@
 import { decode } from '../_lib/base58.js';
+import { generateKeypair, sendSol } from '../_lib/solana.js';
 
 const GENESIS_DNA = {
   "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, focus: "memecoin", buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
@@ -97,14 +98,43 @@ export async function onRequest(context) {
       const dna = GENESIS_DNA[pr.agent_id];
       if (!dna) continue;
 
+      // Generate dedicated trading wallet for the agent
+      const keypair = await generateKeypair();
+
+      // Save secret key in KV
+      const kv = context.env.AGENT_KEYS;
+      if (kv) {
+        await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
+      }
+
+      // Send 85% of purchase price to agent wallet as trading capital
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+      const tradingCapital = pr.amount * (1 - feePct);
+      let fundingTx = null;
+
+      const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
+      if (protocolSecret) {
+        try {
+          fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
+          console.log(`Funded ${pr.agent_id} with ${tradingCapital} SOL, tx: ${fundingTx}`);
+        } catch (e) {
+          console.error(`Failed to fund ${pr.agent_id}:`, e.message);
+        }
+      }
+
       await db.prepare(
         "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status) VALUES (?, NULL, 0, ?, ?, ?, 'alive')"
-      ).bind(pr.agent_id, buyer, buyer, JSON.stringify(dna)).run();
+      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna)).run();
 
       // Log event
       await db.prepare(
         "INSERT INTO events (agent_id, event_type, data) VALUES (?, 'genesis_claimed', ?)"
-      ).bind(pr.agent_id, JSON.stringify({ buyer, amount: pr.amount, tx: sig.signature })).run();
+      ).bind(pr.agent_id, JSON.stringify({
+        buyer, amount: pr.amount, tx: sig.signature,
+        agent_wallet: keypair.publicKey,
+        trading_capital: tradingCapital,
+        funding_tx: fundingTx,
+      })).run();
 
       confirmed++;
     } catch (e) {

@@ -61,7 +61,7 @@ export async function onRequest(context) {
   const amount = arch.price;
 
   // Build Solana Pay URL
-  const solanaPayUrl = `solana:${recipient}?amount=${amount}&reference=${reference}&label=BLOODLINE&message=${encodeURIComponent(arch.name)}`;
+  const solanaPayUrl = `solana:${recipient}?amount=${amount}&reference=${reference}&label=SPAWN&message=${encodeURIComponent(arch.name)}`;
 
   // Save to DB
   await db.prepare(
