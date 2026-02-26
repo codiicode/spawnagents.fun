@@ -143,10 +143,92 @@ export async function onRequest(context) {
     }
   }
 
+  // === VERIFY PENDING WITHDRAWALS (micro_tx) ===
+  let wConfirmed = 0;
+  let wErrors = 0;
+
+  // Expire old pending withdrawals (>30 min)
+  await db.prepare(
+    "UPDATE withdrawal_requests SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')"
+  ).run();
+
+  const pendingWithdrawals = await db.prepare(
+    "SELECT id, agent_id, owner_wallet, amount_sol, micro_amount, reference FROM withdrawal_requests WHERE status = 'pending' AND method = 'micro_tx'"
+  ).all();
+
+  for (const wr of pendingWithdrawals.results) {
+    try {
+      const sigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [wr.reference, { limit: 1 }]);
+      if (!sigs || sigs.length === 0) continue;
+
+      const sig = sigs[0];
+      if (sig.err) continue;
+
+      const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+      if (!tx || !tx.meta) continue;
+
+      // Verify sender is owner_wallet (first signer)
+      const accounts = tx.transaction.message.accountKeys;
+      const sender = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+      if (sender !== wr.owner_wallet) {
+        await db.prepare("UPDATE withdrawal_requests SET status = 'expired' WHERE id = ?").bind(wr.id).run();
+        continue;
+      }
+
+      // Verify micro amount was sent to PROTOCOL_WALLET
+      const protocolWallet = context.env.PROTOCOL_WALLET;
+      let recipientIdx = -1;
+      for (let i = 0; i < accounts.length; i++) {
+        const pubkey = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+        if (pubkey === protocolWallet) { recipientIdx = i; break; }
+      }
+
+      if (recipientIdx < 0) continue;
+
+      const lamportsReceived = tx.meta.postBalances[recipientIdx] - tx.meta.preBalances[recipientIdx];
+      const solReceived = lamportsReceived / 1e9;
+
+      // Verify micro amount matches (0.5% tolerance)
+      if (Math.abs(solReceived - wr.micro_amount) > wr.micro_amount * 0.05) continue;
+
+      // Verified — execute withdrawal from agent wallet
+      const kv = context.env.AGENT_KEYS;
+      const agentSecret = await kv.get(`agent:${wr.agent_id}:secret`);
+      if (!agentSecret) {
+        console.error(`No secret key for agent ${wr.agent_id}`);
+        continue;
+      }
+
+      const withdrawTx = await sendSol(agentSecret, wr.owner_wallet, wr.amount_sol, rpcUrl);
+
+      await db.prepare(
+        "UPDATE withdrawal_requests SET status = 'completed', tx_signature = ? WHERE id = ?"
+      ).bind(withdrawTx, wr.id).run();
+
+      // Log event
+      await db.prepare(
+        "INSERT INTO events (agent_id, event_type, data) VALUES (?, 'withdrawal', ?)"
+      ).bind(wr.agent_id, JSON.stringify({
+        amount: wr.amount_sol,
+        method: 'micro_tx',
+        owner: wr.owner_wallet,
+        tx: withdrawTx,
+      })).run();
+
+      console.log(`Withdrawal ${wr.id}: sent ${wr.amount_sol} SOL to ${wr.owner_wallet}, tx: ${withdrawTx}`);
+      wConfirmed++;
+    } catch (e) {
+      console.error(`Error verifying withdrawal ${wr.id}:`, e);
+      wErrors++;
+    }
+  }
+
   return Response.json({
     pending: pending.results.length,
     confirmed,
     errors,
+    withdrawals: { pending: pendingWithdrawals.results.length, confirmed: wConfirmed, errors: wErrors },
   });
 }
 

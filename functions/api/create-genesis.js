@@ -29,8 +29,14 @@ export async function onRequest(context) {
     await db.prepare("INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status) VALUES (?, NULL, 0, ?, ?, ?, 'alive')").bind(archetype_id, owner_wallet, agent_wallet, JSON.stringify(arch.dna)).run();
     return Response.json({ success: true, agent: { id: archetype_id, name: arch.name, dna: arch.dna } });
   }
-  const claimed = await db.prepare("SELECT id FROM agents WHERE generation = 0").all();
-  const claimedIds = new Set(claimed.results.map(a => a.id));
-  const archetypes = GENESIS_ARCHETYPES.map(a => ({ ...a, available: !claimedIds.has(a.id) }));
+  const claimed = await db.prepare("SELECT id, owner_wallet, agent_wallet FROM agents WHERE generation = 0").all();
+  const claimedMap = {};
+  for (const a of claimed.results) claimedMap[a.id] = a;
+  const archetypes = GENESIS_ARCHETYPES.map(a => {
+    const c = claimedMap[a.id];
+    return c
+      ? { ...a, available: false, owner_wallet: c.owner_wallet, agent_wallet: c.agent_wallet }
+      : { ...a, available: true };
+  });
   return Response.json({ genesis: archetypes, available: archetypes.filter(a => a.available).length, total: archetypes.length });
 }

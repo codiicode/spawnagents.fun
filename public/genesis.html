@@ -212,7 +212,7 @@
     }
 
     .agent-card.claimed {
-      opacity: 0.5;
+      opacity: 0.65;
     }
 
     .agent-card-head {
@@ -526,6 +526,134 @@
 
     .pulse { animation: pulse 1.5s ease-in-out infinite; }
 
+    /* === WITHDRAW MODAL === */
+    .withdraw-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px;
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+
+    .withdraw-btn:hover {
+      background: rgba(180, 30, 50, 0.08);
+      color: var(--text);
+      border-color: var(--blood-deep);
+    }
+
+    .w-modal-amount-input {
+      width: 100%;
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 500;
+      text-align: center;
+      margin-bottom: 6px;
+      outline: none;
+    }
+
+    .w-modal-amount-input:focus {
+      border-color: var(--blood);
+    }
+
+    .w-modal-balance {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .w-modal-methods {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .w-method-btn {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+      text-align: left;
+    }
+
+    .w-method-btn:hover {
+      background: rgba(180, 30, 50, 0.06);
+      border-color: var(--blood-deep);
+    }
+
+    .w-method-btn .w-method-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .w-method-btn .w-method-desc {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .w-micro-info {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--border-strong);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .w-micro-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+
+    .w-micro-amount {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .w-micro-addr {
+      font-size: 10px;
+      color: var(--text-muted);
+      word-break: break-all;
+      background: rgba(255,255,255,0.03);
+      padding: 8px;
+      border: 1px solid var(--border);
+      user-select: all;
+      margin-top: 8px;
+    }
+
+    .w-micro-from {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+
+    .w-micro-from strong {
+      color: var(--text-muted);
+    }
+
     /* === RESPONSIVE === */
     @media (max-width: 640px) {
       .agent-grid { grid-template-columns: 1fr; }
@@ -587,6 +715,39 @@
       <div class="modal-fallback-addr" id="modalAddr"></div>
     </div>
     <div class="modal-status" id="modalStatus"></div>
+  </div>
+</div>
+
+<!-- WITHDRAW MODAL -->
+<div class="modal-overlay" id="withdrawModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeWithdrawModal()">&times;</button>
+    <div class="modal-title" id="wModalAgent"></div>
+    <div class="modal-subtitle">Withdraw SOL from agent wallet</div>
+    <div id="wModalBody">
+      <input type="number" class="w-modal-amount-input" id="wAmountInput" placeholder="0.00" step="0.01" min="0.01">
+      <div class="w-modal-balance" id="wBalance">Loading balance...</div>
+      <div class="w-modal-methods">
+        <button class="w-method-btn" onclick="withdrawPhantom()">
+          <span class="w-method-label">Verify with Phantom</span>
+          <span class="w-method-desc">Connect wallet and sign a message to prove ownership</span>
+        </button>
+        <button class="w-method-btn" onclick="withdrawMicroTx()">
+          <span class="w-method-label">Verify with micro-transaction</span>
+          <span class="w-method-desc">Send a tiny amount from your owner wallet — no connect needed</span>
+        </button>
+      </div>
+    </div>
+    <div id="wMicroInfo" style="display:none;">
+      <div class="w-micro-info">
+        <div class="w-micro-label">Send exactly this amount</div>
+        <div class="w-micro-amount" id="wMicroAmount"></div>
+        <div class="w-micro-label" style="margin-top:12px;">To this address</div>
+        <div class="w-micro-addr" id="wMicroAddr"></div>
+        <div class="w-micro-from">From wallet: <strong id="wMicroFrom"></strong></div>
+      </div>
+    </div>
+    <div class="modal-status" id="wModalStatus"></div>
   </div>
 </div>
 
@@ -697,6 +858,7 @@ function agentCard(g, priceLabel) {
     </div>
     ${g.available && !AUCTION_IDS.has(g.id) ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" onclick="initBuy(this)">Buy &mdash; ${priceLabel}</button>` : ''}
     ${g.available && AUCTION_IDS.has(g.id) ? `<button class="buy-btn" disabled>Auction &mdash; Coming soon</button>` : ''}
+    ${!g.available ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
   </div>`;
 }
 
@@ -999,7 +1161,206 @@ document.getElementById('payModal').addEventListener('click', (e) => {
 
 // Close on Escape
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeWithdrawModal(); }
+});
+
+// ============================================================
+// WITHDRAW FLOW
+// ============================================================
+
+let wPollInterval = null;
+let wAgentId = null;
+let wOwnerWallet = null;
+let wAgentWallet = null;
+let wBalance = null;
+
+async function initWithdraw(btn) {
+  wAgentId = btn.dataset.agent;
+  wOwnerWallet = btn.dataset.owner;
+  wAgentWallet = btn.dataset.wallet;
+
+  document.getElementById('wModalAgent').textContent = btn.dataset.name;
+  document.getElementById('wAmountInput').value = '';
+  document.getElementById('wModalStatus').textContent = '';
+  document.getElementById('wModalStatus').className = 'modal-status';
+  document.getElementById('wModalBody').style.display = '';
+  document.getElementById('wMicroInfo').style.display = 'none';
+  document.getElementById('wBalance').textContent = 'Loading balance...';
+
+  document.getElementById('withdrawModal').classList.add('open');
+
+  // Fetch balance
+  try {
+    const res = await fetch(`/api/agents`);
+    const data = await res.json();
+    const agent = data.agents?.find(a => a.id === wAgentId);
+    if (agent && wAgentWallet) {
+      // Show wallet link
+      document.getElementById('wBalance').innerHTML =
+        `Agent wallet: <a href="https://solscan.io/account/${wAgentWallet}" target="_blank" style="color:var(--blood-bright);">${wAgentWallet.slice(0,6)}...${wAgentWallet.slice(-4)}</a>`;
+    } else {
+      document.getElementById('wBalance').textContent = 'Agent wallet info unavailable';
+    }
+  } catch {
+    document.getElementById('wBalance').textContent = 'Could not load balance';
+  }
+}
+
+async function withdrawPhantom() {
+  const amount = parseFloat(document.getElementById('wAmountInput').value);
+  if (!amount || amount <= 0) {
+    showWStatus('Enter a valid amount', 'error');
+    return;
+  }
+
+  const provider = window.phantom?.solana;
+  if (!provider) {
+    showWStatus('Phantom wallet not detected', 'error');
+    return;
+  }
+
+  try {
+    showWStatus('Connecting wallet...', 'waiting');
+    const resp = await provider.connect();
+    const wallet = resp.publicKey.toString();
+
+    // Generate nonce
+    const nonce = Math.random().toString(36).slice(2, 10);
+    const message = `withdraw:${wAgentId}:${amount}:${nonce}`;
+
+    showWStatus('Sign message in Phantom...', 'waiting pulse');
+    const encoded = new TextEncoder().encode(message);
+    const signed = await provider.signMessage(encoded, 'utf8');
+
+    // Convert signature to base64
+    const sigBase64 = btoa(String.fromCharCode(...signed.signature));
+
+    showWStatus('Verifying and sending withdrawal...', 'waiting pulse');
+
+    const res = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: wAgentId,
+        amount_sol: amount,
+        method: 'phantom',
+        signature: sigBase64,
+        message: message,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showWStatus(data.error || 'Withdrawal failed', 'error');
+      return;
+    }
+
+    const solscanUrl = `https://solscan.io/tx/${data.tx_signature}`;
+    document.getElementById('wModalStatus').innerHTML =
+      `Withdrawal complete! <strong>${amount} SOL</strong> sent.<br>` +
+      `<a href="${solscanUrl}" target="_blank" style="color:var(--blood-bright);font-size:0.8rem;">${data.tx_signature.slice(0,12)}...</a>`;
+    document.getElementById('wModalStatus').className = 'modal-status confirmed';
+
+    // Hide input area
+    document.getElementById('wModalBody').style.display = 'none';
+
+  } catch (e) {
+    if (e.code === 4001 || e.message?.includes('rejected')) {
+      showWStatus('Signing cancelled', 'error');
+    } else {
+      showWStatus(e.message || 'Failed', 'error');
+    }
+  }
+}
+
+async function withdrawMicroTx() {
+  const amount = parseFloat(document.getElementById('wAmountInput').value);
+  if (!amount || amount <= 0) {
+    showWStatus('Enter a valid amount', 'error');
+    return;
+  }
+
+  showWStatus('Creating verification request...', 'waiting');
+
+  try {
+    const res = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agent_id: wAgentId,
+        amount_sol: amount,
+        method: 'micro_tx',
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showWStatus(data.error || 'Request failed', 'error');
+      return;
+    }
+
+    // Hide amount input, show micro-tx info
+    document.getElementById('wModalBody').style.display = 'none';
+    document.getElementById('wMicroInfo').style.display = '';
+    document.getElementById('wMicroAmount').textContent = data.micro_amount.toFixed(6) + ' SOL';
+    document.getElementById('wMicroAddr').textContent = data.send_to;
+    document.getElementById('wMicroFrom').textContent = data.owner_wallet
+      ? data.owner_wallet.slice(0, 6) + '...' + data.owner_wallet.slice(-4)
+      : 'your owner wallet';
+
+    showWStatus('Waiting for verification transaction...', 'waiting pulse');
+
+    // Start polling
+    if (wPollInterval) clearInterval(wPollInterval);
+    wPollInterval = setInterval(() => pollWithdrawal(data.withdrawal_id), 3000);
+
+  } catch (e) {
+    showWStatus('Network error', 'error');
+  }
+}
+
+async function pollWithdrawal(withdrawalId) {
+  try {
+    const res = await fetch(`/api/withdraw-status?id=${encodeURIComponent(withdrawalId)}`);
+    const data = await res.json();
+
+    if (data.status === 'completed') {
+      clearInterval(wPollInterval);
+      wPollInterval = null;
+
+      const solscanUrl = `https://solscan.io/tx/${data.tx_signature}`;
+      document.getElementById('wModalStatus').innerHTML =
+        `Withdrawal complete! <strong>${data.amount_sol} SOL</strong> sent.<br>` +
+        `<a href="${solscanUrl}" target="_blank" style="color:var(--blood-bright);font-size:0.8rem;">${data.tx_signature.slice(0,12)}...</a>`;
+      document.getElementById('wModalStatus').className = 'modal-status confirmed';
+      document.getElementById('wMicroInfo').style.display = 'none';
+    } else if (data.status === 'expired') {
+      clearInterval(wPollInterval);
+      wPollInterval = null;
+      showWStatus('Verification expired. Please try again.', 'error');
+      document.getElementById('wMicroInfo').style.display = 'none';
+      document.getElementById('wModalBody').style.display = '';
+    }
+  } catch {}
+}
+
+function closeWithdrawModal() {
+  document.getElementById('withdrawModal').classList.remove('open');
+  if (wPollInterval) { clearInterval(wPollInterval); wPollInterval = null; }
+  wAgentId = null;
+}
+
+function showWStatus(msg, type) {
+  const el = document.getElementById('wModalStatus');
+  el.textContent = msg;
+  el.className = 'modal-status ' + type;
+}
+
+// Close withdraw modal on overlay click
+document.getElementById('withdrawModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeWithdrawModal();
 });
 </script>
 </body>

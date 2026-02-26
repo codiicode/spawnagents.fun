@@ -49,6 +49,20 @@ CREATE TABLE IF NOT EXISTS spawns (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS withdrawal_requests (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  owner_wallet TEXT NOT NULL,
+  amount_sol REAL NOT NULL,
+  method TEXT NOT NULL,
+  micro_amount REAL,
+  reference TEXT UNIQUE,
+  status TEXT DEFAULT 'pending',
+  tx_signature TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (agent_id) REFERENCES agents(id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_id);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
@@ -58,3 +72,5 @@ CREATE INDEX IF NOT EXISTS idx_trades_created ON trades(created_at);
 CREATE INDEX IF NOT EXISTS idx_royalties_from ON royalties(from_agent_id);
 CREATE INDEX IF NOT EXISTS idx_royalties_to ON royalties(to_agent_id);
 CREATE INDEX IF NOT EXISTS idx_spawns_parent ON spawns(parent_id);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawal_requests(status);
+CREATE INDEX IF NOT EXISTS idx_withdrawals_agent ON withdrawal_requests(agent_id);

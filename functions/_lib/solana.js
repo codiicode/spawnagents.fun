@@ -176,6 +176,15 @@ export async function sendSol(fromSecretB58, toAddressB58, amountSol, rpcUrl) {
   return result; // tx signature
 }
 
+// Verify Ed25519 signature (for Phantom sign message)
+export async function verifySignature(pubkeyB58, signatureBytes, messageBytes) {
+  const pubkeyRaw = decode(pubkeyB58);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', pubkeyRaw, { name: 'Ed25519' }, false, ['verify']
+  );
+  return await crypto.subtle.verify('Ed25519', cryptoKey, signatureBytes, messageBytes);
+}
+
 // --- Helpers ---
 
 async function rpcCall(url, method, params) {
