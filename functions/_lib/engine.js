@@ -1,4 +1,4 @@
-import { getTrendingTokens, getTokenData } from "./market-data.js";
+import { getTokenData } from './market-data.js';
 import {
   SOL_MINT,
   getBalance,
@@ -6,15 +6,13 @@ import {
   getJupiterQuote,
   getJupiterSwapTx,
   signAndSendSwapTx,
-} from "./solana.js";
+} from './solana.js';
 
-export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey) {
+// candidates = pre-fetched token list from discoverTokens() (shared across agents)
+export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, candidates) {
   const dna = JSON.parse(agent.dna);
 
-  // Get real SOL balance
   const solBalance = await getBalance(agentPubkey, rpcUrl);
-
-  // Get on-chain token holdings
   const tokenBalances = await getTokenBalances(agentPubkey, rpcUrl);
 
   // --- SELL SIGNALS: check existing positions ---
@@ -30,14 +28,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey) 
     const costBasis = (costRow?.total_bought || 0) - (costRow?.total_sold || 0);
     if (costBasis <= 0) continue;
 
-    // Get Jupiter quote to see what we'd get selling all tokens → SOL
     const sellQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount);
     if (!sellQuote) continue;
 
     const outSol = parseInt(sellQuote.outAmount) / 1e9;
     const pnlPct = ((outSol - costBasis) / costBasis) * 100;
 
-    // Take profit
+    // Take profit — patient agents hold longer
     if (pnlPct >= dna.sell_profit_pct * (1 + dna.patience * 0.5)) {
       return await executeSell(sellQuote, agentPubkey, agentSecret, rpcUrl, {
         token: token.mint, symbol: tokenData.symbol, reason: 'take profit',
@@ -45,7 +42,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey) 
       });
     }
 
-    // Stop loss
+    // Stop loss — risk tolerant agents endure more pain
     if (pnlPct <= -(dna.sell_loss_pct * (1 + dna.risk_tolerance * 0.5))) {
       return await executeSell(sellQuote, agentPubkey, agentSecret, rpcUrl, {
         token: token.mint, symbol: tokenData.symbol, reason: 'stop loss',
@@ -55,50 +52,126 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey) 
   }
 
   // --- BUY SIGNALS ---
-  // Keep 0.01 SOL reserve for tx fees
   const availableSol = solBalance - 0.01;
   if (availableSol < 0.005) return { action: 'hold', reason: 'insufficient balance' };
+  if (!candidates || candidates.length === 0) return { action: 'idle', reason: 'no candidates' };
 
   const tradeAmountSol = Math.min(availableSol, availableSol * (dna.max_position_pct / 100));
   const tradeAmountLamports = Math.round(tradeAmountSol * 1e9);
 
-  const tokens = await getTrendingTokens(dna.focus);
-  if (tokens.length === 0) return { action: 'idle', reason: 'no tokens found' };
-
   const heldMints = new Set(tokenBalances.map(t => t.mint));
 
-  for (const t of tokens) {
-    if (heldMints.has(t.address)) continue;
+  // Avoid re-buying tokens recently sold
+  const recentSells = await db.prepare(
+    "SELECT token_address FROM trades WHERE agent_id = ? AND action = 'sell' AND created_at > datetime('now', '-2 hours')"
+  ).bind(agent.id).all();
+  const recentlySold = new Set(recentSells.results.map(r => r.token_address));
 
-    const threshold = (dna.buy_threshold_volume || 500) * (Math.random() < dna.aggression ? 0.7 : 1.0);
-    if (t.volume_24h >= threshold && t.liquidity_usd > 5000) {
-      const buyQuote = await getJupiterQuote(SOL_MINT, t.address, tradeAmountLamports);
-      if (!buyQuote) continue;
+  // Filter and score candidates based on DNA
+  const scored = candidates
+    .filter(t => {
+      if (heldMints.has(t.address)) return false;
+      if (recentlySold.has(t.address)) return false;
+      if (t.address === SOL_MINT) return false;
 
-      const swapTx = await getJupiterSwapTx(buyQuote, agentPubkey);
-      if (!swapTx) continue;
+      // Volume filter
+      if (t.volume_24h < (dna.buy_threshold_volume || 500)) return false;
 
-      try {
-        const txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
-        const tokenAmount = parseInt(buyQuote.outAmount) / (10 ** (t.decimals || 6));
-        return {
-          action: 'buy',
-          token: t.address,
-          symbol: t.symbol,
-          reason: 'signal match',
-          amount_sol: tradeAmountSol,
-          token_amount: tokenAmount,
-          tx_signature: txSig,
-        };
-      } catch (e) {
-        console.error(`Swap failed for ${t.symbol}:`, e.message);
-        continue;
-      }
+      // Activity filter (txns as proxy for holders)
+      if (t.txns_24h < (dna.buy_threshold_holders || 100)) return false;
+
+      // Liquidity minimum: conservative agents need more liquidity
+      const minLiq = 5000 + (1 - dna.risk_tolerance) * 45000; // 5k-50k
+      if (t.liquidity_usd < minLiq) return false;
+
+      // Age filter: low-risk agents avoid very new pairs
+      const minAge = (1 - dna.risk_tolerance) * 24; // 0-24 hours
+      if (t.pair_age_hours < minAge) return false;
+
+      return true;
+    })
+    .map(t => ({ ...t, score: scoreToken(t, dna) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Try top 3 candidates
+  for (const t of scored.slice(0, 3)) {
+    // Aggressive agents buy more readily
+    const buyChance = 0.3 + dna.aggression * 0.5; // 30-80%
+    if (Math.random() > buyChance) continue;
+
+    const buyQuote = await getJupiterQuote(SOL_MINT, t.address, tradeAmountLamports);
+    if (!buyQuote) continue;
+
+    const swapTx = await getJupiterSwapTx(buyQuote, agentPubkey);
+    if (!swapTx) continue;
+
+    try {
+      const txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
+      return {
+        action: 'buy',
+        token: t.address,
+        symbol: t.symbol,
+        reason: `score ${t.score.toFixed(1)} | vol $${(t.volume_24h / 1000).toFixed(0)}k | liq $${(t.liquidity_usd / 1000).toFixed(0)}k`,
+        amount_sol: tradeAmountSol,
+        token_amount: parseInt(buyQuote.outAmount) / 1e6,
+        tx_signature: txSig,
+      };
+    } catch (e) {
+      console.error(`Swap failed for ${t.symbol}:`, e.message);
+      continue;
     }
   }
 
-  return { action: 'hold', reason: 'no signals' };
+  return { action: 'hold', reason: `no signals (${scored.length} candidates filtered)` };
 }
+
+// ============================================================
+// SCORING — each agent's DNA produces a different ranking
+// ============================================================
+
+function scoreToken(token, dna) {
+  let score = 0;
+
+  // Volume score (normalized, max 5 pts)
+  score += Math.min(token.volume_24h / 100000, 5);
+
+  // Momentum — aggressive agents love pumps, patient agents prefer stability
+  if (dna.aggression > 0.6) {
+    // Short-term pump chasers
+    score += Math.max(0, token.price_change_1h) * 0.1;
+    score += Math.max(0, token.price_change_5m) * 0.2;
+  } else {
+    // Steady growers, penalize extreme volatility
+    score += Math.max(0, token.price_change_24h) * 0.03;
+    if (Math.abs(token.price_change_1h) > 30) score -= 2;
+  }
+
+  // Buy pressure (more buys than sells = bullish)
+  if (token.buy_sell_ratio_1h > 1.2) score += 2;
+  if (token.buy_sell_ratio_1h > 2.0) score += 1;
+
+  // Activity (txns as engagement proxy, max 3 pts)
+  score += Math.min(token.txns_1h / 50, 3);
+
+  // Liquidity bonus (max 3 pts)
+  score += Math.min(token.liquidity_usd / 50000, 3);
+
+  // Risk-tolerant agents get bonus for newer, riskier tokens
+  if (dna.risk_tolerance > 0.7 && token.pair_age_hours < 12) {
+    score += 2;
+  }
+
+  // Patient agents prefer proven tokens (older pairs)
+  if (dna.patience > 0.7 && token.pair_age_hours > 48) {
+    score += 1.5;
+  }
+
+  return score;
+}
+
+// ============================================================
+// SELL EXECUTION
+// ============================================================
 
 async function executeSell(quote, pubkey, secret, rpcUrl, info) {
   const swapTx = await getJupiterSwapTx(quote, pubkey);

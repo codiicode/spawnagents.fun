@@ -1,4 +1,5 @@
 import { processAgent } from "../_lib/engine.js";
+import { discoverTokens } from "../_lib/market-data.js";
 
 export async function onRequest(context) {
   if (context.request.method !== "POST") return new Response("Method not allowed", { status: 405 });
@@ -12,6 +13,10 @@ export async function onRequest(context) {
 
   if (!rpcUrl) return Response.json({ error: "RPC_URL not configured" }, { status: 500 });
   if (!kv) return Response.json({ error: "AGENT_KEYS KV not configured" }, { status: 500 });
+
+  // Discover candidate tokens ONCE, share across all agents
+  const candidates = await discoverTokens();
+  console.log(`Discovered ${candidates.length} candidate tokens`);
 
   const agents = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
   const results = [];
@@ -40,7 +45,7 @@ export async function onRequest(context) {
     }
 
     try {
-      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet);
+      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet, candidates);
 
       if (decision.action === "buy" && decision.tx_signature) {
         await db.batch([
