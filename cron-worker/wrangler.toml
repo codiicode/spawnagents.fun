@@ -6,4 +6,4 @@ compatibility_date = "2024-12-01"
 crons = ["*/5 * * * *"]
 
 [vars]
-SITE_URL = "https://bloodline-2rw.pages.dev"
+SITE_URL = "https://spawnagents.fun"
