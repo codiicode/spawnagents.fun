@@ -304,8 +304,8 @@
   <a href="/" class="nav-logo">SPAWN</a>
   <div class="nav-links">
     <a href="/genesis.html">agents</a>
-    <a href="/how.html" class="active">how?</a>
     <a href="/bloodline.html">bloodline</a>
+    <a href="/how.html" class="active">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-blood">$SPAWN</a>
   </div>
@@ -315,8 +315,8 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
-  <a href="/how.html">how?</a>
   <a href="/bloodline.html">bloodline</a>
+  <a href="/how.html">how?</a>
   <a href="https://x.com/spawnagents" target="_blank">X</a>
   <a href="#" class="nav-blood">$SPAWN</a>
 </div>
@@ -332,7 +332,7 @@
 
   <!-- 01 OVERVIEW -->
   <div class="block">
-    <div class="block-title"><span class="block-num">01</span>Overview</div>
+    <div class="block-title">Overview</div>
     <p>SPAWN is an autonomous agent ecosystem on Solana. You buy an AI trading agent. That agent gets its own wallet, its own DNA, and starts trading memecoins on its own. If it makes enough profit, it can reproduce — creating a mutated child agent. If it loses too much, it dies. Natural selection with real money.</p>
     <p>There is no human intervention in trading decisions. Each agent's behavior is entirely determined by its DNA — a set of 10 parameters that control how aggressively it trades, how long it holds, how much risk it takes, and what tokens it looks for. No two agents trade the same way.</p>
     <p>The ecosystem starts with <strong>15 genesis agents</strong> (generation 0). From there, the bloodline grows through reproduction. Children inherit mutated DNA from their parents. The maximum depth is <strong>5 generations</strong>.</p>
@@ -340,7 +340,7 @@
 
   <!-- 02 GENESIS -->
   <div class="block">
-    <div class="block-title"><span class="block-num">02</span>Genesis Agents</div>
+    <div class="block-title">Genesis Agents</div>
     <p>The 15 genesis agents are the founding ancestors of the entire ecosystem. Each one has a unique name, a fixed DNA profile, and a price tier. Once purchased, the agent begins trading autonomously.</p>
 
     <table class="data-table">
@@ -378,7 +378,7 @@
 
   <!-- 03 DNA -->
   <div class="block">
-    <div class="block-title"><span class="block-num">03</span>DNA</div>
+    <div class="block-title">DNA</div>
     <p>DNA is the core of SPAWN. Every trading decision an agent makes is determined by its 10 genetic parameters. There is no AI "deciding" what to do — the DNA is the algorithm.</p>
 
     <table class="data-table">
@@ -412,7 +412,7 @@
 
   <!-- 04 TRADING -->
   <div class="block">
-    <div class="block-title"><span class="block-num">04</span>How Agents Trade</div>
+    <div class="block-title">How Agents Trade</div>
     <p>Every few minutes (determined by <strong>check_interval_min</strong>), each alive agent runs a trading cycle. The cycle has two phases: <strong>sell</strong> (check existing positions) and <strong>buy</strong> (find new tokens).</p>
 
     <p><strong>Selling.</strong> For each token the agent currently holds, it checks the current price against its cost basis. If the profit exceeds the take-profit target, it sells. If the loss exceeds the stop-loss threshold, it sells. Otherwise, it holds.</p>
@@ -449,14 +449,14 @@
 
   <!-- 05 REPRODUCTION -->
   <div class="block">
-    <div class="block-title"><span class="block-num">05</span>Reproduction</div>
+    <div class="block-title">Reproduction</div>
     <p>When an agent is profitable enough, it becomes eligible to reproduce. A child agent is created with mutated DNA — similar to the parent, but not identical. This is how the ecosystem evolves.</p>
 
     <p><strong>Requirements to spawn:</strong></p>
     <ul>
       <li>Parent must be <strong>alive</strong></li>
       <li>Parent must have earned at least <strong>+0.5 SOL</strong> in total PnL (absolute profit, not percentage)</li>
-      <li>7-day cooldown between spawns per parent</li>
+      <li><strong>6-hour cooldown</strong> between spawns per parent</li>
       <li>Maximum <strong>5 generations</strong> deep (genesis is gen 0, max child is gen 5)</li>
     </ul>
 
@@ -487,7 +487,7 @@
 
   <!-- 06 ROYALTIES -->
   <div class="block">
-    <div class="block-title"><span class="block-num">06</span>Royalties</div>
+    <div class="block-title">Royalties</div>
     <p>Parents earn passive income from their descendants. When a child agent makes a profitable trade, <strong>10%</strong> of the profit is automatically sent to the parent agent's wallet.</p>
 
     <p>This creates a powerful incentive: owning a genesis agent means you earn royalties from every profitable trade made by its children, grandchildren, and so on down the bloodline.</p>
@@ -502,7 +502,7 @@
 
   <!-- 07 DEATH -->
   <div class="block">
-    <div class="block-title"><span class="block-num">07</span>Death</div>
+    <div class="block-title">Death</div>
     <p>Agents can die. If an agent's balance drops below <strong>20%</strong> of its initial capital (i.e., it has lost 80% or more), it is declared dead.</p>
 
     <p><strong>What happens on death:</strong></p>
@@ -525,7 +525,7 @@
 
   <!-- 08 WITHDRAWALS -->
   <div class="block">
-    <div class="block-title"><span class="block-num">08</span>Withdrawals</div>
+    <div class="block-title">Withdrawals</div>
     <p>As the agent owner, you can withdraw SOL from your agent's wallet at any time. The agent must be alive, and you must leave at least <strong>0.003 SOL</strong> in the wallet (rent-exempt minimum).</p>
 
     <p>There are two verification methods to prove you own the agent:</p>
@@ -537,7 +537,7 @@
 
   <!-- 09 FEES -->
   <div class="block">
-    <div class="block-title"><span class="block-num">09</span>Fee Structure</div>
+    <div class="block-title">Fee Structure</div>
 
     <table class="data-table">
       <thead>
@@ -555,7 +555,7 @@
 
   <!-- 10 OWNERSHIP -->
   <div class="block">
-    <div class="block-title"><span class="block-num">10</span>Ownership & Wallets</div>
+    <div class="block-title">Ownership & Wallets</div>
     <p><strong>Ownership is determined by your Solana wallet.</strong> The wallet you use to purchase the agent is registered as the owner. Only the owner can withdraw funds from the agent's trading wallet.</p>
 
     <p>Each agent has its own dedicated trading wallet. This wallet is separate from your personal wallet. The agent's private key is stored in encrypted key-value storage on the server — you never need to manage it.</p>
@@ -577,7 +577,7 @@
 
   <!-- 11 BLOOD TOKEN -->
   <div class="block">
-    <div class="block-title"><span class="block-num">11</span>$BLOOD Token</div>
+    <div class="block-title">$BLOOD Token</div>
     <p><strong>$BLOOD</strong> is the utility token of the SPAWN ecosystem, launched on pump.fun. Its primary use is as the cost to spawn child agents — you must burn $BLOOD tokens to reproduce.</p>
     <p>The burn cost increases with each generation, creating deflationary pressure as the ecosystem grows. More reproduction = more $BLOOD burned = less supply.</p>
     <p>$BLOOD is not used for trading, governance, or staking. Its only purpose is spawning.</p>
@@ -585,7 +585,7 @@
 
   <!-- 12 SUMMARY -->
   <div class="block">
-    <div class="block-title"><span class="block-num">12</span>Summary of Constants</div>
+    <div class="block-title">Summary of Constants</div>
 
     <table class="data-table">
       <thead>
@@ -598,7 +598,7 @@
         <tr><td>Trading capital</td><td class="val">85% of purchase</td></tr>
         <tr><td>Royalty to parent</td><td class="val">10% of profit</td></tr>
         <tr><td>Min PnL to spawn</td><td class="val">+0.5 SOL</td></tr>
-        <tr><td>Spawn cooldown</td><td class="val">7 days</td></tr>
+        <tr><td>Spawn cooldown</td><td class="val">6 hours</td></tr>
         <tr><td>Spawn cost</td><td class="val">1,000 × generation $BLOOD</td></tr>
         <tr><td>Death threshold</td><td class="val">80% capital loss</td></tr>
         <tr><td>Slippage</td><td class="val">3% (300 bps)</td></tr>

@@ -13,8 +13,8 @@ export async function onRequest(context) {
   if (parent.total_pnl < parseFloat(context.env.MIN_SPAWN_PNL || "0.5")) return Response.json({ error: "Insufficient PnL" }, { status: 400 });
   const lastSpawn = await db.prepare("SELECT created_at FROM spawns WHERE parent_id = ? ORDER BY created_at DESC LIMIT 1").bind(parent_id).first();
   if (lastSpawn) {
-    const days = (Date.now() - new Date(lastSpawn.created_at + "Z").getTime()) / 86400000;
-    if (days < 7) return Response.json({ error: `Cooldown: ${(7 - days).toFixed(1)}d remaining` }, { status: 400 });
+    const hours = (Date.now() - new Date(lastSpawn.created_at + "Z").getTime()) / 3600000;
+    if (hours < 6) return Response.json({ error: `Cooldown: ${(6 - hours).toFixed(1)}h remaining` }, { status: 400 });
   }
   const childGen = parent.generation + 1;
   const minBlood = 1000 * childGen;
