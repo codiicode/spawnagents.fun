@@ -14,11 +14,19 @@ export async function onRequest(context) {
 
   if (!pr) return Response.json({ error: 'Payment not found' }, { status: 404 });
 
+  // If confirmed, include the agent's trading wallet
+  let agent_wallet = null;
+  if (pr.status === 'confirmed') {
+    const agent = await db.prepare('SELECT agent_wallet FROM agents WHERE id = ?').bind(pr.agent_id).first();
+    if (agent) agent_wallet = agent.agent_wallet;
+  }
+
   return Response.json({
     status: pr.status,
     tx_signature: pr.tx_signature,
     buyer_wallet: pr.buyer_wallet,
     agent_id: pr.agent_id,
     amount: pr.amount,
+    agent_wallet,
   });
 }

@@ -596,7 +596,7 @@
   <div class="footer-links">
     <a href="/">Home</a>
     <a href="https://x.com/spawnagents" target="_blank">Twitter</a>
-    <a href="https://github.com/codiicode/spawn" target="_blank">GitHub</a>
+    <a href="https://github.com/codiicode/spawnagents.fun" target="_blank">GitHub</a>
   </div>
 </footer>
 
@@ -933,7 +933,17 @@ async function pollPayment(reference) {
       pollInterval = null;
 
       const status = document.getElementById('modalStatus');
-      status.textContent = 'Agent claimed!';
+      const feePct = 0.15;
+      const tradingCapital = (data.amount * (1 - feePct)).toFixed(2);
+      const walletShort = data.agent_wallet ? data.agent_wallet.slice(0, 6) + '...' + data.agent_wallet.slice(-4) : '';
+      const solscanUrl = data.agent_wallet ? `https://solscan.io/account/${data.agent_wallet}` : '';
+
+      status.innerHTML = data.agent_wallet
+        ? `Agent claimed! <span style="color:var(--green);">${tradingCapital} SOL</span> sent to agent wallet.<br><br>` +
+          `<span style="color:var(--muted);font-size:0.75rem;">Agent wallet:</span><br>` +
+          `<a href="${solscanUrl}" target="_blank" style="color:var(--blood-bright);font-size:0.8rem;word-break:break-all;">${data.agent_wallet}</a><br>` +
+          `<span style="color:var(--dim);font-size:0.7rem;">Track all trades on Solscan</span>`
+        : 'Agent claimed!';
       status.className = 'modal-status confirmed';
 
       // Update the card
@@ -949,8 +959,8 @@ async function pollPayment(reference) {
         }
       }
 
-      // Auto-close after 3s
-      setTimeout(closeModal, 3000);
+      // Don't auto-close — let user see the wallet
+      // setTimeout(closeModal, 3000);
     } else if (data.status === 'expired') {
       clearInterval(pollInterval);
       pollInterval = null;
