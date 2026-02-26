@@ -7,19 +7,25 @@ export async function onRequest(context) {
   const maxGen = parseInt(context.env.MAX_GENERATIONS || "5");
   const profitable = await db.prepare("SELECT * FROM agents WHERE status = 'alive' AND total_pnl > 0 AND parent_id IS NOT NULL").all();
   const batch = [];
+  let totalPaid = 0;
   for (const agent of profitable.results) {
     const paid = await db.prepare("SELECT COALESCE(SUM(amount_sol), 0) as paid FROM royalties WHERE from_agent_id = ?").bind(agent.id).first();
-    const remaining = agent.total_pnl * royaltyPct - (paid?.paid || 0);
+    const owedTotal = agent.total_pnl * royaltyPct;
+    const remaining = owedTotal - (paid?.paid || 0);
     if (remaining <= 0.001) continue;
     let currentId = agent.parent_id, depth = 0, share = remaining;
     while (currentId && depth < maxGen) {
       const p = await db.prepare("SELECT id, parent_id FROM agents WHERE id = ?").bind(currentId).first();
       if (!p) break;
       const payout = share * 0.5;
-      if (payout > 0.001) batch.push(db.prepare("INSERT INTO royalties (from_agent_id, to_agent_id, amount_sol, generation_depth) VALUES (?, ?, ?, ?)").bind(agent.id, p.id, payout, depth + 1));
+      if (payout > 0.001) {
+        batch.push(db.prepare("INSERT INTO royalties (from_agent_id, to_agent_id, amount_sol) VALUES (?, ?, ?)").bind(agent.id, p.id, payout));
+        batch.push(db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('royalty', ?, ?)").bind(agent.id, JSON.stringify({ from: agent.id, to: p.id, amount: payout, depth: depth + 1 })));
+        totalPaid += payout;
+      }
       share *= 0.5; currentId = p.parent_id; depth++;
     }
   }
   if (batch.length > 0) await db.batch(batch);
-  return Response.json({ processed: profitable.results.length, royalties: batch.length });
+  return Response.json({ processed: profitable.results.length, royalties: batch.length / 2, total_paid: totalPaid });
 }

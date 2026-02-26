@@ -6,5 +6,4 @@ compatibility_date = "2024-12-01"
 crons = ["*/5 * * * *"]
 
 [vars]
-SITE_URL = ""
-# Set CRON_SECRET via: npx wrangler secret put CRON_SECRET
+SITE_URL = "https://bloodline-2rw.pages.dev"

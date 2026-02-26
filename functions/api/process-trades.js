@@ -15,6 +15,20 @@ export async function onRequest(context) {
     }
     try {
       const decision = await processAgent(agent, db);
+      if (decision.action === "buy") {
+        await db.batch([
+          db.prepare("INSERT INTO trades (agent_id, token_address, action, amount_sol, price_at_trade) VALUES (?, ?, 'buy', ?, ?)").bind(agent.id, decision.token, decision.amount_sol, 0),
+          db.prepare("UPDATE agents SET total_trades = total_trades + 1, last_trade_at = datetime('now') WHERE id = ?").bind(agent.id),
+          db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)").bind(agent.id, JSON.stringify({ action: "buy", token: decision.symbol, amount: decision.amount_sol }))
+        ]);
+      } else if (decision.action === "sell") {
+        const pnl = decision.pnl_pct ? (decision.pnl_pct / 100) * 0.01 : 0;
+        await db.batch([
+          db.prepare("INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade) VALUES (?, ?, 'sell', ?, ?, ?, ?)").bind(agent.id, decision.token, 0, decision.amount, pnl, 0),
+          db.prepare("UPDATE agents SET total_trades = total_trades + 1, total_pnl = total_pnl + ?, last_trade_at = datetime('now') WHERE id = ?").bind(pnl, agent.id),
+          db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)").bind(agent.id, JSON.stringify({ action: "sell", token: decision.symbol, pnl_pct: decision.pnl_pct }))
+        ]);
+      }
       results.push({ agent: agent.id, action: decision.action, reason: decision.reason });
     } catch (e) { results.push({ agent: agent.id, error: e.message }); }
   }

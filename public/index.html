@@ -7,10 +7,10 @@
   <meta name="description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
   <meta property="og:title" content="BLOODLINE">
   <meta property="og:description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
-  <meta property="og:image" content="/og.png">
+  <meta property="og:image" content="/og.svg">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
-  <link rel="icon" href="/favicon.png">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -915,16 +915,42 @@ function renderLeaderboard(agents) {
 // FEED
 // ============================================================
 
-function renderFeed() {
-  const el = document.getElementById("feedList");
-  const ic = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr + "Z").getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return m + "m";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h";
+  return Math.floor(h / 24) + "d";
+}
 
-  el.innerHTML = MOCK_FEED.map(f => `
-    <div class="feed-item">
-      <div class="feed-icon ${f.type}">${ic[f.type]}</div>
-      <div class="feed-text">${f.text}<span class="time">${f.time}</span></div>
-    </div>
-  `).join("");
+function formatEvent(e) {
+  const d = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+  const ic = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
+  let text = "";
+  if (e.type === "trade" && d.action === "buy") {
+    text = `<span class="highlight">${e.agent_id}</span> bought ${d.token} for <span class="amount">${d.amount} SOL</span>`;
+  } else if (e.type === "trade" && d.action === "sell") {
+    text = `<span class="highlight">${e.agent_id}</span> sold ${d.token} <span class="amount">${d.pnl_pct > 0 ? "+" : ""}${(d.pnl_pct||0).toFixed(1)}%</span>`;
+  } else if (e.type === "spawn") {
+    text = `<span class="highlight">${d.parent}</span> reproduced &rarr; <span class="highlight">${e.agent_id}</span>`;
+  } else if (e.type === "royalty") {
+    text = `<span class="highlight">${d.from}</span> paid <span class="amount">${(d.amount||0).toFixed(3)} SOL</span> to <span class="highlight">${d.to}</span>`;
+  } else {
+    text = `<span class="highlight">${e.agent_id}</span> ${e.type}`;
+  }
+  return `<div class="feed-item"><div class="feed-icon ${e.type}">${ic[e.type] || "&#8226;"}</div><div class="feed-text">${text}<span class="time">${timeAgo(e.created_at)}</span></div></div>`;
+}
+
+function renderFeed(events) {
+  const el = document.getElementById("feedList");
+  if (events && events.length > 0) {
+    el.innerHTML = events.map(formatEvent).join("");
+  } else {
+    const ic = { spawn: "&#9829;", trade: "&#8644;", royalty: "&#9650;", death: "&#10007;" };
+    el.innerHTML = MOCK_FEED.map(f => `<div class="feed-item"><div class="feed-icon ${f.type}">${ic[f.type]}</div><div class="feed-text">${f.text}<span class="time">${f.time}</span></div></div>`).join("");
+  }
 }
 
 // ============================================================
@@ -995,16 +1021,26 @@ async function fetchGenesis() {
   return GENESIS_FALLBACK;
 }
 
+async function fetchEvents() {
+  try {
+    const r = await fetch("/api/events?limit=20");
+    if (!r.ok) throw 0;
+    const d = await r.json();
+    return d.events || [];
+  } catch {}
+  return [];
+}
+
 // ============================================================
 // INIT
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const [agents, genesis] = await Promise.all([fetchAgents(), fetchGenesis()]);
+  const [agents, genesis, events] = await Promise.all([fetchAgents(), fetchGenesis(), fetchEvents()]);
   updateStats(agents);
   renderTree(agents);
   renderLeaderboard(agents);
-  renderFeed();
+  renderFeed(events);
   renderGenesis(genesis);
 
   // Resize tree SVG to fill container
