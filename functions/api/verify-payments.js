@@ -161,6 +161,106 @@ export async function onRequest(context) {
     }
   }
 
+  // === FALLBACK: AMOUNT-MATCHING FOR MANUAL PAYMENTS ===
+  // If reference-based search missed manual payments, try matching by unique amount
+  const stillPending = await db.prepare(
+    "SELECT id, agent_id, amount, recipient FROM payment_requests WHERE status = 'pending'"
+  ).all();
+
+  if (stillPending.results.length > 0) {
+    try {
+      const protocolAddr = context.env.PROTOCOL_WALLET;
+      const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 15 }]);
+      const amountMatched = new Set();
+
+      if (recentSigs?.length > 0) {
+        for (const sig of recentSigs) {
+          if (sig.err || amountMatched.size >= stillPending.results.length) break;
+
+          const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+          if (!tx?.meta) continue;
+
+          const accounts = tx.transaction.message.accountKeys;
+          let protoIdx = -1;
+          for (let i = 0; i < accounts.length; i++) {
+            const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+            if (pk === protocolAddr) { protoIdx = i; break; }
+          }
+          if (protoIdx < 0) continue;
+
+          const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
+
+          // Skip micro amounts (login range) — only match agent purchases (≥1.5 SOL)
+          if (solReceived < 1.5) continue;
+
+          for (const pr of stillPending.results) {
+            if (amountMatched.has(pr.id)) continue;
+            // Match within 0.5% tolerance
+            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.005) {
+              const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+              // Update payment request
+              await db.prepare(
+                "UPDATE payment_requests SET status = 'confirmed', buyer_wallet = ?, tx_signature = ?, confirmed_at = datetime('now') WHERE id = ?"
+              ).bind(buyer, sig.signature, pr.id).run();
+
+              // Check if agent already claimed
+              const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
+              if (existingAgent && existingAgent.status !== 'dead') {
+                amountMatched.add(pr.id);
+                continue;
+              }
+              if (existingAgent && existingAgent.status === 'dead') {
+                await db.prepare('DELETE FROM agents WHERE id = ? AND status = ?').bind(pr.agent_id, 'dead').run();
+              }
+
+              const dna = GENESIS_DNA[pr.agent_id];
+              if (!dna) { amountMatched.add(pr.id); continue; }
+
+              const keypair = await generateKeypair();
+              const kv = context.env.AGENT_KEYS;
+              if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
+
+              const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+              const tradingCapital = pr.amount * (1 - feePct);
+              const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
+
+              if (protocolSecret) {
+                try {
+                  const fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
+                  await db.prepare(
+                    "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+                  ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+                  await db.prepare(
+                    "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
+                  ).bind(pr.agent_id, JSON.stringify({
+                    buyer, amount: pr.amount, tx: sig.signature,
+                    agent_wallet: keypair.publicKey, trading_capital: tradingCapital,
+                    funding_tx: fundingTx, matched_by: 'amount',
+                  })).run();
+                  confirmed++;
+                  console.log(`Amount-matched ${pr.agent_id} from ${buyer}, funded ${tradingCapital} SOL`);
+                } catch (e) {
+                  await db.prepare(
+                    "UPDATE payment_requests SET status = 'funding_failed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
+                  ).bind(buyer, sig.signature, pr.id).run();
+                  if (kv) await kv.put(`funding:${pr.id}:pubkey`, keypair.publicKey);
+                  console.error(`Amount-match funding failed for ${pr.agent_id}:`, e.message);
+                  errors++;
+                }
+              }
+
+              amountMatched.add(pr.id);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error in amount-matching fallback:', e);
+    }
+  }
+
   // === RETRY FAILED FUNDING ===
   let retried = 0;
   const failedFunding = await db.prepare(

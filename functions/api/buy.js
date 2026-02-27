@@ -52,12 +52,17 @@ export async function onRequest(context) {
   const reference = encode(refBytes);
 
   const id = crypto.randomUUID();
-  const amount = arch.price;
+  const baseAmount = arch.price;
+
+  // Add unique micro-offset so manual payments can be matched by amount
+  // Range: 0.000001 – 0.000999 SOL (< $0.01)
+  const microOffset = (Math.floor(Math.random() * 999) + 1) / 1_000_000;
+  const amount = parseFloat((baseAmount + microOffset).toFixed(6));
 
   // Build Solana Pay URL
   const solanaPayUrl = `solana:${recipient}?amount=${amount}&reference=${reference}&label=SPAWN&message=${encodeURIComponent(arch.name)}`;
 
-  // Save to DB
+  // Save to DB (amount = unique amount with micro-offset)
   await db.prepare(
     'INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, agent_id, amount, reference, recipient, 'pending').run();

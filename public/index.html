@@ -111,7 +111,8 @@
     .micro-info { font-size:12px; color:var(--text-muted); margin-bottom:20px; line-height:1.6; }
     .micro-amount { font-family:var(--font-display); font-size:28px; font-weight:600; color:var(--text); text-align:center; margin-bottom:4px; }
     .micro-amount-label { font-size:11px; color:var(--text-dim); text-align:center; margin-bottom:20px; letter-spacing:0.1em; text-transform:uppercase; }
-    .micro-dest { font-size:10px; color:var(--text-muted); word-break:break-all; background:rgba(255,255,255,0.03); padding:8px; border:1px solid var(--border); user-select:all; cursor:pointer; margin-bottom:20px; }
+    .micro-dest { font-size:10px; color:var(--text-muted); word-break:break-all; background:rgba(255,255,255,0.03); padding:8px; border:1px solid var(--border); cursor:pointer; margin-bottom:20px; transition:border-color 0.2s; }
+    .micro-dest:hover { border-color:var(--text-muted); }
     .micro-dest span { color:var(--text-dim); display:block; font-size:9px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
     .micro-status { text-align:center; font-size:12px; color:var(--text-muted); margin-top:8px; }
     .micro-status.polling { color:var(--text-dim); }
@@ -529,7 +530,7 @@
       <p class="micro-info">Send the exact amount below from your wallet to prove ownership.</p>
       <div class="micro-amount" id="microAmount">—</div>
       <div class="micro-amount-label">SOL</div>
-      <div class="micro-dest" id="microDest" onclick="copyText(this)"><span>send to</span>—</div>
+      <div class="micro-dest" id="microDest" onclick="copyAddr(this)"><span>send to</span>—</div>
       <div class="micro-status" id="microStatus"></div>
       <button class="login-cancel" onclick="microBack()">back</button>
     </div>
@@ -710,11 +711,18 @@ function microBack() {
   document.getElementById('loginStep1').style.display = 'block';
 }
 
-function copyText(el) {
-  const t = el.textContent.replace('to: ', '');
-  navigator.clipboard.writeText(t).catch(() => {});
-  const o = el.style.borderColor; el.style.borderColor = 'var(--green)';
-  setTimeout(() => el.style.borderColor = o, 600);
+function copyAddr(el) {
+  const addr = el.textContent.replace(/send to|copied!/gi, '').trim();
+  navigator.clipboard.writeText(addr).catch(() => {});
+  el.style.borderColor = 'var(--green)';
+  const span = el.querySelector('span');
+  if (span) { span.textContent = 'copied!'; }
+  else { el.dataset.origText = el.textContent; el.textContent = 'copied!'; }
+  setTimeout(() => {
+    el.style.borderColor = '';
+    if (span) { span.textContent = 'send to'; }
+    else if (el.dataset.origText) { el.textContent = el.dataset.origText; delete el.dataset.origText; }
+  }, 1200);
 }
 
 (function() {

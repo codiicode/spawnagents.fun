@@ -167,8 +167,9 @@
       font-size: 10px; color: var(--text-muted);
       word-break: break-all; background: rgba(255,255,255,0.03);
       padding: 8px; border: 1px solid var(--border);
-      user-select: all; cursor: pointer; margin-bottom: 20px;
+      cursor: pointer; margin-bottom: 20px; transition: border-color 0.2s;
     }
+    .micro-dest:hover { border-color: var(--text-muted); }
     .micro-dest span { color: var(--text-dim); display: block; font-size: 9px;
       letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
     .micro-status {
@@ -257,6 +258,30 @@
       font-weight: 600;
     }
 
+    /* === FILTER BAR === */
+    .filter-bar {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 clamp(20px, 4vw, 48px) 32px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 10px 20px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      background: none;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { border-color: var(--blood); color: var(--text); }
+    .filter-btn.active { background: var(--blood-deep); border-color: var(--blood); color: var(--text); }
+
     /* === TIER SECTIONS === */
     .tier-section {
       max-width: 1100px;
@@ -290,6 +315,35 @@
       font-size: 12px;
       color: var(--text-dim);
       margin-left: auto;
+    }
+
+    /* === CUSTOM AGENTS === */
+    .custom-agents-info {
+      border: 1px solid var(--border);
+      padding: 32px;
+    }
+    .custom-agents-info p {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin: 0 0 12px;
+    }
+    .custom-agents-info p:last-of-type {
+      color: var(--text);
+      font-style: italic;
+      margin-bottom: 20px;
+    }
+    .custom-agents-params {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .custom-agents-params span {
+      font-size: 10px;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      letter-spacing: 0.06em;
     }
 
     /* === AGENT CARDS === */
@@ -597,8 +651,27 @@
       background: rgba(255,255,255,0.03);
       padding: 8px;
       border: 1px solid var(--border);
-      user-select: all;
+      cursor: pointer;
+      transition: border-color 0.2s;
     }
+    .modal-fallback-addr:hover { border-color: var(--text-muted); }
+
+    .verify-btn {
+      display: block;
+      width: 100%;
+      margin-top: 10px;
+      padding: 10px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .verify-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .verify-btn:disabled { opacity: 0.5; cursor: default; }
 
     .modal-status {
       text-align: center;
@@ -741,9 +814,11 @@
       background: rgba(255,255,255,0.03);
       padding: 8px;
       border: 1px solid var(--border);
-      user-select: all;
+      cursor: pointer;
+      transition: border-color 0.2s;
       margin-top: 8px;
     }
+    .w-micro-addr:hover { border-color: var(--text-muted); }
 
     .w-micro-from {
       font-size: 10px;
@@ -806,7 +881,7 @@
       <p class="micro-info">Send the exact amount below from your wallet to prove ownership.</p>
       <div class="micro-amount" id="microAmount">—</div>
       <div class="micro-amount-label">SOL</div>
-      <div class="micro-dest" id="microDest" onclick="copyText(this)"><span>send to</span>—</div>
+      <div class="micro-dest" id="microDest" onclick="copyAddr(this)"><span>send to</span>—</div>
       <div class="micro-status" id="microStatus"></div>
       <button class="login-cancel" onclick="microBack()">back</button>
     </div>
@@ -824,6 +899,16 @@
   </div>
 </div>
 
+<!-- FILTER -->
+<div class="filter-bar">
+  <button class="filter-btn active" onclick="filterTier('all')">All</button>
+  <button class="filter-btn" onclick="filterTier('auction')">Auction</button>
+  <button class="filter-btn" onclick="filterTier('tier3')">Tier 3</button>
+  <button class="filter-btn" onclick="filterTier('tier2')">Tier 2</button>
+  <button class="filter-btn" onclick="filterTier('tier1')">Tier 1</button>
+  <button class="filter-btn" onclick="filterTier('custom')">Custom</button>
+</div>
+
 <!-- AGENTS -->
 <div id="agentSections"></div>
 
@@ -838,7 +923,8 @@
     <button class="pay-btn" id="modalPayBtn" onclick="handlePay()">Pay with Phantom</button>
     <div class="modal-fallback">
       <div class="modal-fallback-label">or send manually to:</div>
-      <div class="modal-fallback-addr" id="modalAddr"></div>
+      <div class="modal-fallback-addr" id="modalAddr" onclick="copyAddr(this)"></div>
+      <button class="verify-btn" id="verifyBtn" onclick="verifyManual()">I've sent it</button>
     </div>
     <div class="modal-status" id="modalStatus"></div>
   </div>
@@ -869,7 +955,7 @@
         <div class="w-micro-label">Send exactly this amount</div>
         <div class="w-micro-amount" id="wMicroAmount"></div>
         <div class="w-micro-label" style="margin-top:12px;">To this address</div>
-        <div class="w-micro-addr" id="wMicroAddr"></div>
+        <div class="w-micro-addr" id="wMicroAddr" onclick="copyAddr(this)"></div>
         <div class="w-micro-from">From wallet: <strong id="wMicroFrom"></strong></div>
       </div>
     </div>
@@ -1000,7 +1086,7 @@ function renderAgents(data) {
   let html = '';
 
   // Auction
-  html += `<div class="tier-section">
+  html += `<div class="tier-section" data-tier="auction">
     <div class="tier-header">
       <div class="tier-label">Auction</div>
       <div class="tier-price">5 extreme archetypes</div>
@@ -1009,37 +1095,65 @@ function renderAgents(data) {
     <div class="agent-grid">${auction.map(g => agentCard(g, "Auction")).join("")}</div>
   </div>`;
 
-  // Tier III
-  html += `<div class="tier-section">
+  // Tier 3
+  html += `<div class="tier-section" data-tier="tier3">
     <div class="tier-header">
-      <div class="tier-label">Tier III</div>
+      <div class="tier-label">Tier 3</div>
       <div class="tier-price">4 SOL each</div>
       <div class="tier-desc">${t4.filter(g => g.available).length} / ${t4.length} available</div>
     </div>
     <div class="agent-grid">${t4.map(g => agentCard(g, "4 SOL")).join("")}</div>
   </div>`;
 
-  // Tier II
-  html += `<div class="tier-section">
+  // Tier 2
+  html += `<div class="tier-section" data-tier="tier2">
     <div class="tier-header">
-      <div class="tier-label">Tier II</div>
+      <div class="tier-label">Tier 2</div>
       <div class="tier-price">3 SOL each</div>
       <div class="tier-desc">${t3.filter(g => g.available).length} / ${t3.length} available</div>
     </div>
     <div class="agent-grid">${t3.map(g => agentCard(g, "3 SOL")).join("")}</div>
   </div>`;
 
-  // Tier I
-  html += `<div class="tier-section">
+  // Tier 1
+  html += `<div class="tier-section" data-tier="tier1">
     <div class="tier-header">
-      <div class="tier-label">Tier I</div>
+      <div class="tier-label">Tier 1</div>
       <div class="tier-price">2 SOL each</div>
       <div class="tier-desc">${t2.filter(g => g.available).length} / ${t2.length} available</div>
     </div>
     <div class="agent-grid">${t2.map(g => agentCard(g, "2 SOL")).join("")}</div>
   </div>`;
 
+  // Custom Agents
+  html += `<div class="tier-section" data-tier="custom">
+    <div class="tier-header">
+      <div class="tier-label">Custom Agents</div>
+      <div class="tier-price">10 — 15 SOL</div>
+      <div class="tier-desc">coming soon</div>
+    </div>
+    <div class="custom-agents-info">
+      <p>Build your own agent from scratch. Full control over every parameter — aggression, patience, risk tolerance, position sizing, profit targets, stop losses, check intervals, and more.</p>
+      <p>Your DNA. Your strategy. Your agent.</p>
+      <div class="custom-agents-params">
+        <span>aggression</span><span>patience</span><span>risk tolerance</span><span>focus</span><span>buy threshold</span><span>sell targets</span><span>position size</span><span>check interval</span>
+      </div>
+    </div>
+  </div>`;
+
   container.innerHTML = html;
+}
+
+// ============================================================
+// FILTER
+// ============================================================
+
+function filterTier(tier) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.querySelectorAll('.tier-section').forEach(s => {
+    s.style.display = (tier === 'all' || s.dataset.tier === tier) ? '' : 'none';
+  });
 }
 
 // ============================================================
@@ -1192,12 +1306,22 @@ function microBack() {
   document.getElementById('loginStep1').style.display = 'block';
 }
 
-function copyText(el) {
-  const text = el.textContent.replace('to: ', '');
-  navigator.clipboard.writeText(text).catch(() => {});
-  const orig = el.style.borderColor;
+function copyAddr(el) {
+  // Extract just the wallet address (strip labels like "send to")
+  const addr = el.textContent.replace(/send to|copied!/gi, '').trim();
+  navigator.clipboard.writeText(addr).catch(() => {});
+  const orig = el.innerHTML;
+  const origBorder = el.style.borderColor;
   el.style.borderColor = 'var(--green)';
-  setTimeout(() => el.style.borderColor = orig, 600);
+  // Show "copied!" briefly
+  const span = el.querySelector('span');
+  if (span) { span.textContent = 'copied!'; }
+  else { el.dataset.origText = el.textContent; el.textContent = 'copied!'; }
+  setTimeout(() => {
+    el.style.borderColor = origBorder;
+    if (span) { span.textContent = 'send to'; }
+    else if (el.dataset.origText) { el.textContent = el.dataset.origText; delete el.dataset.origText; }
+  }, 1200);
 }
 
 function checkWallet() {
@@ -1266,7 +1390,7 @@ function showModal(name, amount, payUrl, recipient, reference) {
   currentAmount = amount;
 
   document.getElementById('modalAgent').textContent = name;
-  document.getElementById('modalAmount').textContent = amount;
+  document.getElementById('modalAmount').textContent = parseFloat(amount).toFixed(6);
   document.getElementById('modalAddr').textContent = recipient;
   document.getElementById('modalStatus').textContent = '';
   document.getElementById('modalStatus').className = 'modal-status';
@@ -1318,7 +1442,7 @@ async function handlePay() {
     const transferIx = SystemProgram.transfer({
       fromPubkey: buyer,
       toPubkey: new PublicKey(currentRecipient),
-      lamports: currentAmount * LAMPORTS_PER_SOL,
+      lamports: Math.round(currentAmount * LAMPORTS_PER_SOL),
     });
 
     // Add reference as extra account key (non-signer, non-writable)
@@ -1347,6 +1471,71 @@ async function handlePay() {
   }
 }
 
+async function verifyManual() {
+  const btn = document.getElementById('verifyBtn');
+  const status = document.getElementById('modalStatus');
+  btn.disabled = true;
+  btn.textContent = 'checking...';
+  status.textContent = 'Searching for your transaction on-chain...';
+  status.className = 'modal-status waiting pulse';
+
+  try {
+    const res = await fetch('/api/payment-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reference: currentReference }),
+    });
+    const data = await res.json();
+
+    if (data.status === 'confirmed') {
+      // Stop polling — we got it
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      showConfirmed(data);
+    } else {
+      status.textContent = 'Not found yet — it can take a minute for the transaction to confirm on Solana.';
+      status.className = 'modal-status waiting';
+      btn.textContent = "I've sent it";
+      btn.disabled = false;
+    }
+  } catch (e) {
+    status.textContent = 'Error checking — try again in a moment.';
+    status.className = 'modal-status error';
+    btn.textContent = "I've sent it";
+    btn.disabled = false;
+  }
+}
+
+function showConfirmed(data) {
+  const status = document.getElementById('modalStatus');
+  const feePct = 0.15;
+  const tradingCapital = (data.amount * (1 - feePct)).toFixed(2);
+  const solscanUrl = data.agent_wallet ? `https://solscan.io/account/${data.agent_wallet}` : '';
+
+  status.innerHTML = data.agent_wallet
+    ? `Agent claimed! <span style="color:var(--green);">${tradingCapital} SOL</span> sent to agent wallet.<br><br>` +
+      `<span style="color:var(--muted);font-size:0.75rem;">Agent wallet:</span><br>` +
+      `<a href="${solscanUrl}" target="_blank" style="color:var(--blood-bright);font-size:0.8rem;word-break:break-all;">${data.agent_wallet}</a><br>` +
+      `<span style="color:var(--dim);font-size:0.7rem;">Track all trades on Solscan</span>`
+    : 'Agent claimed!';
+  status.className = 'modal-status confirmed';
+
+  // Hide verify button
+  document.getElementById('verifyBtn').style.display = 'none';
+
+  // Update the card
+  if (currentAgentId) {
+    const btn = document.querySelector(`[data-agent="${currentAgentId}"]`);
+    if (btn) {
+      const card = btn.closest('.agent-card');
+      card.classList.add('claimed');
+      const statusEl = card.querySelector('.agent-status');
+      statusEl.textContent = 'claimed';
+      statusEl.className = 'agent-status claimed';
+      btn.remove();
+    }
+  }
+}
+
 async function pollPayment(reference) {
   try {
     const res = await fetch(`/api/payment-status?ref=${encodeURIComponent(reference)}`);
@@ -1355,36 +1544,7 @@ async function pollPayment(reference) {
     if (data.status === 'confirmed') {
       clearInterval(pollInterval);
       pollInterval = null;
-
-      const status = document.getElementById('modalStatus');
-      const feePct = 0.15;
-      const tradingCapital = (data.amount * (1 - feePct)).toFixed(2);
-      const walletShort = data.agent_wallet ? data.agent_wallet.slice(0, 6) + '...' + data.agent_wallet.slice(-4) : '';
-      const solscanUrl = data.agent_wallet ? `https://solscan.io/account/${data.agent_wallet}` : '';
-
-      status.innerHTML = data.agent_wallet
-        ? `Agent claimed! <span style="color:var(--green);">${tradingCapital} SOL</span> sent to agent wallet.<br><br>` +
-          `<span style="color:var(--muted);font-size:0.75rem;">Agent wallet:</span><br>` +
-          `<a href="${solscanUrl}" target="_blank" style="color:var(--blood-bright);font-size:0.8rem;word-break:break-all;">${data.agent_wallet}</a><br>` +
-          `<span style="color:var(--dim);font-size:0.7rem;">Track all trades on Solscan</span>`
-        : 'Agent claimed!';
-      status.className = 'modal-status confirmed';
-
-      // Update the card
-      if (currentAgentId) {
-        const btn = document.querySelector(`[data-agent="${currentAgentId}"]`);
-        if (btn) {
-          const card = btn.closest('.agent-card');
-          card.classList.add('claimed');
-          const statusEl = card.querySelector('.agent-status');
-          statusEl.textContent = 'claimed';
-          statusEl.className = 'agent-status claimed';
-          btn.remove();
-        }
-      }
-
-      // Don't auto-close — let user see the wallet
-      // setTimeout(closeModal, 3000);
+      showConfirmed(data);
     } else if (data.status === 'expired') {
       clearInterval(pollInterval);
       pollInterval = null;
