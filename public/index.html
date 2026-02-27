@@ -118,6 +118,9 @@
     .micro-status.polling { color:var(--text-dim); }
     .micro-status.polling::after { content:''; display:inline-block; width:4px; height:4px; background:var(--blood); border-radius:50%; margin-left:6px; animation:pulse 1.5s ease-in-out infinite; vertical-align:middle; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .verify-btn { display:block; width:100%; margin-top:10px; padding:10px; background:none; border:1px solid var(--border); color:var(--text-muted); font-family:var(--font-mono); font-size:11px; letter-spacing:0.06em; cursor:pointer; transition:all 0.2s; }
+    .verify-btn:hover { border-color:var(--text-muted); color:var(--text); }
+    .verify-btn:disabled { opacity:0.5; cursor:default; }
 
     .nav-hamburger {
       display: none;
@@ -531,6 +534,7 @@
       <div class="micro-amount" id="microAmount">—</div>
       <div class="micro-amount-label">SOL</div>
       <div class="micro-dest" id="microDest" onclick="copyAddr(this)"><span>send to</span>—</div>
+      <button class="verify-btn" id="loginVerifyBtn" onclick="verifyLogin()" style="display:none">I've sent it</button>
       <div class="micro-status" id="microStatus"></div>
       <button class="login-cancel" onclick="microBack()">back</button>
     </div>
@@ -689,20 +693,31 @@ async function showMicroStep() {
     currentLoginId = data.id;
     document.getElementById('microAmount').textContent = data.micro_amount;
     document.getElementById('microDest').innerHTML = '<span>send to</span>' + data.send_to;
-    document.getElementById('microStatus').textContent = 'waiting for transaction...';
-    document.getElementById('microStatus').className = 'micro-status polling';
-    loginPollInterval = setInterval(async () => {
-      try {
-        const r = await fetch('/api/login-status?id=' + currentLoginId);
-        const d = await r.json();
-        if (d.status === 'verified' && d.wallet) {
-          clearInterval(loginPollInterval); loginPollInterval = null;
-          connectedWallet = d.wallet; localStorage.setItem('spawn_wallet', connectedWallet);
-          updateWalletUI(); closeLoginModal();
-        }
-      } catch {}
-    }, 3000);
+    document.getElementById('loginVerifyBtn').style.display = 'block';
+    document.getElementById('microStatus').textContent = '';
+    document.getElementById('microStatus').className = 'micro-status';
   } catch (e) { document.getElementById('microStatus').textContent = 'error: ' + e.message; }
+}
+async function verifyLogin() {
+  const btn = document.getElementById('loginVerifyBtn');
+  const status = document.getElementById('microStatus');
+  btn.disabled = true; btn.textContent = 'checking...';
+  status.textContent = 'Searching for your transaction on-chain...';
+  status.className = 'micro-status polling';
+  try {
+    const res = await fetch('/api/login-status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: currentLoginId }) });
+    const data = await res.json();
+    if (data.status === 'verified' && data.wallet) {
+      connectedWallet = data.wallet; localStorage.setItem('spawn_wallet', connectedWallet);
+      updateWalletUI(); closeLoginModal();
+    } else {
+      status.textContent = 'Not found yet — it can take a minute to confirm on Solana.';
+      status.className = 'micro-status'; btn.textContent = "I've sent it"; btn.disabled = false;
+    }
+  } catch (e) {
+    status.textContent = 'Error checking — try again.';
+    status.className = 'micro-status'; btn.textContent = "I've sent it"; btn.disabled = false;
+  }
 }
 function microBack() {
   if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval = null; }
