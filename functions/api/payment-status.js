@@ -64,9 +64,16 @@ export async function onRequest(context) {
       try {
         const protocolAddr = context.env.PROTOCOL_WALLET;
         const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 10 }]);
+
+        // Get already-used tx signatures to prevent double-matching
+        const usedTxs = await db.prepare(
+          "SELECT tx_signature FROM payment_requests WHERE tx_signature IS NOT NULL"
+        ).all();
+        const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
+
         if (recentSigs?.length > 0) {
           for (const sig of recentSigs) {
-            if (sig.err) continue;
+            if (sig.err || usedSigs.has(sig.signature)) continue;
             const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
             if (!tx?.meta) continue;
 

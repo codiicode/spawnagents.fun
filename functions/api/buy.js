@@ -55,8 +55,8 @@ export async function onRequest(context) {
   const baseAmount = arch.price;
 
   // Add unique micro-offset so manual payments can be matched by amount
-  // Range: 0.000001 – 0.000999 SOL (< $0.01)
-  const microOffset = (Math.floor(Math.random() * 999) + 1) / 1_000_000;
+  // Range: 0.000001 – 0.009999 SOL — 9999 possible values
+  const microOffset = (Math.floor(Math.random() * 9999) + 1) / 1_000_000;
   const amount = parseFloat((baseAmount + microOffset).toFixed(6));
 
   // Build Solana Pay URL

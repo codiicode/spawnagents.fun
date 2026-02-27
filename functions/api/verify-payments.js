@@ -173,9 +173,16 @@ export async function onRequest(context) {
       const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 15 }]);
       const amountMatched = new Set();
 
+      // Get already-used tx signatures to prevent double-matching
+      const usedTxs = await db.prepare(
+        "SELECT tx_signature FROM payment_requests WHERE tx_signature IS NOT NULL"
+      ).all();
+      const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
+
       if (recentSigs?.length > 0) {
         for (const sig of recentSigs) {
           if (sig.err || amountMatched.size >= stillPending.results.length) break;
+          if (usedSigs.has(sig.signature)) continue; // skip already-matched txs
 
           const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
           if (!tx?.meta) continue;

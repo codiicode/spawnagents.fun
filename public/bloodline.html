@@ -708,6 +708,18 @@
     @media (max-width: 480px) {
       .detail-panel { height: 70vh; max-height: 70vh; }
     }
+
+    footer {
+      padding: 40px clamp(20px, 5vw, 60px);
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    footer a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    footer a:hover { color: var(--blood); }
+    .footer-links { display: flex; gap: 20px; }
   </style>
 </head>
 <body>
@@ -798,6 +810,14 @@
   </div>
 
 </div>
+
+<footer>
+  <div class="footer-links">
+    <a href="https://x.com/spawnagents" target="_blank">X</a>
+    <a href="https://github.com/codiicode/spawnagents.fun" target="_blank">GitHub</a>
+    <a href="/api/info" target="_blank">API</a>
+  </div>
+</footer>
 
 <script>
 // ============================================================
