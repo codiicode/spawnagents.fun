@@ -46,12 +46,6 @@ export async function onRequest(context) {
   const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
   if (existing && existing.status !== 'dead') return Response.json({ error: 'Already claimed' }, { status: 409 });
 
-  // Check for active pending payment
-  const pending = await db.prepare(
-    "SELECT id FROM payment_requests WHERE agent_id = ? AND status = 'pending' AND created_at > datetime('now', '-30 minutes')"
-  ).bind(agent_id).first();
-  if (pending) return Response.json({ error: 'Payment already pending for this agent' }, { status: 409 });
-
   // Generate reference (32 random bytes → base58)
   const refBytes = new Uint8Array(32);
   crypto.getRandomValues(refBytes);

@@ -86,9 +86,7 @@ export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
   const keypairBytes = decode(secretKeyB58); // 64 bytes
   const seed = keypairBytes.slice(0, 32);
 
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw', seed, { name: 'Ed25519' }, false, ['sign']
-  );
+  const cryptoKey = await importEd25519Seed(seed);
 
   // Decode base64 → bytes
   const txBytes = base64ToBytes(swapTxBase64);
@@ -107,7 +105,7 @@ export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
 
   // Send
   const signedBase64 = bytesToBase64(signedTx);
-  const result = await rpcCall(rpcUrl, 'sendRawTransaction', [
+  const result = await rpcCall(rpcUrl, 'sendTransaction', [
     signedBase64,
     { encoding: 'base64', skipPreflight: false },
   ]);
@@ -154,10 +152,8 @@ export async function sendSol(fromSecretB58, toAddressB58, amountSol, rpcUrl) {
   message[o++] = 12; // data length
   message.set(ixData, o);
 
-  // Sign with Ed25519
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw', seed, { name: 'Ed25519' }, false, ['sign']
-  );
+  // Sign with Ed25519 — wrap seed in PKCS8 envelope
+  const cryptoKey = await importEd25519Seed(seed);
   const sig = new Uint8Array(await crypto.subtle.sign('Ed25519', cryptoKey, message));
 
   // Build full transaction
@@ -168,7 +164,7 @@ export async function sendSol(fromSecretB58, toAddressB58, amountSol, rpcUrl) {
 
   // Send
   const txBase64 = bytesToBase64(tx);
-  const result = await rpcCall(rpcUrl, 'sendRawTransaction', [
+  const result = await rpcCall(rpcUrl, 'sendTransaction', [
     txBase64,
     { encoding: 'base64', skipPreflight: false },
   ]);
@@ -186,6 +182,19 @@ export async function verifySignature(pubkeyB58, signatureBytes, messageBytes) {
 }
 
 // --- Helpers ---
+
+// PKCS8 envelope for Ed25519: 16-byte header + 32-byte seed
+const ED25519_PKCS8_PREFIX = new Uint8Array([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+  0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
+
+async function importEd25519Seed(seed) {
+  const pkcs8 = new Uint8Array(48);
+  pkcs8.set(ED25519_PKCS8_PREFIX, 0);
+  pkcs8.set(seed, 16);
+  return crypto.subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']);
+}
 
 async function rpcCall(url, method, params) {
   const res = await fetch(url, {

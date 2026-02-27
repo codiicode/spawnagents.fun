@@ -7,8 +7,10 @@
   <meta name="description" content="Visualize the evolutionary tree of AI trading agents. Watch lineages grow, mutate, and compete on Solana.">
   <meta property="og:title" content="The Lineage — SPAWN">
   <meta property="og:description" content="Evolutionary family trees of autonomous trading agents on Solana.">
-  <meta property="og:image" content="/og.jpg">
-  <link rel="icon" href="/og.jpg" type="image/jpeg">
+  <meta property="og:image" content="https://spawnagents.fun/S.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://spawnagents.fun/S.jpg">
+  <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -109,6 +111,32 @@
       padding: 4px 10px;
     }
     .nav-links a.nav-blood:hover { color: var(--blood); border-color: var(--blood); }
+    .nav-wallet { color: var(--blood-deep) !important; border: 1px solid var(--border-strong); padding: 4px 10px; cursor: pointer; transition: all 0.2s; }
+    .nav-wallet:hover { color: var(--blood) !important; border-color: var(--blood); }
+    .nav-wallet.connected { color: var(--green) !important; border-color: rgba(74, 158, 106, 0.3); }
+    .nav-wallet.connected:hover { color: var(--red) !important; border-color: rgba(196, 64, 64, 0.3); }
+
+    .login-overlay { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.85); backdrop-filter:blur(8px); align-items:center; justify-content:center; }
+    .login-overlay.open { display:flex; }
+    .login-modal { background:#0d0a10; border:1px solid var(--border-strong); padding:36px; max-width:420px; width:90%; position:relative; }
+    .login-modal h3 { font-family:var(--font-display); font-size:22px; font-weight:600; color:var(--text); letter-spacing:0.04em; margin-bottom:6px; }
+    .login-modal .login-sub { font-size:12px; color:var(--text-muted); margin-bottom:28px; }
+    .login-option { display:block; width:100%; padding:14px; background:var(--blood-deep); border:1px solid var(--blood); color:var(--text); font-family:var(--font-mono); font-size:13px; font-weight:500; letter-spacing:0.06em; cursor:pointer; text-align:center; transition:background 0.2s; margin-bottom:10px; }
+    .login-option:hover { background:var(--blood); }
+    .login-or { text-align:center; font-size:11px; color:var(--text-dim); margin-bottom:10px; letter-spacing:0.15em; text-transform:uppercase; }
+    .login-option-alt { display:block; width:100%; padding:14px; background:none; border:1px solid var(--border); color:var(--text-muted); font-family:var(--font-mono); font-size:13px; letter-spacing:0.06em; cursor:pointer; text-align:center; transition:all 0.2s; }
+    .login-option-alt:hover { border-color:var(--border-strong); color:var(--text); }
+    .login-cancel { display:block; width:100%; margin-top:16px; background:none; border:none; color:var(--text-dim); font-family:var(--font-mono); font-size:11px; cursor:pointer; text-align:center; letter-spacing:0.1em; transition:color 0.2s; }
+    .login-cancel:hover { color:var(--text-muted); }
+    .micro-info { font-size:12px; color:var(--text-muted); margin-bottom:20px; line-height:1.6; }
+    .micro-amount { font-family:var(--font-display); font-size:28px; font-weight:600; color:var(--text); text-align:center; margin-bottom:4px; }
+    .micro-amount-label { font-size:11px; color:var(--text-dim); text-align:center; margin-bottom:20px; letter-spacing:0.1em; text-transform:uppercase; }
+    .micro-dest { font-size:10px; color:var(--text-muted); word-break:break-all; background:rgba(255,255,255,0.03); padding:8px; border:1px solid var(--border); user-select:all; cursor:pointer; margin-bottom:20px; }
+    .micro-dest span { color:var(--text-dim); display:block; font-size:9px; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:4px; }
+    .micro-status { text-align:center; font-size:12px; color:var(--text-muted); margin-top:8px; }
+    .micro-status.polling { color:var(--text-dim); }
+    .micro-status.polling::after { content:''; display:inline-block; width:4px; height:4px; background:var(--blood); border-radius:50%; margin-left:6px; animation:pulse 1.5s ease-in-out infinite; vertical-align:middle; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
     .nav-hamburger {
       display: none; background: none; border: none; cursor: pointer; padding: 4px;
@@ -299,6 +327,8 @@
     .node-alive-profit .node-outer { stroke: rgba(74, 158, 106, 0.35); }
     .node-alive-loss .node-outer { stroke: rgba(196, 64, 64, 0.3); }
 
+    .node-unclaimed .node-outer { stroke: var(--text-dim); opacity: 0.5; stroke-dasharray: 4 3; }
+    .node-unclaimed .node-inner { fill: rgba(20, 16, 22, 0.5); }
     .node-dead .node-outer { stroke: var(--text-dim); opacity: 0.4; }
     .node-dead .node-inner { fill: rgba(20, 16, 22, 0.7); }
 
@@ -332,6 +362,7 @@
       font-weight: 500;
       letter-spacing: 0.02em;
     }
+    .node-unclaimed .node-label { fill: var(--text-dim); }
     .node-dead .node-label { fill: var(--text-dim); }
 
     .node-gen-badge {
@@ -438,6 +469,7 @@
       font-weight: 600;
     }
     .detail-alive.alive { color: var(--green); }
+    .detail-alive.unclaimed { color: var(--text-dim); }
     .detail-alive.dead { color: var(--text-dim); }
 
     /* Detail sections */
@@ -687,7 +719,7 @@
     <a href="/bloodline.html" class="active">bloodline</a>
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
-    <a href="#" class="nav-blood">$SPAWN</a>
+    <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -698,7 +730,30 @@
   <a href="/bloodline.html">bloodline</a>
   <a href="/how.html">how?</a>
   <a href="https://x.com/spawnagents" target="_blank">X</a>
-  <a href="#" class="nav-blood">$SPAWN</a>
+  <a href="#" class="nav-wallet" id="walletBtnMobile" onclick="handleWalletClick()">log in</a>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="login-overlay" id="loginOverlay" onclick="if(event.target===this)closeLoginModal()">
+  <div class="login-modal">
+    <div id="loginStep1">
+      <h3>Log In</h3>
+      <p class="login-sub">Verify ownership of your wallet</p>
+      <button class="login-option" onclick="loginPhantom()">Connect Wallet</button>
+      <div class="login-or">or</div>
+      <button class="login-option-alt" onclick="showMicroStep()">Verify with Transaction</button>
+      <button class="login-cancel" onclick="closeLoginModal()">cancel</button>
+    </div>
+    <div id="loginStep2" style="display:none">
+      <h3>Verify Wallet</h3>
+      <p class="micro-info">Send the exact amount below from your wallet to prove ownership.</p>
+      <div class="micro-amount" id="microAmount">—</div>
+      <div class="micro-amount-label">SOL</div>
+      <div class="micro-dest" id="microDest" onclick="copyText(this)"><span>send to</span>—</div>
+      <div class="micro-status" id="microStatus"></div>
+      <button class="login-cancel" onclick="microBack()">back</button>
+    </div>
+  </div>
 </div>
 
 <!-- APP -->
@@ -748,32 +803,23 @@
 // DATA
 // ============================================================
 
-const MOCK_AGENTS = [
-  // Genesis agents (gen 0)
-  { id: "the-berserker", parent_id: null, generation: 0, status: "alive", total_pnl: -0.5, total_trades: 34, owner_wallet: "9pLm...xV4a", dna: { aggression: 0.92, patience: 0.1, risk_tolerance: 0.9, sell_profit_pct: 15, sell_loss_pct: 8, max_position_pct: 75, check_interval_min: 2 }},
-  { id: "the-gambler", parent_id: null, generation: 0, status: "alive", total_pnl: -1.8, total_trades: 61, owner_wallet: "4kQr...wN2j", dna: { aggression: 0.85, patience: 0.15, risk_tolerance: 0.95, sell_profit_pct: 100, sell_loss_pct: 40, max_position_pct: 80, check_interval_min: 3 }},
-  { id: "the-beast", parent_id: null, generation: 0, status: "alive", total_pnl: 0.7, total_trades: 45, owner_wallet: "8mTx...bK5p", dna: { aggression: 0.88, patience: 0.2, risk_tolerance: 0.85, sell_profit_pct: 20, sell_loss_pct: 25, max_position_pct: 70, check_interval_min: 2 }},
-  { id: "the-turtle", parent_id: null, generation: 0, status: "alive", total_pnl: 2.3, total_trades: 12, owner_wallet: "6vHn...cR8d", dna: { aggression: 0.12, patience: 0.9, risk_tolerance: 0.2, sell_profit_pct: 60, sell_loss_pct: 4, max_position_pct: 15, check_interval_min: 20 }},
-  { id: "the-monk", parent_id: null, generation: 0, status: "alive", total_pnl: 1.5, total_trades: 8, owner_wallet: "2wJf...mP4e", dna: { aggression: 0.08, patience: 0.95, risk_tolerance: 0.15, sell_profit_pct: 80, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 15 }},
-  { id: "the-wolf", parent_id: null, generation: 0, status: "alive", total_pnl: 4.2, total_trades: 87, owner_wallet: "7xKX...9mPq", dna: { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 }},
-  { id: "the-jackal", parent_id: null, generation: 0, status: "alive", total_pnl: 1.9, total_trades: 56, owner_wallet: "5rLs...hQ7g", dna: { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 }},
-  { id: "the-viper", parent_id: null, generation: 0, status: "alive", total_pnl: -0.3, total_trades: 72, owner_wallet: "3nWk...jF2c", dna: { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 }},
-  { id: "the-sniper", parent_id: null, generation: 0, status: "alive", total_pnl: 1.8, total_trades: 52, owner_wallet: "3bNc...kR2d", dna: { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 }},
-  { id: "the-surgeon", parent_id: null, generation: 0, status: "alive", total_pnl: 3.1, total_trades: 39, owner_wallet: "1tBx...pG6a", dna: { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 }},
-  { id: "the-oracle", parent_id: null, generation: 0, status: "alive", total_pnl: 5.6, total_trades: 15, owner_wallet: "9cDz...nH3b", dna: { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 }},
-  { id: "the-hawk", parent_id: null, generation: 0, status: "alive", total_pnl: 0.4, total_trades: 43, owner_wallet: "7fMr...sK9e", dna: { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 }},
-  { id: "the-phantom", parent_id: null, generation: 0, status: "alive", total_pnl: 2.8, total_trades: 27, owner_wallet: "4hNv...wL2f", dna: { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 }},
-  { id: "the-specter", parent_id: null, generation: 0, status: "alive", total_pnl: 1.2, total_trades: 18, owner_wallet: "2jRw...xM5c", dna: { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 }},
-  { id: "the-colossus", parent_id: null, generation: 0, status: "alive", total_pnl: 0.8, total_trades: 35, owner_wallet: "6kTp...bQ4d", dna: { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 }},
-  // Descendants
-  { id: "wolf-alpha", parent_id: "the-wolf", generation: 1, status: "alive", total_pnl: 2.1, total_trades: 41, owner_wallet: "5tHj...nQ8w", dna: { aggression: 0.68, patience: 0.4, risk_tolerance: 0.65, sell_profit_pct: 35, sell_loss_pct: 12, max_position_pct: 55, check_interval_min: 4 }},
-  { id: "wolf-beta", parent_id: "the-wolf", generation: 1, status: "alive", total_pnl: 0.9, total_trades: 28, owner_wallet: "2mRk...jD6e", dna: { aggression: 0.8, patience: 0.3, risk_tolerance: 0.72, sell_profit_pct: 42, sell_loss_pct: 18, max_position_pct: 62, check_interval_min: 3 }},
-  { id: "sniper-echo", parent_id: "the-sniper", generation: 1, status: "dead", total_pnl: -1.2, total_trades: 19, owner_wallet: "8vCx...pM3f", dna: { aggression: 0.35, patience: 0.78, risk_tolerance: 0.5, sell_profit_pct: 45, sell_loss_pct: 10, max_position_pct: 38, check_interval_min: 8 }},
-  { id: "oracle-sight", parent_id: "the-oracle", generation: 1, status: "alive", total_pnl: 3.4, total_trades: 11, owner_wallet: "3pVn...gK8a", dna: { aggression: 0.22, patience: 0.92, risk_tolerance: 0.2, sell_profit_pct: 75, sell_loss_pct: 4, max_position_pct: 18, check_interval_min: 14 }},
-  { id: "surgeon-blade", parent_id: "the-surgeon", generation: 1, status: "alive", total_pnl: 1.7, total_trades: 24, owner_wallet: "7rQw...hM3b", dna: { aggression: 0.5, patience: 0.65, risk_tolerance: 0.35, sell_profit_pct: 28, sell_loss_pct: 7, max_position_pct: 32, check_interval_min: 5 }},
-  { id: "wolf-alpha-prime", parent_id: "wolf-alpha", generation: 2, status: "alive", total_pnl: 3.5, total_trades: 63, owner_wallet: "4nWq...sK7b", dna: { aggression: 0.62, patience: 0.44, risk_tolerance: 0.6, sell_profit_pct: 32, sell_loss_pct: 11, max_position_pct: 50, check_interval_min: 5 }},
-  { id: "wolf-alpha-x", parent_id: "wolf-alpha", generation: 2, status: "alive", total_pnl: 0.3, total_trades: 15, owner_wallet: "6jFp...tR1c", dna: { aggression: 0.71, patience: 0.38, risk_tolerance: 0.68, sell_profit_pct: 38, sell_loss_pct: 14, max_position_pct: 58, check_interval_min: 4 }},
-  { id: "prime-omega", parent_id: "wolf-alpha-prime", generation: 3, status: "alive", total_pnl: 1.1, total_trades: 22, owner_wallet: "1xAz...uH9g", dna: { aggression: 0.58, patience: 0.5, risk_tolerance: 0.55, sell_profit_pct: 30, sell_loss_pct: 10, max_position_pct: 48, check_interval_min: 5 }},
+// All 15 genesis agents with real DNA — always shown on bloodline page
+const GENESIS_BASE = [
+  { id: "the-berserker", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.92, patience: 0.1, risk_tolerance: 0.9, sell_profit_pct: 15, sell_loss_pct: 8, max_position_pct: 75, check_interval_min: 2 }},
+  { id: "the-gambler", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.85, patience: 0.15, risk_tolerance: 0.95, sell_profit_pct: 100, sell_loss_pct: 40, max_position_pct: 80, check_interval_min: 3 }},
+  { id: "the-beast", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.88, patience: 0.2, risk_tolerance: 0.85, sell_profit_pct: 20, sell_loss_pct: 25, max_position_pct: 70, check_interval_min: 2 }},
+  { id: "the-turtle", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.12, patience: 0.9, risk_tolerance: 0.2, sell_profit_pct: 60, sell_loss_pct: 4, max_position_pct: 15, check_interval_min: 20 }},
+  { id: "the-monk", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.08, patience: 0.95, risk_tolerance: 0.15, sell_profit_pct: 80, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 15 }},
+  { id: "the-wolf", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 }},
+  { id: "the-jackal", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 }},
+  { id: "the-viper", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 }},
+  { id: "the-sniper", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 }},
+  { id: "the-surgeon", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 }},
+  { id: "the-oracle", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 }},
+  { id: "the-hawk", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 }},
+  { id: "the-phantom", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 }},
+  { id: "the-specter", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 }},
+  { id: "the-colossus", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 }},
 ];
 
 let allAgents = [];
@@ -872,6 +918,7 @@ function layoutForest(roots) {
 // ============================================================
 
 function getNodeClass(node) {
+  if (node.status === 'unclaimed') return 'node-unclaimed';
   if (node.status === 'dead') return 'node-dead';
   if (node.generation === 0) return 'node-genesis';
   if (node.total_pnl >= 0) return 'node-alive-profit';
@@ -1417,20 +1464,25 @@ function buildGenesisFilters(agents) {
 // ============================================================
 
 async function fetchAgents() {
+  // Start with all 15 genesis agents as base
+  const genesisMap = {};
+  GENESIS_BASE.forEach(g => genesisMap[g.id] = { ...g });
+
+  // Fetch live data from API
   try {
     const r = await fetch('/api/agents');
-    if (!r.ok) throw 0;
-    const d = await r.json();
-    if (d.agents?.length > 0) {
-      return d.agents.map(a => ({
-        ...a,
-        dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : a.dna,
-        total_pnl: parseFloat(a.total_pnl) || 0,
-        total_trades: parseInt(a.total_trades) || 0,
-      }));
+    if (r.ok) {
+      const d = await r.json();
+      if (d.agents?.length > 0) {
+        for (const agent of d.agents) {
+          // Overwrite genesis base with live data, or add descendants
+          genesisMap[agent.id] = agent;
+        }
+      }
     }
   } catch {}
-  return MOCK_AGENTS;
+
+  return Object.values(genesisMap);
 }
 
 // ============================================================
@@ -1466,6 +1518,106 @@ function toggleMobileMenu() {
   document.getElementById('mobileMenu').classList.toggle('open');
   document.getElementById('hamburgerBtn').classList.toggle('open');
 }
+
+// LOGIN SYSTEM
+let connectedWallet = null;
+let loginPollInterval = null;
+let currentLoginId = null;
+
+function updateWalletUI() {
+  ['walletBtn', 'walletBtnMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (connectedWallet) {
+      el.textContent = connectedWallet.slice(0, 4) + '...' + connectedWallet.slice(-4);
+      el.classList.add('connected');
+    } else {
+      el.textContent = 'log in';
+      el.classList.remove('connected');
+    }
+  });
+}
+
+function handleWalletClick() {
+  if (connectedWallet) {
+    connectedWallet = null; localStorage.removeItem('spawn_wallet');
+    if (window.phantom?.solana) try { window.phantom.solana.disconnect(); } catch {}
+    updateWalletUI(); return;
+  }
+  openLoginModal();
+}
+
+function openLoginModal() {
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginStep2').style.display = 'none';
+  document.getElementById('loginOverlay').classList.add('open');
+}
+function closeLoginModal() {
+  document.getElementById('loginOverlay').classList.remove('open');
+  if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval = null; }
+  currentLoginId = null;
+}
+async function loginPhantom() {
+  const p = window.phantom?.solana || window.solflare;
+  if (!p) { window.open('https://phantom.app/', '_blank'); return; }
+  try {
+    const r = await p.connect();
+    connectedWallet = r.publicKey.toString();
+    localStorage.setItem('spawn_wallet', connectedWallet);
+    updateWalletUI(); closeLoginModal();
+  } catch {}
+}
+async function showMicroStep() {
+  document.getElementById('loginStep1').style.display = 'none';
+  document.getElementById('loginStep2').style.display = 'block';
+  document.getElementById('microStatus').textContent = 'requesting...';
+  document.getElementById('microStatus').className = 'micro-status';
+  try {
+    const res = await fetch('/api/login', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { document.getElementById('microStatus').textContent = 'error: ' + data.error; return; }
+    currentLoginId = data.id;
+    document.getElementById('microAmount').textContent = data.micro_amount;
+    document.getElementById('microDest').innerHTML = '<span>send to</span>' + data.send_to;
+    document.getElementById('microStatus').textContent = 'waiting for transaction...';
+    document.getElementById('microStatus').className = 'micro-status polling';
+    loginPollInterval = setInterval(async () => {
+      try {
+        const r = await fetch('/api/login-status?id=' + currentLoginId);
+        const d = await r.json();
+        if (d.status === 'verified' && d.wallet) {
+          clearInterval(loginPollInterval); loginPollInterval = null;
+          connectedWallet = d.wallet; localStorage.setItem('spawn_wallet', connectedWallet);
+          updateWalletUI(); closeLoginModal();
+        }
+      } catch {}
+    }, 3000);
+  } catch (e) { document.getElementById('microStatus').textContent = 'error: ' + e.message; }
+}
+function microBack() {
+  if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval = null; }
+  currentLoginId = null;
+  document.getElementById('loginStep2').style.display = 'none';
+  document.getElementById('loginStep1').style.display = 'block';
+}
+
+function copyText(el) {
+  const t = el.textContent.replace('to: ', '');
+  navigator.clipboard.writeText(t).catch(() => {});
+  const o = el.style.borderColor; el.style.borderColor = 'var(--green)';
+  setTimeout(() => el.style.borderColor = o, 600);
+}
+
+(function() {
+  const saved = localStorage.getItem('spawn_wallet');
+  if (saved) { connectedWallet = saved; updateWalletUI(); }
+  ['walletBtn', 'walletBtnMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('mouseenter', () => { if (connectedWallet) el.textContent = 'log out'; });
+    el.addEventListener('mouseleave', () => { if (connectedWallet) el.textContent = connectedWallet.slice(0, 4) + '...' + connectedWallet.slice(-4); });
+  });
+})();
 </script>
 </body>
 </html>

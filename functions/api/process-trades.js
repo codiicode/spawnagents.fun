@@ -93,6 +93,12 @@ export async function onRequest(context) {
   for (const agent of agents.results) {
     if (agent.initial_capital <= 0) continue; // no capital info, skip
 
+    // Skip agents created less than 10 minutes ago (funding tx may not be confirmed yet)
+    if (agent.born_at) {
+      const ageMins = (Date.now() - new Date(agent.born_at + "Z").getTime()) / 60000;
+      if (ageMins < 10) continue;
+    }
+
     try {
       const balance = await getBalance(agent.agent_wallet, rpcUrl);
       const threshold = agent.initial_capital * (1 - deathPct);

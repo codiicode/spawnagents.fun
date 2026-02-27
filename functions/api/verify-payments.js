@@ -115,25 +115,38 @@ export async function onRequest(context) {
       // Send 85% of purchase price to agent wallet as trading capital
       const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
       const tradingCapital = pr.amount * (1 - feePct);
-      let fundingTx = null;
 
       const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
-      if (protocolSecret) {
-        try {
-          fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
-          console.log(`Funded ${pr.agent_id} with ${tradingCapital} SOL, tx: ${fundingTx}`);
-        } catch (e) {
-          console.error(`Failed to fund ${pr.agent_id}:`, e.message);
-        }
+      if (!protocolSecret) {
+        await db.prepare("UPDATE payment_requests SET status = 'funding_failed' WHERE id = ?").bind(pr.id).run();
+        console.error(`No PROTOCOL_PRIVATE_KEY for ${pr.agent_id}`);
+        continue;
       }
 
+      let fundingTx;
+      try {
+        fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
+        console.log(`Funded ${pr.agent_id} with ${tradingCapital} SOL, tx: ${fundingTx}`);
+      } catch (e) {
+        // Funding failed — do NOT create agent, mark for retry
+        await db.prepare(
+          "UPDATE payment_requests SET status = 'funding_failed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
+        ).bind(buyer, sig.signature, pr.id).run();
+        // Save wallet info so retry can use same keypair
+        await kv.put(`funding:${pr.id}:pubkey`, keypair.publicKey);
+        console.error(`Failed to fund ${pr.agent_id}, will retry:`, e.message);
+        errors++;
+        continue;
+      }
+
+      // Funding succeeded — create agent
       await db.prepare(
         "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
       ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
 
       // Log event
       await db.prepare(
-        "INSERT INTO events (agent_id, event_type, data) VALUES (?, 'genesis_claimed', ?)"
+        "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
       ).bind(pr.agent_id, JSON.stringify({
         buyer, amount: pr.amount, tx: sig.signature,
         agent_wallet: keypair.publicKey,
@@ -145,6 +158,67 @@ export async function onRequest(context) {
     } catch (e) {
       console.error(`Error verifying payment ${pr.id}:`, e);
       errors++;
+    }
+  }
+
+  // === RETRY FAILED FUNDING ===
+  let retried = 0;
+  const failedFunding = await db.prepare(
+    "SELECT id, agent_id, amount, buyer_wallet, tx_signature FROM payment_requests WHERE status = 'funding_failed' AND created_at > datetime('now', '-24 hours')"
+  ).all();
+
+  for (const pf of failedFunding.results) {
+    try {
+      const dna = GENESIS_DNA[pf.agent_id];
+      if (!dna) continue;
+
+      const kv = context.env.AGENT_KEYS;
+      const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
+      if (!protocolSecret || !kv) continue;
+
+      // Check if agent already exists (another retry might have succeeded)
+      const existing = await db.prepare('SELECT id FROM agents WHERE id = ?').bind(pf.agent_id).first();
+      if (existing) {
+        await db.prepare("UPDATE payment_requests SET status = 'confirmed' WHERE id = ?").bind(pf.id).run();
+        continue;
+      }
+
+      // Get the saved keypair or generate new one
+      let agentPubkey = await kv.get(`funding:${pf.id}:pubkey`);
+      if (!agentPubkey) {
+        // No saved pubkey — keypair might be lost, generate new
+        const keypair = await generateKeypair();
+        await kv.put(`agent:${pf.agent_id}:secret`, keypair.secretKey);
+        agentPubkey = keypair.publicKey;
+      }
+
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+      const tradingCapital = pf.amount * (1 - feePct);
+
+      const fundingTx = await sendSol(protocolSecret, agentPubkey, tradingCapital, rpcUrl);
+      console.log(`Retry funded ${pf.agent_id} with ${tradingCapital} SOL, tx: ${fundingTx}`);
+
+      // Create agent now that funding succeeded
+      await db.prepare(
+        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+      ).bind(pf.agent_id, pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital).run();
+
+      await db.prepare("UPDATE payment_requests SET status = 'confirmed' WHERE id = ?").bind(pf.id).run();
+
+      // Clean up temp KV key
+      await kv.delete(`funding:${pf.id}:pubkey`);
+
+      await db.prepare(
+        "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
+      ).bind(pf.agent_id, JSON.stringify({
+        buyer: pf.buyer_wallet, amount: pf.amount, tx: pf.tx_signature,
+        agent_wallet: agentPubkey, trading_capital: tradingCapital, funding_tx: fundingTx,
+        retried: true,
+      })).run();
+
+      retried++;
+    } catch (e) {
+      console.error(`Retry funding failed for ${pf.agent_id}:`, e.message);
     }
   }
 
@@ -213,7 +287,7 @@ export async function onRequest(context) {
 
       // Log event
       await db.prepare(
-        "INSERT INTO events (agent_id, event_type, data) VALUES (?, 'withdrawal', ?)"
+        "INSERT INTO events (agent_id, type, data) VALUES (?, 'withdrawal', ?)"
       ).bind(wr.agent_id, JSON.stringify({
         amount: wr.amount_sol,
         method: 'micro_tx',
@@ -229,11 +303,73 @@ export async function onRequest(context) {
     }
   }
 
+  // === VERIFY PENDING LOGIN REQUESTS (micro_tx amount-matching) ===
+  let loginVerified = 0;
+
+  await db.prepare(
+    "UPDATE login_requests SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-10 minutes')"
+  ).run();
+
+  const pendingLogins = await db.prepare(
+    "SELECT id, micro_amount FROM login_requests WHERE status = 'pending'"
+  ).all();
+
+  const protocolWallet = context.env.PROTOCOL_WALLET;
+
+  if (pendingLogins.results.length > 0 && protocolWallet) {
+    try {
+      // Get recent transactions TO protocol wallet
+      const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolWallet, { limit: 10 }]);
+      const matched = new Set();
+
+      if (recentSigs?.length > 0) {
+        for (const sig of recentSigs) {
+          if (sig.err || matched.size >= pendingLogins.results.length) break;
+
+          const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+          if (!tx?.meta) continue;
+
+          const accounts = tx.transaction.message.accountKeys;
+          let protoIdx = -1;
+          for (let i = 0; i < accounts.length; i++) {
+            const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+            if (pk === protocolWallet) { protoIdx = i; break; }
+          }
+          if (protoIdx < 0) continue;
+
+          const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
+
+          // Only consider micro amounts (login range: 0.001–0.002 SOL)
+          if (solReceived < 0.0005 || solReceived > 0.003) continue;
+
+          // Match against pending login requests by amount
+          for (const lr of pendingLogins.results) {
+            if (matched.has(lr.id)) continue;
+            if (Math.abs(solReceived - lr.micro_amount) <= lr.micro_amount * 0.05) {
+              const sender = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+              await db.prepare(
+                "UPDATE login_requests SET status = 'verified', verified_wallet = ? WHERE id = ?"
+              ).bind(sender, lr.id).run();
+              matched.add(lr.id);
+              loginVerified++;
+              console.log(`Login verified for wallet ${sender}, request ${lr.id}`);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error verifying logins:', e);
+    }
+  }
+
   return Response.json({
     pending: pending.results.length,
     confirmed,
     errors,
+    retried,
     withdrawals: { pending: pendingWithdrawals.results.length, confirmed: wConfirmed, errors: wErrors },
+    logins: { pending: pendingLogins.results.length, verified: loginVerified },
   });
 }
 
