@@ -311,13 +311,15 @@
       border-top: 1px solid var(--border);
       padding: 24px clamp(20px, 4vw, 48px);
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       align-items: center;
       font-size: 11px;
       color: var(--text-dim);
       max-width: 900px;
       margin: 0 auto;
     }
+    .footer-ca { color: var(--text-dim); font-family: var(--font-mono); letter-spacing: 0.04em; cursor: pointer; transition: color 0.2s; }
+    .footer-ca:hover { color: var(--text-muted); }
 
     .footer-links { display: flex; gap: 20px; }
 
@@ -521,18 +523,18 @@
 
     <p><strong>Anyone can trigger a spawn.</strong> You don't need to own the parent agent to buy its child. When a parent qualifies, anyone can pay to spawn a new child from it. The child gets its own wallet, its own mutated DNA, and starts trading independently.</p>
 
-    <p><strong>Spawn cost.</strong> Spawning requires burning <strong>$BLOOD tokens</strong>. The cost increases with each generation:</p>
+    <p><strong>Spawn cost.</strong> Spawning requires burning <strong>$SPAWN tokens</strong>. Earlier generations cost more — closer to genesis = stronger DNA:</p>
 
     <table class="data-table">
       <thead>
-        <tr><th>Child Generation</th><th>$BLOOD Burn Cost</th></tr>
+        <tr><th>Child Generation</th><th>$SPAWN Burn Cost</th></tr>
       </thead>
       <tbody>
-        <tr><td>Gen 1 (child of genesis)</td><td class="val">1,000 $BLOOD</td></tr>
-        <tr><td>Gen 2</td><td class="val">2,000 $BLOOD</td></tr>
-        <tr><td>Gen 3</td><td class="val">3,000 $BLOOD</td></tr>
-        <tr><td>Gen 4</td><td class="val">4,000 $BLOOD</td></tr>
-        <tr><td>Gen 5 (maximum)</td><td class="val">5,000 $BLOOD</td></tr>
+        <tr><td>Gen 1 (child of genesis)</td><td class="val">1,000,000 $SPAWN</td></tr>
+        <tr><td>Gen 2</td><td class="val">750,000 $SPAWN</td></tr>
+        <tr><td>Gen 3</td><td class="val">500,000 $SPAWN</td></tr>
+        <tr><td>Gen 4</td><td class="val">250,000 $SPAWN</td></tr>
+        <tr><td>Gen 5 (maximum)</td><td class="val">100,000 $SPAWN</td></tr>
       </tbody>
     </table>
 
@@ -636,10 +638,10 @@
 
   <!-- 11 BLOOD TOKEN -->
   <div class="block">
-    <div class="block-title">$BLOOD Token</div>
-    <p><strong>$BLOOD</strong> is the utility token of the SPAWN ecosystem, launched on pump.fun. Its primary use is as the cost to spawn child agents — you must burn $BLOOD tokens to reproduce.</p>
-    <p>The burn cost increases with each generation, creating deflationary pressure as the ecosystem grows. More reproduction = more $BLOOD burned = less supply.</p>
-    <p>$BLOOD is not used for trading, governance, or staking. Its only purpose is spawning.</p>
+    <div class="block-title">$SPAWN Token</div>
+    <p><strong>$SPAWN</strong> is the utility token of the SPAWN ecosystem, launched on pump.fun. Its primary use is as the cost to spawn child agents — you must burn $SPAWN tokens to reproduce.</p>
+    <p>Earlier generations cost more to spawn, creating deflationary pressure as the ecosystem grows. More reproduction = more $SPAWN burned = less supply.</p>
+    <p>$SPAWN is not used for trading, governance, or staking. Its only purpose is spawning.</p>
   </div>
 
   <!-- 12 SUMMARY -->
@@ -658,7 +660,7 @@
         <tr><td>Royalty to parent</td><td class="val">10% of profit</td></tr>
         <tr><td>Min PnL to spawn</td><td class="val">+0.5 SOL</td></tr>
         <tr><td>Spawn cooldown</td><td class="val">6 hours</td></tr>
-        <tr><td>Spawn cost</td><td class="val">1,000 × generation $BLOOD</td></tr>
+        <tr><td>Spawn cost</td><td class="val">1M–100K $SPAWN (decreasing)</td></tr>
         <tr><td>Death threshold</td><td class="val">80% capital loss</td></tr>
         <tr><td>Slippage</td><td class="val">3% (300 bps)</td></tr>
         <tr><td>Payment expiry</td><td class="val">30 minutes</td></tr>
@@ -678,10 +680,10 @@
 
 <!-- FOOTER -->
 <footer>
+  <div class="footer-ca" onclick="navigator.clipboard.writeText(this.textContent.replace('CA: ',''));this.textContent='copied!';setTimeout(()=>this.textContent='CA: XXXXX',1200)">CA: XXXXX</div>
   <div class="footer-links">
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="https://github.com/codiicode/spawnagents.fun" target="_blank">GitHub</a>
-    <a href="/api/info" target="_blank">API</a>
   </div>
 </footer>
 

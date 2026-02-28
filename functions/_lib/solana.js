@@ -1,7 +1,7 @@
 import { encode, decode } from './base58.js';
 
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
-const JUPITER_API = 'https://quote-api.jup.ag/v6';
+const JUPITER_API = 'https://api.jup.ag/swap/v1';
 
 // Generate Ed25519 keypair for agent wallet
 export async function generateKeypair() {
@@ -54,10 +54,17 @@ export async function getTokenBalances(pubkeyB58, rpcUrl) {
     .filter(t => t.amount > 0);
 }
 
-// Get Jupiter V6 quote
+// Set Jupiter API key (call once from request handler)
+let _jupiterApiKey = '';
+export function setJupiterApiKey(key) { _jupiterApiKey = key; }
+
+// Get Jupiter quote
 export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit) {
+  const headers = {};
+  if (_jupiterApiKey) headers['x-api-key'] = _jupiterApiKey;
   const res = await fetch(
-    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=300`
+    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=300`,
+    { headers }
   );
   if (!res.ok) return null;
   return await res.json();
@@ -65,9 +72,11 @@ export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit)
 
 // Get Jupiter swap transaction (base64 encoded)
 export async function getJupiterSwapTx(quoteResponse, userPublicKey) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (_jupiterApiKey) headers['x-api-key'] = _jupiterApiKey;
   const res = await fetch(`${JUPITER_API}/swap`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       quoteResponse,
       userPublicKey,

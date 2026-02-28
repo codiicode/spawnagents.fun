@@ -67,11 +67,18 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).all();
   const recentlySold = new Set(recentSells.results.map(r => r.token_address));
 
+  // Max 2 buys per token
+  const buyCountRows = await db.prepare(
+    "SELECT token_address, COUNT(*) as cnt FROM trades WHERE agent_id = ? AND action = 'buy' GROUP BY token_address HAVING cnt >= 2"
+  ).bind(agent.id).all();
+  const maxedTokens = new Set(buyCountRows.results.map(r => r.token_address));
+
   // Filter and score candidates based on DNA
   const scored = candidates
     .filter(t => {
       if (heldMints.has(t.address)) return false;
       if (recentlySold.has(t.address)) return false;
+      if (maxedTokens.has(t.address)) return false;
       if (t.address === SOL_MINT) return false;
 
       // Volume filter
@@ -94,30 +101,32 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     .sort((a, b) => b.score - a.score);
 
   // Try top 5 scored candidates, safety check before buying
+  const skipped = [];
   for (const t of scored.slice(0, 5)) {
     // Aggressive agents buy more readily
-    const buyChance = 0.3 + dna.aggression * 0.5; // 30-80%
-    if (Math.random() > buyChance) continue;
+    const buyChance = 0.5 + dna.aggression * 0.4; // 50-90%
+    if (Math.random() > buyChance) { skipped.push({ token: t.symbol, reason: 'rng skip' }); continue; }
 
     // Safety check via RugCheck + heuristics
     const safety = await checkTokenSafety(t.address, t);
     if (!safety.safe) {
-      console.log(`${agent.id} skipped ${t.symbol}: ${safety.reasons.join(', ')}`);
+      skipped.push({ token: t.symbol, reason: safety.reasons.join(', ') });
       continue;
     }
 
     // Risk-tolerant agents accept lower RugCheck scores
-    const minScore = Math.round(300 + (1 - dna.risk_tolerance) * 400); // 300-700
-    if (safety.score > 0 && safety.score < minScore) {
-      console.log(`${agent.id} skipped ${t.symbol}: rugcheck score ${safety.score} < ${minScore}`);
+    // Scores < 10 = unranked token, skip this check
+    const minScore = Math.round(50 + (1 - dna.risk_tolerance) * 150); // 50-200
+    if (safety.score >= 10 && safety.score < minScore) {
+      skipped.push({ token: t.symbol, reason: `rugcheck ${safety.score} < ${minScore}` });
       continue;
     }
 
     const buyQuote = await getJupiterQuote(SOL_MINT, t.address, tradeAmountLamports);
-    if (!buyQuote) continue;
+    if (!buyQuote) { skipped.push({ token: t.symbol, reason: 'quote failed' }); continue; }
 
     const swapTx = await getJupiterSwapTx(buyQuote, agentPubkey);
-    if (!swapTx) continue;
+    if (!swapTx) { skipped.push({ token: t.symbol, reason: 'swap tx failed' }); continue; }
 
     try {
       const txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
@@ -131,12 +140,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         tx_signature: txSig,
       };
     } catch (e) {
-      console.error(`Swap failed for ${t.symbol}:`, e.message);
+      skipped.push({ token: t.symbol, reason: `swap error: ${e.message}` });
       continue;
     }
   }
 
-  return { action: 'hold', reason: `no signals (${scored.length} candidates filtered)` };
+  return { action: 'hold', reason: `no signals (${scored.length} candidates filtered)`, skipped };
 }
 
 // ============================================================

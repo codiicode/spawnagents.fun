@@ -1,8 +1,9 @@
 import { processAgent } from "../_lib/engine.js";
 import { discoverTokens } from "../_lib/market-data.js";
-import { getBalance, sendSol } from "../_lib/solana.js";
+import { getBalance, getTokenBalances, sendSol, setJupiterApiKey, getJupiterQuote, SOL_MINT } from "../_lib/solana.js";
 
 export async function onRequest(context) {
+  if (context.env.JUPITER_API_KEY) setJupiterApiKey(context.env.JUPITER_API_KEY);
   if (context.request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   const secret = context.request.headers.get("x-cron-secret");
@@ -79,7 +80,7 @@ export async function onRequest(context) {
         ]);
       }
 
-      results.push({ agent: agent.id, action: decision.action, reason: decision.reason, tx: decision.tx_signature || null });
+      results.push({ agent: agent.id, action: decision.action, reason: decision.reason, tx: decision.tx_signature || null, skipped: decision.skipped || undefined });
     } catch (e) {
       console.error(`Agent ${agent.id} error:`, e.message);
       results.push({ agent: agent.id, error: e.message });
@@ -100,8 +101,14 @@ export async function onRequest(context) {
     }
 
     try {
-      const balance = await getBalance(agent.agent_wallet, rpcUrl);
-      const threshold = agent.initial_capital * (1 - deathPct);
+      const solBalance = await getBalance(agent.agent_wallet, rpcUrl);
+      const tokens = await getTokenBalances(agent.agent_wallet, rpcUrl).catch(() => []);
+
+      // Agent only dies if SOL < 0.05 AND no token holdings
+      if (solBalance >= 0.05 || tokens.length > 0) continue;
+
+      const balance = solBalance;
+      const threshold = 0.05;
 
       if (balance < threshold) {
         // Agent is dead — send remaining SOL to protocol wallet
