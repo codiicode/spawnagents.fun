@@ -52,8 +52,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   }
 
   // --- BUY SIGNALS ---
-  const availableSol = solBalance - 0.01;
-  if (availableSol < 0.005) return { action: 'hold', reason: 'insufficient balance' };
+  // Always keep 0.1 SOL reserve for fees + rent
+  const SOL_RESERVE = 0.1;
+  const availableSol = solBalance - SOL_RESERVE;
+  if (availableSol < 0.01) return { action: 'hold', reason: `insufficient balance (${solBalance.toFixed(3)} SOL, need >${SOL_RESERVE})` };
   if (!candidates || candidates.length === 0) return { action: 'idle', reason: 'no candidates' };
 
   const tradeAmountSol = Math.min(availableSol, availableSol * (dna.max_position_pct / 100));

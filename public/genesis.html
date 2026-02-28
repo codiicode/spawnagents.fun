@@ -569,6 +569,42 @@
     .agent-stat-row .k { color: var(--text-dim); }
     .agent-stat-row .v { color: var(--text-muted); font-weight: 500; }
 
+    /* Portfolio section */
+    .agent-portfolio {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .portfolio-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .portfolio-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      padding: 3px 0;
+    }
+    .portfolio-row .p-sym { color: var(--text-muted); }
+    .portfolio-row .p-val { color: var(--text-dim); }
+    .portfolio-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      padding-top: 6px;
+      margin-top: 6px;
+      border-top: 1px solid var(--border);
+      color: var(--blood-bright);
+    }
+    .portfolio-loading {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
     /* Price footer */
     .agent-price {
       margin-top: 20px;
@@ -1072,7 +1108,7 @@
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-ca" onclick="navigator.clipboard.writeText(this.textContent.replace('CA: ',''));this.textContent='copied!';setTimeout(()=>this.textContent='CA: XXXXX',1200)">CA: XXXXX</div>
+  <div class="footer-ca" onclick="navigator.clipboard.writeText(this.textContent.replace('CA: ',''));this.textContent='copied!';setTimeout(()=>this.textContent='CA: 4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump',1200)">CA: 4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump</div>
   <div class="footer-links">
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="https://github.com/codiicode/spawnagents.fun" target="_blank">GitHub</a>
@@ -1169,6 +1205,11 @@ function agentCard(g, priceLabel) {
       <div class="agent-stat-row"><span class="k">min holders</span><span class="v">${d.buy_threshold_holders}</span></div>
       <div class="agent-stat-row"><span class="k">min volume</span><span class="v">${d.buy_threshold_volume}</span></div>
     </div>
+
+    ${!g.available && g.agent_wallet ? `<div class="agent-portfolio" id="portfolio-${g.id}">
+      <div class="portfolio-label">Portfolio</div>
+      <div class="portfolio-loading">loading...</div>
+    </div>` : ''}
 
     <div class="agent-price">
       <span class="agent-price-label">Price</span>
@@ -1286,7 +1327,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   const data = await fetchGenesis();
   lastGenesisData = data;
   renderAgents(data);
+  loadPortfolios(data);
 });
+
+async function loadPortfolios(data) {
+  const claimed = data.filter(g => !g.available && g.agent_wallet);
+  for (const g of claimed) {
+    try {
+      const r = await fetch(`/api/agent-portfolio?wallet=${g.agent_wallet}`);
+      if (!r.ok) continue;
+      const p = await r.json();
+      const el = document.getElementById(`portfolio-${g.id}`);
+      if (!el) continue;
+
+      let html = '<div class="portfolio-label">Portfolio</div>';
+
+      // SOL balance
+      html += `<div class="portfolio-row">
+        <span class="p-sym">SOL</span>
+        <span class="p-val">${p.sol_balance.toFixed(4)} SOL${p.sol_value_usd > 0.01 ? ` ($${p.sol_value_usd.toFixed(2)})` : ''}</span>
+      </div>`;
+
+      // Token holdings
+      for (const t of p.tokens) {
+        const amt = t.amount >= 1000 ? `${(t.amount / 1000).toFixed(1)}k` : t.amount.toFixed(1);
+        html += `<div class="portfolio-row">
+          <span class="p-sym">${t.symbol}</span>
+          <span class="p-val">${amt}${t.value_usd > 0.01 ? ` ($${t.value_usd.toFixed(2)})` : ''}</span>
+        </div>`;
+      }
+
+      // Total
+      if (p.total_value_usd > 0.01) {
+        html += `<div class="portfolio-total">
+          <span>Total</span>
+          <span>$${p.total_value_usd.toFixed(2)}</span>
+        </div>`;
+      }
+
+      el.innerHTML = html;
+    } catch {}
+  }
+}
 
 function toggleMobileMenu() {
   document.getElementById("mobileMenu").classList.toggle("open");

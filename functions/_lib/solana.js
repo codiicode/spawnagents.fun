@@ -32,16 +32,25 @@ export async function getBalance(pubkeyB58, rpcUrl) {
   return (data?.value || 0) / 1e9;
 }
 
-// Get SPL token balances for a wallet
+// Get SPL token balances for a wallet (checks both Token and Token-2022 programs)
 export async function getTokenBalances(pubkeyB58, rpcUrl) {
   const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-  const data = await rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
-    pubkeyB58,
-    { programId: TOKEN_PROGRAM },
-    { encoding: 'jsonParsed', commitment: 'confirmed' },
+  const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
+  const [data1, data2] = await Promise.all([
+    rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
+      pubkeyB58, { programId: TOKEN_PROGRAM },
+      { encoding: 'jsonParsed', commitment: 'confirmed' },
+    ]).catch(() => ({ value: [] })),
+    rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
+      pubkeyB58, { programId: TOKEN_2022 },
+      { encoding: 'jsonParsed', commitment: 'confirmed' },
+    ]).catch(() => ({ value: [] })),
   ]);
 
-  return (data?.value || [])
+  const allAccounts = [...(data1?.value || []), ...(data2?.value || [])];
+
+  return allAccounts
     .map(acc => {
       const info = acc.account.data.parsed.info;
       return {

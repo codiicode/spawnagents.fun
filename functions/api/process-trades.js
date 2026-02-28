@@ -87,63 +87,9 @@ export async function onRequest(context) {
     }
   }
 
-  // === DEATH CHECK: kill agents that lost 80%+ of capital ===
-  const deathPct = parseFloat(context.env.DEATH_LOSS_PCT || "0.8");
-  let deaths = 0;
-
-  for (const agent of agents.results) {
-    if (agent.initial_capital <= 0) continue; // no capital info, skip
-
-    // Skip agents created less than 10 minutes ago (funding tx may not be confirmed yet)
-    if (agent.born_at) {
-      const ageMins = (Date.now() - new Date(agent.born_at + "Z").getTime()) / 60000;
-      if (ageMins < 10) continue;
-    }
-
-    try {
-      const solBalance = await getBalance(agent.agent_wallet, rpcUrl);
-      const tokens = await getTokenBalances(agent.agent_wallet, rpcUrl).catch(() => []);
-
-      // Agent only dies if SOL < 0.05 AND no token holdings
-      if (solBalance >= 0.05 || tokens.length > 0) continue;
-
-      const balance = solBalance;
-      const threshold = 0.05;
-
-      if (balance < threshold) {
-        // Agent is dead — send remaining SOL to protocol wallet
-        const protocolWallet = context.env.PROTOCOL_WALLET;
-        const agentSecret = await kv.get(`agent:${agent.id}:secret`);
-        let deathTx = null;
-
-        if (agentSecret && protocolWallet && balance > 0.002) {
-          try {
-            const sendAmount = balance - 0.001; // keep dust for rent
-            deathTx = await sendSol(agentSecret, protocolWallet, sendAmount, rpcUrl);
-          } catch (e) {
-            console.error(`Failed to reclaim ${agent.id} funds:`, e.message);
-          }
-        }
-
-        await db.batch([
-          db.prepare("UPDATE agents SET status = 'dead' WHERE id = ?").bind(agent.id),
-          db.prepare(
-            "INSERT INTO events (type, agent_id, data) VALUES ('death', ?, ?)"
-          ).bind(agent.id, JSON.stringify({
-            balance,
-            initial_capital: agent.initial_capital,
-            loss_pct: ((1 - balance / agent.initial_capital) * 100).toFixed(1),
-            reclaim_tx: deathTx,
-          })),
-        ]);
-
-        console.log(`Agent ${agent.id} died: ${balance.toFixed(4)} SOL remaining (started with ${agent.initial_capital})`);
-        deaths++;
-      }
-    } catch (e) {
-      console.error(`Death check failed for ${agent.id}:`, e.message);
-    }
-  }
+  // === DEATH CHECK DISABLED — re-enable when economy is stable ===
+  // Agents should not auto-die during early launch phase
+  const deaths = 0;
 
   return Response.json({ processed: agents.results.length, results, deaths });
 }
