@@ -132,6 +132,18 @@ export async function getTokenData(tokenMint) {
   } catch { return null; }
 }
 
+// Price-only lookup for PnL — no liquidity filter
+export async function getTokenPrice(tokenMint) {
+  try {
+    const res = await fetch(`${DEXSCREENER}/latest/dex/tokens/${tokenMint}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pair = (data.pairs || []).find(p => p.chainId === 'solana');
+    if (!pair) return null;
+    return { price_usd: parseFloat(pair.priceUsd || 0), symbol: pair.baseToken?.symbol };
+  } catch { return null; }
+}
+
 // ============================================================
 // SAFETY CHECK — RugCheck API + heuristics to avoid scams
 // ============================================================

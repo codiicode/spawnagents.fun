@@ -497,6 +497,19 @@
       border-color: var(--border);
     }
 
+    .agent-status.unavailable {
+      color: var(--text-dim);
+      border-color: var(--border);
+    }
+
+    .agent-img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      border: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
     .agent-flavor {
       font-size: 12px;
       color: var(--text-muted);
@@ -961,6 +974,70 @@
       color: var(--text-muted);
     }
 
+    /* === REPRODUCE BUTTON === */
+    .reproduce-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    .reproduce-btn:hover {
+      background: rgba(74, 158, 106, 0.12);
+      color: var(--text);
+    }
+    .reproduce-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .spawn-modal-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .spawn-modal-row .k { color: var(--text-dim); }
+    .spawn-modal-row .v { color: var(--text); font-weight: 500; font-family: var(--font-mono); }
+    .spawn-sol-input {
+      width: 100%;
+      padding: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 500;
+      text-align: center;
+      margin: 12px 0 4px;
+      outline: none;
+    }
+    .spawn-sol-input:focus { border-color: var(--blood); }
+    .spawn-sol-hint {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .spawn-mutation {
+      font-size: 11px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      margin: 4px 0;
+    }
+    .spawn-mutation .param { color: var(--blood-bright); font-weight: 600; }
+    .spawn-mutation .from { color: var(--text-dim); }
+    .spawn-mutation .to { color: var(--green); font-weight: 500; }
+
     /* === RESPONSIVE === */
     @media (max-width: 640px) {
       .agent-grid { grid-template-columns: 1fr; }
@@ -1106,6 +1183,52 @@
   </div>
 </div>
 
+<!-- SPAWN MODAL -->
+<div class="modal-overlay" id="spawnModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeSpawnModal()">&times;</button>
+    <div class="modal-title" id="spawnModalAgent"></div>
+    <div class="modal-subtitle">Reproduce — create a child agent</div>
+    <div id="spawnModalBody">
+      <div class="spawn-modal-row">
+        <span class="k">Child generation</span>
+        <span class="v" id="spawnChildGen">—</span>
+      </div>
+      <div class="spawn-modal-row">
+        <span class="k">$SPAWN cost</span>
+        <span class="v" id="spawnTokenCost">—</span>
+      </div>
+      <div class="spawn-modal-row">
+        <span class="k">Parent PnL</span>
+        <span class="v" id="spawnParentPnl">—</span>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
+        <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
+        <div class="spawn-sol-hint">Minimum 1 SOL — 85% goes to child wallet, 15% protocol fee</div>
+      </div>
+      <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send $SPAWN + SOL</button>
+    </div>
+    <div id="spawnPayInfo" style="display:none;">
+      <div class="spawn-modal-row">
+        <span class="k">1. Send $SPAWN tokens</span>
+        <span class="v" id="spawnTokenAmount">—</span>
+      </div>
+      <div class="spawn-modal-row">
+        <span class="k">2. Send SOL (exact amount)</span>
+        <span class="v" id="spawnSolAmount">—</span>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Send both to:</div>
+        <div class="modal-fallback-addr" id="spawnProtocolAddr" onclick="copyAddr(this)"></div>
+      </div>
+      <button class="verify-btn" id="spawnVerifyBtn" onclick="verifySpawn()">Verify Payment</button>
+    </div>
+    <div id="spawnResult" style="display:none;"></div>
+    <div class="modal-status" id="spawnModalStatus"></div>
+  </div>
+</div>
+
 <!-- FOOTER -->
 <footer>
   <div class="footer-ca" onclick="navigator.clipboard.writeText(this.textContent.replace('CA: ',''));this.textContent='copied!';setTimeout(()=>this.textContent='CA: 4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump',1200)">CA: 4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump</div>
@@ -1168,16 +1291,41 @@ const GENESIS_FALLBACK = [
 // RENDER
 // ============================================================
 
+const AGENT_IMAGES = {
+  'the-hawk': '/hawk.jpg',
+  'the-phantom': '/phantom.jpg',
+  'the-viper': '/viper.jpg',
+  'the-beast': '/the-beast.jpg',
+  'the-berserker': '/the-berserker.jpg',
+  'the-bull': '/the-bull.jpg',
+  'the-colossus': '/the-colossus.jpg',
+  'the-jackal': '/the-jackal.jpg',
+  'the-oracle': '/the-oracle.jpg',
+  'the-serpent': '/the-serpent.jpg',
+  'the-shark': '/the-shark.jpg',
+  'the-specter': '/the-specter.jpg',
+  'the-turtle': '/the-turtle.jpg',
+  'the-wolf': '/the-wolf.jpg',
+  'the-wraith': '/the-wraith.jpg',
+  'the-monk': '/the-monk.jpg',
+  'the-gambler': '/the-gambler.jpg',
+  'the-sniper': '/the-sniper.jpg',
+  'the-surgeon': '/the-surgeon.jpg',
+};
+
 function agentCard(g, priceLabel) {
   const d = g.dna;
-  const st = g.available ? "available" : "claimed";
+  const isAuction = AUCTION_IDS.has(g.id);
+  const st = !g.available ? "claimed" : isAuction ? "unavailable" : "available";
   const flavor = FLAVOR[g.id] || "";
+  const img = AGENT_IMAGES[g.id];
 
-  return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}">
+  return `<div class="agent-card ${st === "claimed" ? "claimed" : st === "unavailable" ? "claimed" : ""}">
     <div class="agent-card-head">
       <div class="agent-name">${g.name || g.id}</div>
-      <div class="agent-status ${st}">${st}</div>
+      <div class="agent-status ${st}">${st === "unavailable" ? "coming soon" : st}</div>
     </div>
+    ${img ? `<img class="agent-img" src="${img}" alt="${g.name || g.id}" loading="lazy">` : ''}
     <div class="agent-flavor">${flavor}</div>
 
     <div class="dna-section-label">Core DNA</div>
@@ -1206,8 +1354,14 @@ function agentCard(g, priceLabel) {
       <div class="agent-stat-row"><span class="k">min volume</span><span class="v">${d.buy_threshold_volume}</span></div>
     </div>
 
+    ${!g.available ? `<div class="agent-stats" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <div class="agent-stat-row"><span class="k">PnL</span><span class="v" style="color:${(g.total_pnl||0) >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600;">${(g.total_pnl||0) >= 0 ? '+' : ''}${(g.total_pnl||0).toFixed(3)} SOL</span></div>
+      <div class="agent-stat-row"><span class="k">trades</span><span class="v">${g.total_trades || 0}</span></div>
+      <div class="agent-stat-row"><span class="k">wallet</span><span class="v"><a href="https://solscan.io/account/${g.agent_wallet}" target="_blank" style="color:var(--blood-bright);text-decoration:none;font-size:0.7rem;">${g.agent_wallet.slice(0,4)}...${g.agent_wallet.slice(-4)}</a></span></div>
+    </div>` : ''}
+
     ${!g.available && g.agent_wallet ? `<div class="agent-portfolio" id="portfolio-${g.id}">
-      <div class="portfolio-label">Portfolio</div>
+      <div class="portfolio-label">Holdings</div>
       <div class="portfolio-loading">loading...</div>
     </div>` : ''}
 
@@ -1218,6 +1372,7 @@ function agentCard(g, priceLabel) {
     ${g.available && !AUCTION_IDS.has(g.id) ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" onclick="initBuy(this)">Buy &mdash; ${priceLabel}</button>` : ''}
     ${g.available && AUCTION_IDS.has(g.id) ? `<button class="buy-btn" disabled>Auction &mdash; Coming soon</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
+    ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
   </div>`;
 }
 
@@ -1228,7 +1383,7 @@ function renderAgents(data) {
   const t4 = fixed.filter(g => FIXED_TIERS[g.id] === 4);
   const t3 = fixed.filter(g => FIXED_TIERS[g.id] === 3);
   const t2 = fixed.filter(g => FIXED_TIERS[g.id] === 2);
-  const avail = data.filter(g => g.available).length;
+  const avail = data.filter(g => g.available && !AUCTION_IDS.has(g.id)).length;
   document.getElementById("avail-count").textContent = avail;
 
   let html = '';
@@ -1334,7 +1489,7 @@ async function loadPortfolios(data) {
   const claimed = data.filter(g => !g.available && g.agent_wallet);
   for (const g of claimed) {
     try {
-      const r = await fetch(`/api/agent-portfolio?wallet=${g.agent_wallet}`);
+      const r = await fetch(`/api/agent-portfolio?agent_id=${g.id}&wallet=${g.agent_wallet}`);
       if (!r.ok) continue;
       const p = await r.json();
       const el = document.getElementById(`portfolio-${g.id}`);
@@ -1348,20 +1503,23 @@ async function loadPortfolios(data) {
         <span class="p-val">${p.sol_balance.toFixed(4)} SOL${p.sol_value_usd > 0.01 ? ` ($${p.sol_value_usd.toFixed(2)})` : ''}</span>
       </div>`;
 
-      // Token holdings
+      // Token holdings with PnL
       for (const t of p.tokens) {
-        const amt = t.amount >= 1000 ? `${(t.amount / 1000).toFixed(1)}k` : t.amount.toFixed(1);
+        const amt = t.amount >= 1000000 ? `${(t.amount / 1000000).toFixed(1)}M` : t.amount >= 1000 ? `${(t.amount / 1000).toFixed(1)}k` : t.amount.toFixed(1);
+        const pnl = t.pnl_usd !== 0 ? ` <span style="color:${t.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${t.pnl_usd >= 0 ? '+' : ''}$${t.pnl_usd.toFixed(2)}</span>` : '';
         html += `<div class="portfolio-row">
           <span class="p-sym">${t.symbol}</span>
-          <span class="p-val">${amt}${t.value_usd > 0.01 ? ` ($${t.value_usd.toFixed(2)})` : ''}</span>
+          <span class="p-val">$${t.value_usd.toFixed(2)}${pnl}</span>
         </div>`;
       }
 
-      // Total
+      // Total with PnL
       if (p.total_value_usd > 0.01) {
+        const totalPnl = p.total_pnl_usd || 0;
+        const pnlStr = totalPnl !== 0 ? ` (${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)})` : '';
         html += `<div class="portfolio-total">
           <span>Total</span>
-          <span>$${p.total_value_usd.toFixed(2)}</span>
+          <span>$${p.total_value_usd.toFixed(2)}${pnlStr}</span>
         </div>`;
       }
 
@@ -1795,7 +1953,7 @@ document.getElementById('payModal').addEventListener('click', (e) => {
 
 // Close on Escape
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { closeModal(); closeWithdrawModal(); }
+  if (e.key === 'Escape') { closeModal(); closeWithdrawModal(); closeSpawnModal(); }
 });
 
 // ============================================================
@@ -2042,6 +2200,13 @@ function renderActivity() {
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
       </div>`;
+    } else if (ev.type === 'spawn') {
+      return `<div class="activity-item${i === 0 ? ' new' : ''}">
+        <span class="activity-action buy">reproduce</span>
+        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-detail">spawned from ${d.parent ? d.parent.replace('the-','') : '?'} — gen ${d.generation}${d.mutations?.length ? ' — ' + d.mutations.map(m => m.param).join(', ') + ' mutated' : ''}</span>
+        <span class="activity-time">${timeAgo(ev.created_at)}</span>
+      </div>`;
     } else if (ev.type === 'death') {
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action death">death</span>
@@ -2059,7 +2224,7 @@ async function pollActivity() {
     const res = await fetch('/api/events?limit=20');
     const data = await res.json();
     if (data.events && data.events.length > 0) {
-      activityEvents = data.events.filter(e => !e.agent_id.startsWith('test-') && e.type !== 'death');
+      activityEvents = data.events.filter(e => !e.agent_id.startsWith('test-'));
       renderActivity();
     }
   } catch {}
@@ -2067,6 +2232,211 @@ async function pollActivity() {
 
 pollActivity();
 setInterval(pollActivity, 5000);
+
+// ============================================================
+// SPAWN / REPRODUCE FLOW
+// ============================================================
+
+const SPAWN_COSTS = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
+let spawnPollInterval = null;
+let currentSpawnId = null;
+let currentSpawnAgentId = null;
+let currentSpawnData = null;
+
+function initSpawn(btn) {
+  // Require login to spawn
+  if (!connectedWallet) {
+    openLoginModal();
+    return;
+  }
+
+  const agentId = btn.dataset.agent;
+  const agentName = btn.dataset.name;
+  const pnl = parseFloat(btn.dataset.pnl);
+  const gen = parseInt(btn.dataset.gen);
+  const childGen = gen + 1;
+  const tokenCost = SPAWN_COSTS[childGen] || 100000;
+
+  currentSpawnAgentId = agentId;
+
+  document.getElementById('spawnModalAgent').textContent = agentName;
+  document.getElementById('spawnChildGen').textContent = `Gen ${childGen}`;
+  document.getElementById('spawnTokenCost').textContent = tokenCost.toLocaleString() + ' $SPAWN';
+  document.getElementById('spawnParentPnl').textContent = pnl.toFixed(3) + ' SOL';
+  document.getElementById('spawnSolInput').value = '1';
+  document.getElementById('spawnModalBody').style.display = '';
+  document.getElementById('spawnPayInfo').style.display = 'none';
+  document.getElementById('spawnResult').style.display = 'none';
+  document.getElementById('spawnModalStatus').textContent = '';
+  document.getElementById('spawnModalStatus').className = 'modal-status';
+  document.getElementById('spawnModal').classList.add('open');
+}
+
+async function handleSpawnPay() {
+  const solInput = parseFloat(document.getElementById('spawnSolInput').value);
+  if (!solInput || solInput < 1) {
+    showSpawnStatus('Minimum 1 SOL', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('spawnPayBtn');
+  btn.disabled = true;
+  btn.textContent = 'Creating spawn request...';
+  showSpawnStatus('', '');
+
+  try {
+    const res = await fetch('/api/spawn-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        parent_id: currentSpawnAgentId,
+        sol_amount: solInput,
+        owner_wallet: connectedWallet,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showSpawnStatus(data.error || 'Request failed', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Send $SPAWN + SOL';
+      return;
+    }
+
+    currentSpawnId = data.spawn_id;
+    currentSpawnData = data;
+
+    // Show payment info
+    document.getElementById('spawnModalBody').style.display = 'none';
+    document.getElementById('spawnPayInfo').style.display = '';
+    document.getElementById('spawnTokenAmount').textContent = data.spawn_cost_tokens.toLocaleString();
+    document.getElementById('spawnSolAmount').textContent = data.sol_amount.toFixed(6) + ' SOL';
+    document.getElementById('spawnProtocolAddr').textContent = data.protocol_wallet;
+
+    showSpawnStatus('Send both payments to the address above, then click Verify', 'waiting');
+
+  } catch (e) {
+    showSpawnStatus('Network error: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Send $SPAWN + SOL';
+  }
+}
+
+async function verifySpawn() {
+  if (!currentSpawnId) return;
+
+  const btn = document.getElementById('spawnVerifyBtn');
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+  showSpawnStatus('Checking payments on-chain...', 'waiting pulse');
+
+  try {
+    const res = await fetch('/api/verify-spawn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spawn_id: currentSpawnId }),
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'confirmed' && data.child) {
+      // Success!
+      if (spawnPollInterval) { clearInterval(spawnPollInterval); spawnPollInterval = null; }
+      showSpawnConfirmed(data.child);
+    } else if (data.status === 'pending') {
+      const checks = data.checks || {};
+      let msg = '';
+      if (!checks.token && !checks.sol) msg = 'Waiting for $SPAWN tokens and SOL payment...';
+      else if (checks.token && !checks.sol) msg = '$SPAWN verified. Waiting for SOL payment...';
+      else if (!checks.token && checks.sol) msg = 'SOL verified. Waiting for $SPAWN tokens...';
+      showSpawnStatus(msg || data.reason || 'Payments not detected yet', 'waiting');
+      btn.textContent = 'Verify Payment';
+      btn.disabled = false;
+
+      // Start polling
+      if (!spawnPollInterval) {
+        spawnPollInterval = setInterval(() => pollSpawnStatus(), 5000);
+      }
+    } else if (data.status === 'expired') {
+      showSpawnStatus('Spawn request expired. Please try again.', 'error');
+      btn.textContent = 'Verify Payment';
+      btn.disabled = false;
+    } else {
+      showSpawnStatus(data.error || data.reason || 'Verification failed', 'error');
+      btn.textContent = 'Verify Payment';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    showSpawnStatus('Network error — try again', 'error');
+    btn.textContent = 'Verify Payment';
+    btn.disabled = false;
+  }
+}
+
+async function pollSpawnStatus() {
+  if (!currentSpawnId) return;
+  try {
+    const res = await fetch(`/api/spawn-status?id=${encodeURIComponent(currentSpawnId)}`);
+    const data = await res.json();
+    if (data.status === 'confirmed' && data.child) {
+      clearInterval(spawnPollInterval);
+      spawnPollInterval = null;
+      showSpawnConfirmed(data.child);
+    } else if (data.status === 'expired' || data.status === 'failed') {
+      clearInterval(spawnPollInterval);
+      spawnPollInterval = null;
+      showSpawnStatus('Spawn ' + data.status + '. Please try again.', 'error');
+    }
+  } catch {}
+}
+
+function showSpawnConfirmed(child) {
+  document.getElementById('spawnPayInfo').style.display = 'none';
+  document.getElementById('spawnResult').style.display = '';
+
+  let mutHtml = '';
+  if (child.mutations?.length > 0) {
+    mutHtml = child.mutations.map(m =>
+      `<div class="spawn-mutation"><span class="param">${m.param}</span> <span class="from">${m.from}</span> → <span class="to">${m.to}</span> (${m.change_pct > 0 ? '+' : ''}${m.change_pct}%)</div>`
+    ).join('');
+  }
+
+  document.getElementById('spawnResult').innerHTML = `
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:0.15em;margin-bottom:8px;">Child Spawned</div>
+      <div style="font-family:var(--font-display);font-size:20px;color:var(--text);margin-bottom:4px;">${child.id}</div>
+      <div style="font-size:12px;color:var(--text-muted);">Generation ${child.generation}</div>
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Mutations</div>
+    ${mutHtml || '<div style="font-size:12px;color:var(--text-dim);">No mutations</div>'}
+    <div style="margin-top:16px;font-size:11px;color:var(--text-dim);">
+      Agent wallet: <a href="https://solscan.io/account/${child.agent_wallet}" target="_blank" style="color:var(--blood-bright);word-break:break-all;">${child.agent_wallet}</a>
+    </div>
+    <div style="margin-top:4px;font-size:11px;color:var(--text-dim);">Trading capital: ${child.trading_capital?.toFixed(4) || '—'} SOL</div>
+  `;
+
+  showSpawnStatus('Child agent is now alive and will start trading on next cron cycle.', 'confirmed');
+}
+
+function closeSpawnModal() {
+  document.getElementById('spawnModal').classList.remove('open');
+  if (spawnPollInterval) { clearInterval(spawnPollInterval); spawnPollInterval = null; }
+  currentSpawnId = null;
+  currentSpawnAgentId = null;
+  currentSpawnData = null;
+}
+
+function showSpawnStatus(msg, type) {
+  const el = document.getElementById('spawnModalStatus');
+  el.textContent = msg;
+  el.className = 'modal-status ' + type;
+}
+
+// Close spawn modal on overlay click
+document.getElementById('spawnModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeSpawnModal();
+});
 </script>
 </body>
 </html>

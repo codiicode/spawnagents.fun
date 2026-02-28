@@ -9,7 +9,7 @@ database_id = "3ded19e6-a992-440a-91a4-90ad10d95930"
 
 [vars]
 PROTOCOL_WALLET = "4EtGKSvtteZNafiYTnxRggjMsmazCY5iZEikqTbGgmAc"
-MIN_SPAWN_PNL = "0.5"
+MIN_SPAWN_PNL = "0.4"
 ROYALTY_PCT = "0.1"
 PROTOCOL_FEE_PCT = "0.02"
 MAX_GENERATIONS = "5"

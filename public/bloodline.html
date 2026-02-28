@@ -502,6 +502,12 @@
     .detail-kv .v.pos { color: var(--green); }
     .detail-kv .v.neg { color: var(--red); }
 
+    .portfolio-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; }
+    .portfolio-row .p-sym { color: var(--text-muted); font-family: var(--font-mono); }
+    .portfolio-row .p-val { color: var(--text-dim); font-family: var(--font-mono); }
+    .portfolio-total { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--border); color: var(--blood-bright); }
+    .portfolio-loading { font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); }
+
     /* DNA bars */
     .dna-row {
       display: flex;
@@ -1148,6 +1154,14 @@ function selectNode(id) {
   }
   html += '</div>';
 
+  // Portfolio (loaded async)
+  if (node.agent_wallet) {
+    html += '<div class="detail-section" id="detail-portfolio">';
+    html += '<div class="detail-section-label">Portfolio</div>';
+    html += '<div class="portfolio-loading">loading...</div>';
+    html += '</div>';
+  }
+
   // DNA
   html += '<div class="detail-section">';
   html += '<div class="detail-section-label">Core DNA</div>';
@@ -1190,8 +1204,53 @@ function selectNode(id) {
     html += '</div>';
   }
 
+  // Reproduce button (owner + profitable)
+  if (node.total_pnl >= 0.4 && node.status === 'alive') {
+    const childGen = (node.generation || 0) + 1;
+    const spawnCosts = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
+    const cost = spawnCosts[childGen] || 100000;
+    if (childGen <= 5) {
+      html += `<div class="detail-section">
+        <button class="reproduce-btn" style="width:100%;margin:0;padding:10px;background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer;" onclick="window.location.href='/genesis.html'">
+          Reproduce (${cost.toLocaleString()} $SPAWN + SOL)
+        </button>
+      </div>`;
+    }
+  }
+
   document.getElementById('detailContent').innerHTML = html;
   document.getElementById('detailPanel').classList.add('open');
+
+  // Fetch portfolio async
+  if (node.agent_wallet) {
+    loadDetailPortfolio(node.id, node.agent_wallet);
+  }
+}
+
+async function loadDetailPortfolio(agentId, wallet) {
+  const el = document.getElementById('detail-portfolio');
+  if (!el) return;
+  try {
+    const r = await fetch(`/api/agent-portfolio?agent_id=${agentId}&wallet=${wallet}`);
+    if (!r.ok) { el.innerHTML = '<div class="detail-section-label">Portfolio</div><div class="portfolio-loading">unavailable</div>'; return; }
+    const p = await r.json();
+    let h = '<div class="detail-section-label">Portfolio</div>';
+    h += `<div class="portfolio-row"><span class="p-sym">SOL</span><span class="p-val">${p.sol_balance.toFixed(4)}${p.sol_value_usd > 0.01 ? ` ($${p.sol_value_usd.toFixed(2)})` : ''}</span></div>`;
+    for (const t of p.tokens) {
+      const amt = t.amount >= 1000000 ? `${(t.amount / 1000000).toFixed(1)}M` : t.amount >= 1000 ? `${(t.amount / 1000).toFixed(1)}k` : t.amount.toFixed(1);
+      const pnl = t.pnl_usd !== 0 ? ` <span style="color:${t.pnl_usd >= 0 ? 'var(--green)' : 'var(--red)'}">${t.pnl_usd >= 0 ? '+' : ''}$${t.pnl_usd.toFixed(2)}</span>` : '';
+      h += `<div class="portfolio-row"><span class="p-sym">${t.symbol}</span><span class="p-val">$${t.value_usd.toFixed(2)}${pnl}</span></div>`;
+    }
+    if (p.tokens.length === 0 && p.sol_balance < 0.001) {
+      h += '<div class="portfolio-loading">no holdings</div>';
+    }
+    if (p.total_value_usd > 0.01) {
+      const totalPnl = p.total_pnl_usd || 0;
+      const pnlStr = totalPnl !== 0 ? ` (${totalPnl >= 0 ? '+' : ''}$${totalPnl.toFixed(2)})` : '';
+      h += `<div class="portfolio-total"><span>Total</span><span>$${p.total_value_usd.toFixed(2)}${pnlStr}</span></div>`;
+    }
+    el.innerHTML = h;
+  } catch { el.innerHTML = '<div class="detail-section-label">Portfolio</div><div class="portfolio-loading">failed to load</div>'; }
 }
 
 function closeDetail() {

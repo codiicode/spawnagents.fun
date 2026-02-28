@@ -72,7 +72,7 @@ export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit)
   const headers = {};
   if (_jupiterApiKey) headers['x-api-key'] = _jupiterApiKey;
   const res = await fetch(
-    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=300`,
+    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=150`,
     { headers }
   );
   if (!res.ok) return null;

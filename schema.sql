@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS withdrawal_requests (
   FOREIGN KEY (agent_id) REFERENCES agents(id)
 );
 
+CREATE TABLE IF NOT EXISTS pending_spawns (
+  id TEXT PRIMARY KEY,
+  parent_id TEXT NOT NULL,
+  owner_wallet TEXT NOT NULL,
+  spawn_cost INTEGER NOT NULL,
+  sol_amount REAL NOT NULL,
+  micro_amount REAL,
+  status TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_id);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);

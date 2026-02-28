@@ -23,7 +23,16 @@ export default {
       console.error("Failed to process trades:", e);
     }
 
-    // 2. Distribute royalties (every 6 hours — at minute 0 of hours 0, 6, 12, 18)
+    // 2. Recalculate PnL for all agents
+    try {
+      const pnlRes = await fetch(`${siteUrl}/api/recalc-pnl`, { headers });
+      const pnlData = await pnlRes.json();
+      console.log(`PnL recalculated: SOL=$${pnlData.sol_price}, ${pnlData.results?.length || 0} agents`);
+    } catch (e) {
+      console.error("Failed to recalculate PnL:", e);
+    }
+
+    // 3. Distribute royalties (every 6 hours — at minute 0 of hours 0, 6, 12, 18)
     const now = new Date();
     if (now.getUTCHours() % 6 === 0 && now.getUTCMinutes() < 5) {
       try {
@@ -40,7 +49,7 @@ export default {
       }
     }
 
-    // 3. Verify pending payments (Solana Pay)
+    // 4. Verify pending payments (Solana Pay)
     try {
       const payRes = await fetch(`${siteUrl}/api/verify-payments`, {
         method: "POST",

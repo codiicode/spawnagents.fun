@@ -14,10 +14,10 @@ export async function onRequest(context) {
     const status = url.searchParams.get("status");
     let query, params;
     if (status) {
-      query = "SELECT id, parent_id, generation, owner_wallet, dna, status, total_pnl, total_trades, born_at FROM agents WHERE status = ? ORDER BY born_at DESC LIMIT 100";
+      query = "SELECT id, parent_id, generation, owner_wallet, agent_wallet, dna, status, total_pnl, total_trades, born_at FROM agents WHERE status = ? ORDER BY born_at DESC LIMIT 100";
       params = [status];
     } else {
-      query = "SELECT id, parent_id, generation, owner_wallet, dna, status, total_pnl, total_trades, born_at FROM agents ORDER BY born_at DESC LIMIT 100";
+      query = "SELECT id, parent_id, generation, owner_wallet, agent_wallet, dna, status, total_pnl, total_trades, born_at FROM agents ORDER BY born_at DESC LIMIT 100";
       params = [];
     }
     const stmt = params.length ? db.prepare(query).bind(...params) : db.prepare(query);

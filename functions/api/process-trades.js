@@ -64,14 +64,13 @@ export async function onRequest(context) {
           })),
         ]);
       } else if (decision.action === "sell" && decision.tx_signature) {
-        const pnl = decision.pnl_pct ? (decision.pnl_pct / 100) * decision.amount_sol : 0;
         await db.batch([
           db.prepare(
-            "INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade, tx_signature) VALUES (?, ?, 'sell', ?, ?, ?, 0, ?)"
-          ).bind(agent.id, decision.token, decision.amount_sol, decision.token_amount || 0, pnl, decision.tx_signature),
+            "INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade, tx_signature) VALUES (?, ?, 'sell', ?, ?, 0, 0, ?)"
+          ).bind(agent.id, decision.token, decision.amount_sol, decision.token_amount || 0, decision.tx_signature),
           db.prepare(
-            "UPDATE agents SET total_trades = total_trades + 1, total_pnl = total_pnl + ?, last_trade_at = datetime('now') WHERE id = ?"
-          ).bind(pnl, agent.id),
+            "UPDATE agents SET total_trades = total_trades + 1, last_trade_at = datetime('now') WHERE id = ?"
+          ).bind(agent.id),
           db.prepare(
             "INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)"
           ).bind(agent.id, JSON.stringify({
@@ -88,7 +87,6 @@ export async function onRequest(context) {
   }
 
   // === DEATH CHECK DISABLED — re-enable when economy is stable ===
-  // Agents should not auto-die during early launch phase
   const deaths = 0;
 
   return Response.json({ processed: agents.results.length, results, deaths });
