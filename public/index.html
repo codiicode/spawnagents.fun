@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #08050a;
+      --bg: #0a0608;
       --surface: rgba(180, 30, 50, 0.04);
       --surface-hover: rgba(180, 30, 50, 0.08);
       --border: rgba(180, 30, 50, 0.12);
@@ -24,6 +24,8 @@
       --blood-bright: #e63950;
       --blood-deep: #8b1528;
       --blood-dim: rgba(196, 30, 58, 0.15);
+      --blood-glow: rgba(196, 30, 58, 0.08);
+      --blood-glow-strong: rgba(196, 30, 58, 0.15);
       --text: #ede8ea;
       --text-muted: #9e9396;
       --text-dim: #6b5f63;
@@ -45,6 +47,12 @@
       line-height: 1.7;
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
+    }
+
+    /* === VIGNETTE === */
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(8, 4, 6, 0.6) 100%);
     }
 
     /* === NAV === */
@@ -146,7 +154,7 @@
     .mobile-menu {
       display: none;
       position: fixed;
-      top: 52px; left: 0; right: 0;
+      top: 80px; left: 0; right: 0;
       background: rgba(8, 5, 10, 0.96);
       backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--border);
@@ -179,7 +187,7 @@
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 52px 24px 60px;
+      padding: 80px 24px 60px;
       position: relative;
       overflow: hidden;
     }
@@ -221,6 +229,7 @@
       line-height: 1;
       color: var(--blood);
       position: relative;
+      text-shadow: 0 0 60px rgba(196, 30, 58, 0.2), 0 0 120px rgba(196, 30, 58, 0.08);
     }
 
     .hero-tagline {
@@ -253,7 +262,7 @@
     .hero-cta:hover {
       background: var(--blood);
       color: #fff;
-      box-shadow: 0 0 40px rgba(196, 30, 58, 0.2);
+      box-shadow: 0 0 40px rgba(196, 30, 58, 0.3), 0 0 80px rgba(196, 30, 58, 0.1);
     }
 
 
@@ -293,6 +302,7 @@
       color: var(--text);
       letter-spacing: 0.08em;
       margin-bottom: 12px;
+      text-shadow: 0 0 30px rgba(196, 30, 58, 0.15);
     }
 
     .section-subtitle {
@@ -528,8 +538,8 @@
     }
     .activity-item:last-child { border-bottom: none; }
     .activity-item:hover { background: var(--surface-hover); }
-    .activity-item.new { animation: fadeIn 0.4s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .activity-item.new { animation: feedSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes feedSlideIn { from { opacity: 0; transform: translateX(-12px); filter: blur(2px); } to { opacity: 1; transform: translateX(0); filter: blur(0); } }
     .activity-action {
       font-family: var(--font-mono);
       font-size: 10px;
@@ -587,9 +597,222 @@
     @media (max-width: 480px) {
       footer { flex-direction: column; gap: 12px; text-align: center; }
     }
+
+    /* === BLOOD VEINS === */
+    .vein-bg {
+      position: absolute; width: 100%; left: 0;
+      pointer-events: none; z-index: 0; overflow: visible;
+    }
+    .vein { fill: none; stroke-linecap: round; }
+    .vein-main {
+      stroke: rgba(139, 21, 40, 0.18);
+      stroke-width: 1.8;
+      stroke-dasharray: 800;
+      stroke-dashoffset: 800;
+      animation: vein-flow 8s ease-in-out infinite;
+    }
+    .vein-branch {
+      stroke: rgba(139, 21, 40, 0.12);
+      stroke-width: 1.2;
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+      animation: vein-flow 8s ease-in-out 0.5s infinite;
+    }
+    .vein-cap {
+      stroke: rgba(139, 21, 40, 0.07);
+      stroke-width: 0.7;
+      stroke-dasharray: 80;
+      stroke-dashoffset: 80;
+      animation: vein-flow 8s ease-in-out 1s infinite;
+    }
+    @keyframes vein-flow {
+      0% { stroke-dashoffset: 800; opacity: 0.3; }
+      30% { stroke-dashoffset: 0; opacity: 0.8; }
+      50% { stroke-dashoffset: 0; opacity: 0.5; }
+      70% { stroke-dashoffset: -800; opacity: 0.8; }
+      100% { stroke-dashoffset: -800; opacity: 0.3; }
+    }
+    @keyframes heartbeat-glow {
+      0%, 100% { filter: drop-shadow(0 0 0px rgba(196, 30, 58, 0)); }
+      15% { filter: drop-shadow(0 0 4px rgba(196, 30, 58, 0.3)); }
+      30% { filter: drop-shadow(0 0 1px rgba(196, 30, 58, 0.1)); }
+      45% { filter: drop-shadow(0 0 3px rgba(196, 30, 58, 0.2)); }
+    }
+    .vein-bg { animation: heartbeat-glow 2.5s ease-in-out infinite; }
+    .hero { position: relative; }
+
+    /* === SOUND TOGGLE === */
+    .nav-sound {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
+      font-family: var(--font-mono); line-height: 1;
+    }
+    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
+    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
+
+    /* === RIPPLE === */
+    .hero-cta, .buy-btn, .pay-btn, .login-option, .filter-btn { position: relative; overflow: hidden; }
+    .ripple {
+      position: absolute; border-radius: 50%;
+      background: rgba(196, 30, 58, 0.3);
+      transform: scale(0);
+      animation: ripple-expand 0.6s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes ripple-expand { to { transform: scale(4); opacity: 0; } }
+
+    /* === GLITCH EFFECT (Effekt 4) === */
+    .hero h1::before,
+    .hero h1::after {
+      content: 'SPAWN';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      overflow: hidden;
+      color: var(--blood);
+      text-shadow: inherit;
+    }
+    .hero h1::before {
+      animation: glitch-top 8s infinite;
+      clip-path: inset(0 0 65% 0);
+    }
+    .hero h1::after {
+      animation: glitch-bottom 8s infinite;
+      clip-path: inset(65% 0 0 0);
+    }
+    @keyframes glitch-top {
+      0%, 59%, 60.5%, 100% { transform: translateX(0); }
+      59.2% { transform: translateX(2px); clip-path: inset(0 0 70% 0); }
+      59.5% { transform: translateX(-2px); clip-path: inset(0 0 60% 0); }
+      59.8% { transform: translateX(1px); clip-path: inset(0 0 68% 0); }
+      60.2% { transform: translateX(-1px); clip-path: inset(0 0 65% 0); }
+    }
+    @keyframes glitch-bottom {
+      0%, 59%, 60.5%, 100% { transform: translateX(0); }
+      59.2% { transform: translateX(-2px); clip-path: inset(60% 0 0 0); }
+      59.5% { transform: translateX(2px); clip-path: inset(70% 0 0 0); }
+      59.8% { transform: translateX(-1px); clip-path: inset(65% 0 0 0); }
+      60.2% { transform: translateX(1px); clip-path: inset(68% 0 0 0); }
+    }
+    .section-title {
+      position: relative;
+    }
+    .section-title::before {
+      content: attr(data-text);
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      overflow: hidden;
+      color: var(--text);
+      text-shadow: inherit;
+      clip-path: inset(0 0 60% 0);
+      animation: glitch-subtle 12s infinite;
+    }
+    @keyframes glitch-subtle {
+      0%, 59%, 60.5%, 100% { transform: translateX(0); opacity: 0; }
+      59.2% { transform: translateX(1px); opacity: 0.7; }
+      59.5% { transform: translateX(-1px); opacity: 0.5; }
+      60% { transform: translateX(0); opacity: 0; }
+    }
+
+    /* === BLOOD DRIPS (Effekt 5) === */
+    .blood-drip {
+      position: fixed;
+      top: 80px;
+      width: 3px;
+      height: 0;
+      background: var(--blood);
+      opacity: 0;
+      z-index: 99;
+      border-radius: 0 0 50% 50%;
+      pointer-events: none;
+    }
+    .blood-drip::after {
+      content: '';
+      position: absolute;
+      bottom: -4px;
+      left: -1px;
+      width: 5px;
+      height: 5px;
+      background: var(--blood);
+      border-radius: 50%;
+      opacity: 0.8;
+    }
+    @keyframes blood-drip {
+      0% { height: 0; opacity: 0; top: 80px; }
+      10% { height: 12px; opacity: 0.5; top: 80px; }
+      30% { height: 20px; opacity: 0.5; top: 80px; }
+      80% { height: 20px; opacity: 0.3; top: 140px; }
+      100% { height: 20px; opacity: 0; top: 180px; }
+    }
+    .blood-drip:nth-child(1) { left: 15%; animation: blood-drip 7s 0s infinite; }
+    .blood-drip:nth-child(2) { left: 35%; animation: blood-drip 5s 2s infinite; }
+    .blood-drip:nth-child(3) { left: 55%; animation: blood-drip 8s 1s infinite; }
+    .blood-drip:nth-child(4) { left: 75%; animation: blood-drip 6s 3s infinite; }
+    .blood-drip:nth-child(5) { left: 90%; animation: blood-drip 9s 0.5s infinite; }
+
+    /* === TYPING CURSOR (Effekt 6) === */
+    .typing-cursor {
+      display: inline;
+      animation: cursor-blink 0.6s step-end infinite;
+      color: var(--blood);
+    }
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* === CURSOR BLOOD TRAIL (Effekt 2) === */
+    .blood-trail-dot {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(196, 30, 58, 0.4), transparent 70%);
+      pointer-events: none;
+      z-index: 9997;
+      animation: blood-trail-fade 500ms ease-out forwards;
+    }
+    @keyframes blood-trail-fade {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.3); opacity: 0; }
+    }
+
+    /* === LIVE TRADE TICKER (Effekt 1) === */
+    .trade-ticker {
+      position: fixed;
+      top: 52px;
+      left: 0; right: 0;
+      height: 28px;
+      background: rgba(8, 5, 10, 0.85);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      z-index: 99;
+      display: flex;
+      align-items: center;
+    }
+    .ticker-track {
+      display: flex;
+      white-space: nowrap;
+      animation: ticker-scroll 30s linear infinite;
+    }
+    .ticker-item {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      padding: 0 24px;
+      letter-spacing: 0.04em;
+    }
+    .ticker-item .buy { color: var(--green); }
+    .ticker-item .sell { color: var(--red); }
+    .ticker-item .agent { color: var(--text-muted); }
+    @keyframes ticker-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
   </style>
 </head>
 <body>
+<div class="vignette"></div>
+<canvas id="particleCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.4;"></canvas>
 
 <!-- NAV -->
 <nav>
@@ -600,11 +823,14 @@
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
+    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
   </button>
 </nav>
+<div class="trade-ticker" id="tradeTicker"><div class="ticker-track" id="tickerTrack"></div></div>
+<div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
   <a href="/bloodline.html">bloodline</a>
@@ -639,6 +865,16 @@
 
 <!-- HERO -->
 <section class="hero">
+  <svg class="vein-bg" viewBox="0 0 1200 200" preserveAspectRatio="none" style="bottom:0;height:200px;" xmlns="http://www.w3.org/2000/svg">
+    <path class="vein vein-main" d="M-10,100 C200,120 300,40 500,80 S700,140 900,70 S1100,110 1210,90"/>
+    <path class="vein vein-branch" d="M300,40 C340,15 380,8 430,28"/>
+    <path class="vein vein-branch" d="M700,140 C730,165 770,172 820,152"/>
+    <path class="vein vein-branch" d="M500,80 C530,55 555,42 585,58"/>
+    <path class="vein vein-cap" d="M430,28 C448,22 460,18 478,26"/>
+    <path class="vein vein-cap" d="M820,152 C838,160 855,156 865,146"/>
+    <path class="vein vein-branch" d="M900,70 C920,48 945,38 975,50"/>
+    <path class="vein vein-cap" d="M585,58 C600,48 612,44 628,52"/>
+  </svg>
   <div class="hero-eyebrow">Evolutionary agents on Solana</div>
   <h1>SPAWN</h1>
   <p class="hero-tagline">AI agents that trade, reproduce, and evolve. The fittest survive. The rest go extinct.</p>
@@ -650,7 +886,7 @@
 <hr class="section-divider">
 <div class="section-wide" id="how">
   <div class="section" style="padding-top:0;padding-bottom:0">
-    <div class="section-title">How It Works</div>
+    <div class="section-title" data-text="How It Works">How It Works</div>
     <div class="section-subtitle">Each agent carries DNA that controls its trading behavior. Good DNA reproduces. Bad DNA dies. Natural selection with real money.</div>
   </div>
 
@@ -699,6 +935,14 @@
 
 <!-- LIVE ACTIVITY -->
 <hr class="section-divider">
+<div style="position:relative;overflow:hidden;height:80px;">
+  <svg class="vein-bg" viewBox="0 0 1200 80" preserveAspectRatio="none" style="top:0;height:80px;opacity:0.6;" xmlns="http://www.w3.org/2000/svg">
+    <path class="vein vein-main" d="M-10,40 C150,55 350,20 550,45 S800,25 1000,50 S1150,30 1210,40"/>
+    <path class="vein vein-branch" d="M350,20 C375,8 400,5 430,15"/>
+    <path class="vein vein-branch" d="M800,25 C825,10 850,8 880,18"/>
+  </svg>
+</div>
+
 <div class="activity-section">
   <div class="activity-header">
     <div class="activity-dot"></div>
@@ -719,6 +963,111 @@
 </footer>
 
 <script>
+// ============================================================
+// SPAWN SOUND ENGINE
+// ============================================================
+const SpawnAudio = (() => {
+  let ctx = null;
+  let enabled = false;
+
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function toggle() {
+    enabled = !enabled;
+    localStorage.setItem('spawn_sound', enabled ? '1' : '0');
+    const btn = document.getElementById('soundBtn');
+    if (btn) btn.classList.toggle('active', enabled);
+    return enabled;
+  }
+
+  function isEnabled() { return enabled; }
+
+  function playClick() {
+    if (!enabled) return;
+    const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(300, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.12);
+    g.gain.setValueAtTime(0.25, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.15);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.18);
+  }
+
+  function playBuy() {
+    if (!enabled) return;
+    const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(400, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(120, c.currentTime + 0.2);
+    g.gain.setValueAtTime(0.3, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.3);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.35);
+  }
+
+  function playSell() {
+    if (!enabled) return;
+    const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(600, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(250, c.currentTime + 0.35);
+    g.gain.setValueAtTime(0.2, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.4);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.45);
+  }
+
+  function playSpawn() {
+    if (!enabled) return;
+    const c = getCtx();
+    [220, 330, 440].forEach((freq, i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = i === 0 ? 'sine' : 'triangle';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0, c.currentTime);
+      g.gain.linearRampToValueAtTime(0.2, c.currentTime + 0.15);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 1.2);
+      o.connect(g); g.connect(c.destination);
+      o.start(c.currentTime + i * 0.05);
+      o.stop(c.currentTime + 1.3);
+    });
+  }
+
+  function playDeath() {
+    if (!enabled) return;
+    const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(500, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(60, c.currentTime + 0.8);
+    g.gain.setValueAtTime(0.25, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 1);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 1.1);
+  }
+
+  // Restore state across page navigations
+  if (localStorage.getItem('spawn_sound') === '1') {
+    enabled = true;
+    requestAnimationFrame(() => document.getElementById('soundBtn')?.classList.add('active'));
+  }
+
+  return { toggle, isEnabled, playClick, playBuy, playSell, playSpawn, playDeath };
+})();
+
+// === SOUND HOOKS ===
+document.addEventListener('click', (e) => {
+  if (e.target.matches('button, a.hero-cta, a.nav-wallet')) SpawnAudio.playClick();
+});
+
 // ============================================================
 // MOBILE MENU
 // ============================================================
@@ -856,6 +1205,15 @@ function copyAddr(el) {
 // ============================================================
 
 let activityEvents = [];
+const AGENT_NAMES = {
+  'the-berserker': 'The Berserker', 'the-monk': 'The Monk', 'the-sniper': 'The Sniper',
+  'the-gambler': 'The Gambler', 'the-surgeon': 'The Surgeon', 'the-wolf': 'The Wolf',
+  'the-turtle': 'The Turtle', 'the-hawk': 'The Hawk', 'the-phantom': 'The Phantom',
+  'the-beast': 'The Beast', 'the-oracle': 'The Oracle', 'the-jackal': 'The Jackal',
+  'the-specter': 'The Specter', 'the-viper': 'The Viper', 'the-colossus': 'The Colossus',
+  'agent_2343b729': 'The Talon',
+};
+function agentName(id) { return AGENT_NAMES[id] || id; }
 
 function timeAgo(dateStr) {
   const s = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
@@ -882,7 +1240,7 @@ function renderActivity() {
       const txLink = d.tx ? `<a class="activity-tx" href="https://solscan.io/tx/${d.tx}" target="_blank">tx</a>` : '';
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action ${cls}">${d.action}</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">${detail}</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
@@ -891,7 +1249,7 @@ function renderActivity() {
       const txLink = d.tx ? `<a class="activity-tx" href="https://solscan.io/tx/${d.tx}" target="_blank">tx</a>` : '';
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action buy">spawn</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">claimed for ${parseFloat(d.amount).toFixed(2)} SOL</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
@@ -899,7 +1257,7 @@ function renderActivity() {
     } else if (ev.type === 'death') {
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action death">death</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">lost ${d.loss_pct}% — eliminated</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
       </div>`;
@@ -908,19 +1266,184 @@ function renderActivity() {
   }).join('');
 }
 
+let lastTopEventId = 0;
 async function pollActivity() {
   try {
     const res = await fetch('/api/events?limit=20');
     const data = await res.json();
     if (data.events && data.events.length > 0) {
       activityEvents = data.events.filter(e => !e.agent_id.startsWith('test-') && e.type !== 'death');
+      // Play sound for new events
+      if (lastTopEventId > 0 && activityEvents[0] && activityEvents[0].id > lastTopEventId) {
+        const latest = activityEvents[0];
+        try {
+          const d = JSON.parse(latest.data);
+          if (d.action === 'buy') SpawnAudio.playBuy();
+          else if (d.action === 'sell') SpawnAudio.playSell();
+          else if (latest.type === 'genesis_claimed') SpawnAudio.playSpawn();
+        } catch {}
+      }
+      if (activityEvents[0]) lastTopEventId = activityEvents[0].id;
       renderActivity();
+      updateTicker();
     }
   } catch {}
 }
 
 pollActivity();
 setInterval(pollActivity, 5000);
+
+// === BLOOD CELL PARTICLES ===
+(function() {
+  const canvas = document.getElementById('particleCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 25;
+
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  class Particle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x = Math.random() * canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.size = Math.random() * 2 + 0.5;
+      this.speedX = (Math.random() - 0.5) * 0.15;
+      this.speedY = (Math.random() - 0.5) * 0.1 - 0.05;
+      this.opacity = Math.random() * 0.3 + 0.05;
+      this.life = Math.random() * 400 + 200;
+      this.maxLife = this.life;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      this.life--;
+      if (this.life <= 0 || this.x < -10 || this.x > canvas.width + 10 || this.y < -10 || this.y > canvas.height + 10) this.reset();
+    }
+    draw() {
+      const fade = Math.min(1, this.life / (this.maxLife * 0.2), (this.maxLife - this.life) < 40 ? (this.maxLife - this.life) / 40 : 1);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(196, 30, 58, ${this.opacity * fade})`;
+      ctx.fill();
+    }
+  }
+
+  for (let i = 0; i < COUNT; i++) {
+    const p = new Particle();
+    p.life = Math.random() * p.maxLife;
+    particles.push(p);
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => { p.update(); p.draw(); });
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// === RIPPLE EFFECT ===
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.hero-cta, button');
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const ripple = document.createElement('span');
+  ripple.className = 'ripple';
+  const size = Math.max(rect.width, rect.height);
+  ripple.style.width = ripple.style.height = size + 'px';
+  ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+  ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+  btn.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove());
+});
+
+// ============================================================
+// TYPING EFFECT (Effekt 6)
+// ============================================================
+(function() {
+  const el = document.querySelector('.hero-tagline');
+  if (!el) return;
+  const fullText = el.textContent;
+  if (sessionStorage.getItem('spawn_typed')) return;
+  el.textContent = '';
+  el.style.visibility = 'visible';
+  let i = 0;
+  const cursor = document.createElement('span');
+  cursor.className = 'typing-cursor';
+  cursor.textContent = '|';
+  el.appendChild(cursor);
+  setTimeout(() => {
+    const timer = setInterval(() => {
+      if (i < fullText.length) {
+        el.insertBefore(document.createTextNode(fullText[i]), cursor);
+        i++;
+      } else {
+        clearInterval(timer);
+        sessionStorage.setItem('spawn_typed', '1');
+        let blinks = 0;
+        const blinkTimer = setInterval(() => {
+          blinks++;
+          if (blinks >= 8) { clearInterval(blinkTimer); cursor.remove(); }
+        }, 600);
+      }
+    }, 40);
+  }, 600);
+})();
+
+// ============================================================
+// CURSOR BLOOD TRAIL (Effekt 2)
+// ============================================================
+(function() {
+  if ('ontouchstart' in window) return;
+  let lastX = 0, lastY = 0, dots = 0;
+  document.addEventListener('mousemove', function(e) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    if (Math.sqrt(dx * dx + dy * dy) < 12) return;
+    lastX = e.clientX; lastY = e.clientY;
+    const dot = document.createElement('div');
+    dot.className = 'blood-trail-dot';
+    dot.style.left = (e.clientX - 4) + 'px';
+    dot.style.top = (e.clientY - 4) + 'px';
+    document.body.appendChild(dot);
+    dots++;
+    dot.addEventListener('animationend', () => { dot.remove(); dots--; });
+    if (dots > 20) {
+      const old = document.querySelector('.blood-trail-dot');
+      if (old) { old.remove(); dots--; }
+    }
+  });
+})();
+
+// ============================================================
+// LIVE TRADE TICKER (Effekt 1)
+// ============================================================
+function updateTicker() {
+  const track = document.getElementById('tickerTrack');
+  if (!track) return;
+  const trades = activityEvents.filter(e => e.type === 'trade');
+  if (trades.length === 0) {
+    track.innerHTML = '';
+    return;
+  }
+  let items = trades.map(ev => {
+    const d = JSON.parse(ev.data);
+    if (d.action === 'buy') {
+      return `<span class="ticker-item"><span class="agent">${agentName(ev.agent_id).toUpperCase()}</span> <span class="buy">bought</span> ${d.token} for ${parseFloat(d.amount).toFixed(2)} SOL</span>`;
+    } else {
+      const pnl = d.pnl_pct ? (d.pnl_pct > 0 ? '+' : '') + d.pnl_pct.toFixed(1) + '%' : '';
+      return `<span class="ticker-item"><span class="agent">${agentName(ev.agent_id).toUpperCase()}</span> <span class="sell">sold</span> ${d.token} ${pnl}</span>`;
+    }
+  }).join('');
+  // Duplicate for seamless loop
+  track.innerHTML = items + items;
+  const w = track.scrollWidth / 2;
+  const dur = Math.max(15, w / 40);
+  track.style.animationDuration = dur + 's';
+}
 </script>
 </body>
 </html>

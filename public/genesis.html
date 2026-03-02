@@ -15,7 +15,7 @@
   <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
   <style>
     :root {
-      --bg: #08050a;
+      --bg: #0a0608;
       --surface: rgba(180, 30, 50, 0.04);
       --surface-hover: rgba(180, 30, 50, 0.08);
       --border: rgba(180, 30, 50, 0.12);
@@ -23,6 +23,9 @@
       --blood: #c41e3a;
       --blood-bright: #e63950;
       --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --blood-glow: rgba(196, 30, 58, 0.08);
+      --blood-glow-strong: rgba(196, 30, 58, 0.15);
       --text: #ede8ea;
       --text-muted: #9e9396;
       --text-dim: #6b5f63;
@@ -43,6 +46,11 @@
       font-size: 14px;
       line-height: 1.7;
       -webkit-font-smoothing: antialiased;
+    }
+
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(8, 4, 6, 0.6) 100%);
     }
 
     /* === NAV === */
@@ -228,6 +236,7 @@
       font-family: var(--font-display);
       font-size: clamp(28px, 5vw, 44px);
       font-weight: 600;
+      text-shadow: 0 0 40px rgba(196, 30, 58, 0.15);
       letter-spacing: 0.12em;
       color: var(--text);
     }
@@ -456,7 +465,7 @@
 
     .agent-card:hover {
       border-color: var(--border-strong);
-      box-shadow: 0 0 40px rgba(196, 30, 58, 0.04);
+      box-shadow: 0 0 40px rgba(196, 30, 58, 0.06), 0 0 80px rgba(196, 30, 58, 0.03);
     }
 
     .agent-card.claimed {
@@ -1047,9 +1056,153 @@
       footer { flex-direction: column; gap: 12px; text-align: center; }
       .modal { padding: 24px; }
     }
+
+    /* === BLOOD VEINS === */
+    .vein-bg {
+      position: absolute; width: 100%; left: 0;
+      pointer-events: none; z-index: 0; overflow: visible;
+    }
+    .vein { fill: none; stroke-linecap: round; }
+    .vein-main {
+      stroke: rgba(139, 21, 40, 0.18); stroke-width: 1.8;
+      stroke-dasharray: 800; stroke-dashoffset: 800;
+      animation: vein-flow 8s ease-in-out infinite;
+    }
+    .vein-branch {
+      stroke: rgba(139, 21, 40, 0.12); stroke-width: 1.2;
+      stroke-dasharray: 200; stroke-dashoffset: 200;
+      animation: vein-flow 8s ease-in-out 0.5s infinite;
+    }
+    .vein-cap {
+      stroke: rgba(139, 21, 40, 0.07); stroke-width: 0.7;
+      stroke-dasharray: 80; stroke-dashoffset: 80;
+      animation: vein-flow 8s ease-in-out 1s infinite;
+    }
+    @keyframes vein-flow {
+      0% { stroke-dashoffset: 800; opacity: 0.3; }
+      30% { stroke-dashoffset: 0; opacity: 0.8; }
+      50% { stroke-dashoffset: 0; opacity: 0.5; }
+      70% { stroke-dashoffset: -800; opacity: 0.8; }
+      100% { stroke-dashoffset: -800; opacity: 0.3; }
+    }
+    @keyframes heartbeat-glow {
+      0%, 100% { filter: drop-shadow(0 0 0px rgba(196, 30, 58, 0)); }
+      15% { filter: drop-shadow(0 0 4px rgba(196, 30, 58, 0.3)); }
+      30% { filter: drop-shadow(0 0 1px rgba(196, 30, 58, 0.1)); }
+      45% { filter: drop-shadow(0 0 3px rgba(196, 30, 58, 0.2)); }
+    }
+    .vein-bg { animation: heartbeat-glow 2.5s ease-in-out infinite; }
+
+    /* === SOUND TOGGLE === */
+    .nav-sound {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
+      font-family: var(--font-mono); line-height: 1;
+    }
+    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
+    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
+
+    /* === BREATHING AGENTS === */
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.004); }
+    }
+    .agent-card.alive { animation: breathe 4s ease-in-out infinite; }
+
+    /* === RIPPLE === */
+    .hero-cta, .buy-btn, .pay-btn, .login-option, .filter-btn, .reproduce-btn, .withdraw-btn { position: relative; overflow: hidden; }
+    .ripple {
+      position: absolute; border-radius: 50%;
+      background: rgba(196, 30, 58, 0.3);
+      transform: scale(0);
+      animation: ripple-expand 0.6s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes ripple-expand { to { transform: scale(4); opacity: 0; } }
+
+    /* === CURSOR BLOOD TRAIL (Effekt 2) === */
+    .blood-trail-dot {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(196, 30, 58, 0.4), transparent 70%);
+      pointer-events: none;
+      z-index: 9997;
+      animation: blood-trail-fade 500ms ease-out forwards;
+    }
+    @keyframes blood-trail-fade {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.3); opacity: 0; }
+    }
+
+    /* === AGENT HEARTBEAT (Effekt 3) === */
+    .heartbeat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .hb-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .hb-dot.active {
+      background: var(--green);
+      animation: hb-pulse-green 1.5s ease-in-out infinite;
+    }
+    .hb-dot.scanning {
+      background: #d4a532;
+      animation: hb-pulse-amber 2.5s ease-in-out infinite;
+    }
+    .hb-dot.idle {
+      background: var(--blood-deep);
+      opacity: 0.5;
+    }
+    .hb-dot.dead {
+      background: var(--text-dim);
+      opacity: 0.3;
+    }
+    .hb-label {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .hb-label.active { color: var(--green); }
+    .hb-label.scanning { color: #d4a532; }
+    .hb-label.idle { color: var(--blood-deep); }
+    .hb-label.dead { color: var(--text-dim); }
+    @keyframes hb-pulse-green {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(74, 158, 106, 0.4); }
+      50% { box-shadow: 0 0 0 4px rgba(74, 158, 106, 0); }
+    }
+    @keyframes hb-pulse-amber {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(212, 165, 50, 0.3); }
+      50% { box-shadow: 0 0 0 3px rgba(212, 165, 50, 0); }
+    }
+    .ekg-line {
+      flex: 1;
+      height: 16px;
+      overflow: hidden;
+    }
+    .ekg-line svg {
+      width: 200%;
+      height: 100%;
+      animation: ekg-scroll 2s linear infinite;
+    }
+    @keyframes ekg-scroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
   </style>
 </head>
 <body>
+<div class="vignette"></div>
+<canvas id="particleCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0.4;"></canvas>
 
 <!-- NAV -->
 <nav>
@@ -1060,6 +1213,7 @@
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
+    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -1098,12 +1252,19 @@
 </div>
 
 <!-- PAGE HEADER -->
-<div class="page-header">
+<div class="page-header" style="position:relative;">
+  <svg class="vein-bg" viewBox="0 0 1200 120" preserveAspectRatio="none" style="bottom:-20px;height:120px;" xmlns="http://www.w3.org/2000/svg">
+    <path class="vein vein-main" d="M-10,60 C180,80 350,25 550,55 S750,90 950,45 S1100,70 1210,55"/>
+    <path class="vein vein-branch" d="M350,25 C380,10 410,5 445,18"/>
+    <path class="vein vein-branch" d="M750,90 C780,108 815,112 850,98"/>
+    <path class="vein vein-cap" d="M445,18 C462,12 475,10 490,17"/>
+    <path class="vein vein-branch" d="M550,55 C575,38 600,30 630,42"/>
+  </svg>
   <h1><span>Genesis</span> Agents</h1>
   <p>15 unique trading agents, each with distinct DNA. Your SOL becomes the agent's trading capital. Every descendant pays royalties back to you.</p>
   <div class="page-header-stats">
     <div class="page-header-stat"><strong id="avail-count">--</strong> / 15 available</div>
-    <div class="page-header-stat"><strong>5</strong> auction</div>
+    <div class="page-header-stat"><strong>5</strong> degens</div>
     <div class="page-header-stat"><strong>10</strong> fixed price</div>
   </div>
 </div>
@@ -1111,11 +1272,12 @@
 <!-- FILTER -->
 <div class="filter-bar">
   <button class="filter-btn active" onclick="filterTier('all')">All</button>
-  <button class="filter-btn" onclick="filterTier('auction')">Auction</button>
-  <button class="filter-btn" onclick="filterTier('tier3')">Tier 3</button>
-  <button class="filter-btn" onclick="filterTier('tier2')">Tier 2</button>
-  <button class="filter-btn" onclick="filterTier('tier1')">Tier 1</button>
+  <button class="filter-btn" onclick="filterTier('degen')">Degen</button>
+  <button class="filter-btn" onclick="filterTier('standard')">Standard</button>
   <button class="filter-btn" onclick="filterTier('custom')">Custom</button>
+  <span style="display:inline-block;width:1px;height:20px;background:var(--muted);margin:0 8px;vertical-align:middle;opacity:0.3"></span>
+  <button class="filter-btn" onclick="filterStatus('available')">Available</button>
+  <button class="filter-btn" onclick="filterStatus('claimed')">Claimed</button>
 </div>
 
 <!-- AGENTS -->
@@ -1205,7 +1367,7 @@
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
         <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 85% goes to child wallet, 15% protocol fee</div>
+        <div class="spawn-sol-hint">Minimum 1 SOL — 90% goes to child wallet, 10% protocol fee</div>
       </div>
       <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send $SPAWN + SOL</button>
     </div>
@@ -1240,23 +1402,84 @@
 
 <script>
 // ============================================================
+// SPAWN SOUND ENGINE
+// ============================================================
+const SpawnAudio = (() => {
+  let ctx = null, enabled = false;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function toggle() {
+    enabled = !enabled;
+    localStorage.setItem('spawn_sound', enabled ? '1' : '0');
+    document.getElementById('soundBtn')?.classList.toggle('active', enabled);
+  }
+  function playClick() {
+    if (!enabled) return; const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(300,c.currentTime); o.frequency.exponentialRampToValueAtTime(80,c.currentTime+0.12);
+    g.gain.setValueAtTime(0.25,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.15);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.18);
+  }
+  function playBuy() {
+    if (!enabled) return; const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(400,c.currentTime); o.frequency.exponentialRampToValueAtTime(120,c.currentTime+0.2);
+    g.gain.setValueAtTime(0.3,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.3);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.35);
+  }
+  function playSell() {
+    if (!enabled) return; const c = getCtx();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type='triangle'; o.frequency.setValueAtTime(600,c.currentTime); o.frequency.exponentialRampToValueAtTime(250,c.currentTime+0.35);
+    g.gain.setValueAtTime(0.2,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.4);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.45);
+  }
+  function playSpawn() {
+    if (!enabled) return; const c = getCtx();
+    [220,330,440].forEach((f,i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = i===0?'sine':'triangle'; o.frequency.value=f;
+      g.gain.setValueAtTime(0,c.currentTime); g.gain.linearRampToValueAtTime(0.2,c.currentTime+0.15);
+      g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+1.2);
+      o.connect(g); g.connect(c.destination); o.start(c.currentTime+i*0.05); o.stop(c.currentTime+1.3);
+    });
+  }
+  if (localStorage.getItem('spawn_sound') === '1') {
+    enabled = true;
+    requestAnimationFrame(() => document.getElementById('soundBtn')?.classList.add('active'));
+  }
+  return { toggle, playClick, playBuy, playSell, playSpawn };
+})();
+document.addEventListener('click', (e) => {
+  if (e.target.matches('button, .buy-btn, .pay-btn, .filter-btn, .reproduce-btn, .withdraw-btn, a.nav-wallet')) SpawnAudio.playClick();
+});
+
+// ============================================================
 // AGENT DATA
 // ============================================================
 
-const AUCTION_IDS = new Set(["the-berserker", "the-gambler", "the-beast", "the-turtle", "the-monk"]);
+const DEGEN_IDS = new Set(["the-berserker", "the-gambler", "the-beast", "the-turtle", "the-monk"]);
+
+const DEGEN_PRICES = {
+  "the-beast": 1, "the-berserker": 1, "the-turtle": 1,
+  "the-monk": 1, "the-gambler": 1,
+};
 
 const FIXED_TIERS = {
-  "the-wolf": 4, "the-jackal": 4, "the-viper": 4,
-  "the-sniper": 3, "the-surgeon": 3, "the-oracle": 3,
+  "the-wolf": 2, "the-jackal": 2, "the-viper": 2,
+  "the-sniper": 2, "the-surgeon": 2, "the-oracle": 2,
   "the-hawk": 2, "the-phantom": 2, "the-specter": 2, "the-colossus": 2,
 };
 
 const FLAVOR = {
-  "the-berserker": "Maximum aggression. Trades every 2 minutes. Goes all-in or goes home.",
-  "the-gambler": "100% take-profit target. 40% stop-loss. Plays the longest odds in the ecosystem.",
-  "the-beast": "Relentless. Buys everything that moves. Low standards, high conviction.",
-  "the-turtle": "Infinite patience. Only touches proven tokens. Almost never takes a risk.",
-  "the-monk": "Trades once per hour at most. When it moves, it's calculated perfection.",
+  "the-berserker": "Pump.fun berserker. Apes into fresh launches every 2 minutes. All-in or nothing.",
+  "the-gambler": "Moonshot degen. Hunts 250% pumps on bonding curves. Diamond hands or zero.",
+  "the-beast": "Relentless pump.fun ape. Buys everything that moves. No filter, max conviction.",
+  "the-turtle": "Diamond hands degen. Rides pump.fun waves with tight stops and big targets.",
+  "the-monk": "Calculated degen. Picks pump.fun entries carefully, then goes hard.",
   "the-wolf": "Pack hunter. Aggressive but calculated. Fast trades, moderate risk.",
   "the-jackal": "Scavenger instinct. Quick to buy, quick to cut losses.",
   "the-viper": "Strike fast, strike hard. High aggression, tight stop-losses.",
@@ -1270,16 +1493,16 @@ const FLAVOR = {
 };
 
 const GENESIS_FALLBACK = [
-  { id: "the-berserker", name: "The Berserker", dna: { aggression: 0.92, patience: 0.1, risk_tolerance: 0.9, buy_threshold_holders: 100, buy_threshold_volume: 200, sell_profit_pct: 15, sell_loss_pct: 8, max_position_pct: 75, check_interval_min: 2 }, available: true },
-  { id: "the-monk", name: "The Monk", dna: { aggression: 0.08, patience: 0.95, risk_tolerance: 0.15, buy_threshold_holders: 2000, buy_threshold_volume: 10000, sell_profit_pct: 80, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 15 }, available: true },
+  { id: "the-berserker", name: "The Berserker", dna: { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 }, available: true },
+  { id: "the-monk", name: "The Monk", dna: { degen: true, aggression: 0.88, patience: 0.2, risk_tolerance: 0.9, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 200, sell_loss_pct: 12, max_position_pct: 60, check_interval_min: 3 }, available: true },
   { id: "the-sniper", name: "The Sniper", dna: { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 }, available: true },
-  { id: "the-gambler", name: "The Gambler", dna: { aggression: 0.85, patience: 0.15, risk_tolerance: 0.95, buy_threshold_holders: 80, buy_threshold_volume: 150, sell_profit_pct: 100, sell_loss_pct: 40, max_position_pct: 80, check_interval_min: 3 }, available: true },
+  { id: "the-gambler", name: "The Gambler", dna: { degen: true, aggression: 0.92, patience: 0.1, risk_tolerance: 0.99, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 250, sell_loss_pct: 50, max_position_pct: 85, check_interval_min: 2 }, available: true },
   { id: "the-surgeon", name: "The Surgeon", dna: { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 }, available: true },
   { id: "the-wolf", name: "The Wolf", dna: { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 }, available: true },
-  { id: "the-turtle", name: "The Turtle", dna: { aggression: 0.12, patience: 0.9, risk_tolerance: 0.2, buy_threshold_holders: 3000, buy_threshold_volume: 15000, sell_profit_pct: 60, sell_loss_pct: 4, max_position_pct: 15, check_interval_min: 20 }, available: true },
+  { id: "the-turtle", name: "The Turtle", dna: { degen: true, aggression: 0.85, patience: 0.25, risk_tolerance: 0.88, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 150, sell_loss_pct: 10, max_position_pct: 50, check_interval_min: 3 }, available: true },
   { id: "the-hawk", name: "The Hawk", dna: { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 }, available: true },
   { id: "the-phantom", name: "The Phantom", dna: { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 }, available: true },
-  { id: "the-beast", name: "The Beast", dna: { aggression: 0.88, patience: 0.2, risk_tolerance: 0.85, buy_threshold_holders: 150, buy_threshold_volume: 300, sell_profit_pct: 20, sell_loss_pct: 25, max_position_pct: 70, check_interval_min: 2 }, available: true },
+  { id: "the-beast", name: "The Beast", dna: { degen: true, aggression: 0.98, patience: 0.05, risk_tolerance: 0.98, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 120, sell_loss_pct: 30, max_position_pct: 85, check_interval_min: 2 }, available: true },
   { id: "the-oracle", name: "The Oracle", dna: { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 }, available: true },
   { id: "the-jackal", name: "The Jackal", dna: { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 }, available: true },
   { id: "the-specter", name: "The Specter", dna: { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 }, available: true },
@@ -1313,17 +1536,30 @@ const AGENT_IMAGES = {
   'the-surgeon': '/the-surgeon.jpg',
 };
 
+function getHeartbeatHtml(g) {
+  const lastTrade = g.last_trade_at;
+  let state = 'dead', label = 'NO DATA';
+  if (lastTrade) {
+    const minAgo = (Date.now() - new Date(lastTrade + 'Z').getTime()) / 60000;
+    if (minAgo < 5) { state = 'active'; label = 'ACTIVE'; }
+    else if (minAgo < 30) { state = 'scanning'; label = 'SCANNING'; }
+    else { state = 'idle'; label = 'IDLE'; }
+  }
+  const ekg = state === 'active' ? `<div class="ekg-line"><svg viewBox="0 0 200 16" preserveAspectRatio="none"><polyline fill="none" stroke="rgba(74,158,106,0.5)" stroke-width="1" points="0,8 15,8 20,2 25,14 30,6 35,8 50,8 65,8 70,2 75,14 80,6 85,8 100,8 115,8 120,2 125,14 130,6 135,8 150,8 165,8 170,2 175,14 180,6 185,8 200,8"/></svg></div>` : '';
+  return `<div class="heartbeat"><div class="hb-dot ${state}"></div><span class="hb-label ${state}">${label}</span>${ekg}</div>`;
+}
+
 function agentCard(g, priceLabel) {
   const d = g.dna;
-  const isAuction = AUCTION_IDS.has(g.id);
-  const st = !g.available ? "claimed" : isAuction ? "unavailable" : "available";
+  const isDegen = DEGEN_IDS.has(g.id);
+  const st = !g.available ? "claimed" : "available";
   const flavor = FLAVOR[g.id] || "";
   const img = AGENT_IMAGES[g.id];
 
-  return `<div class="agent-card ${st === "claimed" ? "claimed" : st === "unavailable" ? "claimed" : ""}">
+  return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}">
     <div class="agent-card-head">
       <div class="agent-name">${g.name || g.id}</div>
-      <div class="agent-status ${st}">${st === "unavailable" ? "coming soon" : st}</div>
+      ${isDegen && g.available ? '<div class="agent-status available" style="color:#ff4444;border-color:#ff4444;">degen</div>' : `<div class="agent-status ${st}">${st}</div>`}
     </div>
     ${img ? `<img class="agent-img" src="${img}" alt="${g.name || g.id}" loading="lazy">` : ''}
     <div class="agent-flavor">${flavor}</div>
@@ -1331,17 +1567,17 @@ function agentCard(g, priceLabel) {
     <div class="dna-section-label">Core DNA</div>
     <div class="dna-row">
       <span class="dna-label">aggr</span>
-      <div class="dna-track"><div class="dna-fill" style="width:${d.aggression * 100}%"></div></div>
+      <div class="dna-track"><div class="dna-fill" style="width:0" data-width="${d.aggression * 100}%"></div></div>
       <span class="dna-val">${d.aggression}</span>
     </div>
     <div class="dna-row">
       <span class="dna-label">patience</span>
-      <div class="dna-track"><div class="dna-fill" style="width:${d.patience * 100}%"></div></div>
+      <div class="dna-track"><div class="dna-fill" style="width:0" data-width="${d.patience * 100}%"></div></div>
       <span class="dna-val">${d.patience}</span>
     </div>
     <div class="dna-row">
       <span class="dna-label">risk</span>
-      <div class="dna-track"><div class="dna-fill" style="width:${d.risk_tolerance * 100}%"></div></div>
+      <div class="dna-track"><div class="dna-fill" style="width:0" data-width="${d.risk_tolerance * 100}%"></div></div>
       <span class="dna-val">${d.risk_tolerance}</span>
     </div>
 
@@ -1365,12 +1601,13 @@ function agentCard(g, priceLabel) {
       <div class="portfolio-loading">loading...</div>
     </div>` : ''}
 
+    ${!g.available ? getHeartbeatHtml(g) : ''}
+
     <div class="agent-price">
       <span class="agent-price-label">Price</span>
       <span class="agent-price-val">${priceLabel}</span>
     </div>
-    ${g.available && !AUCTION_IDS.has(g.id) ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" onclick="initBuy(this)">Buy &mdash; ${priceLabel}</button>` : ''}
-    ${g.available && AUCTION_IDS.has(g.id) ? `<button class="buy-btn" disabled>Auction &mdash; Coming soon</button>` : ''}
+    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" onclick="initBuy(this)">Buy &mdash; ${priceLabel}</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
   </div>`;
@@ -1378,54 +1615,36 @@ function agentCard(g, priceLabel) {
 
 function renderAgents(data) {
   const container = document.getElementById("agentSections");
-  const auction = data.filter(g => AUCTION_IDS.has(g.id));
-  const fixed = data.filter(g => !AUCTION_IDS.has(g.id));
+  const degens = data.filter(g => DEGEN_IDS.has(g.id));
+  const fixed = data.filter(g => !DEGEN_IDS.has(g.id));
   const t4 = fixed.filter(g => FIXED_TIERS[g.id] === 4);
   const t3 = fixed.filter(g => FIXED_TIERS[g.id] === 3);
   const t2 = fixed.filter(g => FIXED_TIERS[g.id] === 2);
-  const avail = data.filter(g => g.available && !AUCTION_IDS.has(g.id)).length;
+  const avail = data.filter(g => g.available).length;
   document.getElementById("avail-count").textContent = avail;
 
   let html = '';
 
-  // Auction
-  html += `<div class="tier-section" data-tier="auction">
+  // Degens
+  // Degen tier — pump.fun hunters
+  html += `<div class="tier-section" data-tier="degen">
     <div class="tier-header">
-      <div class="tier-label">Auction</div>
-      <div class="tier-price">5 extreme archetypes</div>
-      <div class="tier-desc">${auction.filter(g => g.available).length} / ${auction.length} available</div>
+      <div class="tier-label">Degen</div>
+      <div class="tier-price">1 SOL each</div>
+      <div class="tier-desc">${degens.filter(g => g.available).length} / ${degens.length} available &mdash; pump.fun hunters</div>
     </div>
-    <div class="agent-grid">${auction.map(g => agentCard(g, "Auction")).join("")}</div>
+    <div class="agent-grid">${degens.map(g => agentCard(g, "1 SOL")).join("")}</div>
   </div>`;
 
-  // Tier 3
-  html += `<div class="tier-section" data-tier="tier3">
+  // Standard tier — all normal agents combined
+  const standard = [...t4, ...t3, ...t2];
+  html += `<div class="tier-section" data-tier="standard">
     <div class="tier-header">
-      <div class="tier-label">Tier 3</div>
-      <div class="tier-price">4 SOL each</div>
-      <div class="tier-desc">${t4.filter(g => g.available).length} / ${t4.length} available</div>
-    </div>
-    <div class="agent-grid">${t4.map(g => agentCard(g, "4 SOL")).join("")}</div>
-  </div>`;
-
-  // Tier 2
-  html += `<div class="tier-section" data-tier="tier2">
-    <div class="tier-header">
-      <div class="tier-label">Tier 2</div>
-      <div class="tier-price">3 SOL each</div>
-      <div class="tier-desc">${t3.filter(g => g.available).length} / ${t3.length} available</div>
-    </div>
-    <div class="agent-grid">${t3.map(g => agentCard(g, "3 SOL")).join("")}</div>
-  </div>`;
-
-  // Tier 1
-  html += `<div class="tier-section" data-tier="tier1">
-    <div class="tier-header">
-      <div class="tier-label">Tier 1</div>
+      <div class="tier-label">Standard</div>
       <div class="tier-price">2 SOL each</div>
-      <div class="tier-desc">${t2.filter(g => g.available).length} / ${t2.length} available</div>
+      <div class="tier-desc">${standard.filter(g => g.available).length} / ${standard.length} available &mdash; Jupiter traders</div>
     </div>
-    <div class="agent-grid">${t2.map(g => agentCard(g, "2 SOL")).join("")}</div>
+    <div class="agent-grid">${standard.map(g => agentCard(g, "2 SOL")).join("")}</div>
   </div>`;
 
   // Custom Agents
@@ -1451,12 +1670,38 @@ function renderAgents(data) {
 // FILTER
 // ============================================================
 
+let activeTier = 'all';
+let activeStatus = null;
+
+function applyFilters() {
+  document.querySelectorAll('.tier-section').forEach(s => {
+    const tierMatch = activeTier === 'all' || s.dataset.tier === activeTier;
+    s.style.display = tierMatch ? '' : 'none';
+    if (tierMatch) {
+      s.querySelectorAll('.agent-card').forEach(c => {
+        if (!activeStatus) { c.style.display = ''; return; }
+        const isClaimed = c.classList.contains('claimed');
+        c.style.display = (activeStatus === 'claimed' && isClaimed) || (activeStatus === 'available' && !isClaimed) ? '' : 'none';
+      });
+    }
+  });
+}
+
 function filterTier(tier) {
+  activeTier = tier;
+  activeStatus = null;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
-  document.querySelectorAll('.tier-section').forEach(s => {
-    s.style.display = (tier === 'all' || s.dataset.tier === tier) ? '' : 'none';
+  applyFilters();
+}
+
+function filterStatus(status) {
+  activeStatus = activeStatus === status ? null : status;
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    if (b.textContent === 'Available' || b.textContent === 'Claimed') b.classList.remove('active');
   });
+  if (activeStatus) event.target.classList.add('active');
+  applyFilters();
 }
 
 // ============================================================
@@ -2161,6 +2406,15 @@ document.getElementById('withdrawModal').addEventListener('click', (e) => {
 
 let lastEventId = 0;
 let activityEvents = [];
+const AGENT_NAMES = {
+  'the-berserker': 'The Berserker', 'the-monk': 'The Monk', 'the-sniper': 'The Sniper',
+  'the-gambler': 'The Gambler', 'the-surgeon': 'The Surgeon', 'the-wolf': 'The Wolf',
+  'the-turtle': 'The Turtle', 'the-hawk': 'The Hawk', 'the-phantom': 'The Phantom',
+  'the-beast': 'The Beast', 'the-oracle': 'The Oracle', 'the-jackal': 'The Jackal',
+  'the-specter': 'The Specter', 'the-viper': 'The Viper', 'the-colossus': 'The Colossus',
+  'agent_2343b729': 'The Talon',
+};
+function agentName(id) { return AGENT_NAMES[id] || id; }
 
 function timeAgo(dateStr) {
   const s = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
@@ -2186,7 +2440,7 @@ function renderActivity() {
       const txLink = d.tx ? `<a class="activity-tx" href="https://solscan.io/tx/${d.tx}" target="_blank">tx</a>` : '';
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action ${cls}">${d.action}</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">${detail}</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
@@ -2195,7 +2449,7 @@ function renderActivity() {
       const txLink = d.tx ? `<a class="activity-tx" href="https://solscan.io/tx/${d.tx}" target="_blank">tx</a>` : '';
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action buy">spawn</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">claimed for ${parseFloat(d.amount).toFixed(2)} SOL</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
@@ -2203,14 +2457,14 @@ function renderActivity() {
     } else if (ev.type === 'spawn') {
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action buy">reproduce</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">spawned from ${d.parent ? d.parent.replace('the-','') : '?'} — gen ${d.generation}${d.mutations?.length ? ' — ' + d.mutations.map(m => m.param).join(', ') + ' mutated' : ''}</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
       </div>`;
     } else if (ev.type === 'death') {
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action death">death</span>
-        <span class="activity-agent">${ev.agent_id}</span>
+        <span class="activity-agent">${agentName(ev.agent_id)}</span>
         <span class="activity-detail">lost ${d.loss_pct}% — eliminated</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
       </div>`;
@@ -2437,6 +2691,116 @@ function showSpawnStatus(msg, type) {
 document.getElementById('spawnModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeSpawnModal();
 });
+
+// === BLOOD CELL PARTICLES ===
+(function() {
+  const canvas = document.getElementById('particleCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 25;
+
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  class Particle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x = Math.random() * canvas.width;
+      this.y = Math.random() * canvas.height;
+      this.size = Math.random() * 2 + 0.5;
+      this.speedX = (Math.random() - 0.5) * 0.15;
+      this.speedY = (Math.random() - 0.5) * 0.1 - 0.05;
+      this.opacity = Math.random() * 0.3 + 0.05;
+      this.life = Math.random() * 400 + 200;
+      this.maxLife = this.life;
+    }
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      this.life--;
+      if (this.life <= 0 || this.x < -10 || this.x > canvas.width + 10 || this.y < -10 || this.y > canvas.height + 10) this.reset();
+    }
+    draw() {
+      const fade = Math.min(1, this.life / (this.maxLife * 0.2), (this.maxLife - this.life) < 40 ? (this.maxLife - this.life) / 40 : 1);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(196, 30, 58, ${this.opacity * fade})`;
+      ctx.fill();
+    }
+  }
+
+  for (let i = 0; i < COUNT; i++) {
+    const p = new Particle();
+    p.life = Math.random() * p.maxLife;
+    particles.push(p);
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => { p.update(); p.draw(); });
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// === DNA BAR ANIMATION ON SCROLL ===
+const dnaObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const fills = entry.target.querySelectorAll('.dna-fill[data-width]');
+      fills.forEach((fill, i) => {
+        setTimeout(() => { fill.style.width = fill.dataset.width; }, i * 80);
+      });
+      dnaObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.15 });
+
+// Observe agent cards after render
+setTimeout(() => {
+  document.querySelectorAll('.agent-card').forEach(card => dnaObserver.observe(card));
+}, 500);
+
+// === RIPPLE EFFECT ===
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.buy-btn, .pay-btn, .filter-btn, .reproduce-btn, .withdraw-btn, button');
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const ripple = document.createElement('span');
+  ripple.className = 'ripple';
+  const size = Math.max(rect.width, rect.height);
+  ripple.style.width = ripple.style.height = size + 'px';
+  ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+  ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+  btn.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove());
+});
+
+// ============================================================
+// CURSOR BLOOD TRAIL (Effekt 2)
+// ============================================================
+(function() {
+  if ('ontouchstart' in window) return;
+  let lastX = 0, lastY = 0, dots = 0;
+  document.addEventListener('mousemove', function(e) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    if (Math.sqrt(dx * dx + dy * dy) < 12) return;
+    lastX = e.clientX; lastY = e.clientY;
+    const dot = document.createElement('div');
+    dot.className = 'blood-trail-dot';
+    dot.style.left = (e.clientX - 4) + 'px';
+    dot.style.top = (e.clientY - 4) + 'px';
+    document.body.appendChild(dot);
+    dots++;
+    dot.addEventListener('animationend', () => { dot.remove(); dots--; });
+    if (dots > 20) {
+      const old = document.querySelector('.blood-trail-dot');
+      if (old) { old.remove(); dots--; }
+    }
+  });
+})();
 </script>
 </body>
 </html>

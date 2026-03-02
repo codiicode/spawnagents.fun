@@ -25,15 +25,27 @@ export async function onRequest(context) {
     ]);
 
     // Get cost basis per token from trades table
-    const costBasisMap = {};
+    const tokenTradeInfo = {};
     if (agentId && db) {
       const trades = await db.prepare(
-        "SELECT token_address, action, amount_sol FROM trades WHERE agent_id = ?"
+        "SELECT token_address, action, amount_sol, token_amount FROM trades WHERE agent_id = ?"
       ).bind(agentId).all();
       for (const t of trades.results) {
-        if (!costBasisMap[t.token_address]) costBasisMap[t.token_address] = 0;
-        if (t.action === 'buy') costBasisMap[t.token_address] += t.amount_sol;
-        if (t.action === 'sell') costBasisMap[t.token_address] -= t.amount_sol;
+        if (!tokenTradeInfo[t.token_address]) {
+          tokenTradeInfo[t.token_address] = { totalBoughtSol: 0, totalBoughtTokens: 0, totalSoldSol: 0, hasZeroSells: false };
+        }
+        const info = tokenTradeInfo[t.token_address];
+        if (t.action === 'buy') {
+          info.totalBoughtSol += t.amount_sol;
+          info.totalBoughtTokens += (t.token_amount || 0);
+        }
+        if (t.action === 'sell') {
+          if (t.amount_sol > 0) {
+            info.totalSoldSol += t.amount_sol;
+          } else {
+            info.hasZeroSells = true;
+          }
+        }
       }
     }
 
@@ -53,7 +65,25 @@ export async function onRequest(context) {
     for (const t of tokenBalances) {
       const data = await getTokenData(t.mint).catch(() => null);
       const valueUsd = (data?.price_usd || 0) * t.amount;
-      const costBasisSol = costBasisMap[t.mint] || 0;
+
+      const info = tokenTradeInfo[t.mint];
+      let costBasisSol = 0;
+
+      if (info) {
+        if (info.hasZeroSells) {
+          // Degen sells didn't record SOL amount — can't compute exact cost basis
+          // Use current native price to estimate cost of remaining tokens
+          if (data?.price_native > 0) {
+            costBasisSol = data.price_native * t.amount;
+          }
+          // If no price_native, costBasisSol stays 0 (no PnL shown)
+        } else {
+          // Normal path: cost basis = total bought - total sold
+          costBasisSol = info.totalBoughtSol - info.totalSoldSol;
+          if (costBasisSol < 0) costBasisSol = 0;
+        }
+      }
+
       const costBasisUsd = costBasisSol * solPrice;
       const pnlUsd = costBasisUsd > 0 ? valueUsd - costBasisUsd : 0;
       const pnlPct = costBasisUsd > 0 ? ((valueUsd - costBasisUsd) / costBasisUsd) * 100 : 0;

@@ -1,5 +1,5 @@
 import { processAgent } from "../_lib/engine.js";
-import { discoverTokens } from "../_lib/market-data.js";
+import { discoverTokens, getTokenData } from "../_lib/market-data.js";
 import { getBalance, getTokenBalances, sendSol, setJupiterApiKey, getJupiterQuote, SOL_MINT } from "../_lib/solana.js";
 
 export async function onRequest(context) {
@@ -20,25 +20,14 @@ export async function onRequest(context) {
   const candidates = await discoverTokens();
   console.log(`Discovered ${candidates.length} candidate tokens`);
 
-  const agents = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
+  const agentsRaw = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
+  // Shuffle so all agents get fair chance, cap at 15 per cycle
+  const agentsList = agentsRaw.results.slice().sort(() => Math.random() - 0.5).slice(0, 15);
   const results = [];
+  const buyCount = {}; // track how many agents bought each token this cycle
+  const MAX_BUYERS_PER_TOKEN = 3;
 
-  for (const agent of agents.results) {
-    const dna = JSON.parse(agent.dna);
-
-    // Check interval
-    const lastTrade = await db.prepare(
-      "SELECT created_at FROM trades WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1"
-    ).bind(agent.id).first();
-
-    if (lastTrade) {
-      const mins = (Date.now() - new Date(lastTrade.created_at + "Z").getTime()) / 60000;
-      if (mins < (dna.check_interval_min || 5)) {
-        results.push({ agent: agent.id, skipped: true });
-        continue;
-      }
-    }
-
+  for (const agent of agentsList) {
     // Get agent's secret key from KV
     const agentSecret = await kv.get(`agent:${agent.id}:secret`);
     if (!agentSecret) {
@@ -47,9 +36,16 @@ export async function onRequest(context) {
     }
 
     try {
-      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet, candidates);
+      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet, candidates, kv);
 
       if (decision.action === "buy" && decision.tx_signature) {
+        // Track buys per token — remove from candidates when max reached
+        buyCount[decision.token] = (buyCount[decision.token] || 0) + 1;
+        if (buyCount[decision.token] >= MAX_BUYERS_PER_TOKEN) {
+          const idx = candidates.findIndex(c => c.address === decision.token);
+          if (idx !== -1) candidates.splice(idx, 1);
+        }
+
         await db.batch([
           db.prepare(
             "INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, price_at_trade, tx_signature) VALUES (?, ?, 'buy', ?, ?, 0, ?)"
@@ -86,8 +82,29 @@ export async function onRequest(context) {
     }
   }
 
+  // === LIVE PnL UPDATE — runs for ALL alive agents every cycle ===
+  let pnlUpdated = 0;
+  for (const agent of agentsRaw.results) {
+    if (!agent.agent_wallet || !agent.initial_capital) continue;
+    try {
+      const solBal = await getBalance(agent.agent_wallet, rpcUrl);
+      const tokens = await getTokenBalances(agent.agent_wallet, rpcUrl);
+      let tokenVal = 0;
+      for (const t of tokens) {
+        const data = await getTokenData(t.mint).catch(() => null);
+        if (data && data.price_native) tokenVal += data.price_native * t.amount;
+      }
+      const livePnl = solBal + tokenVal - (agent.initial_capital || 0);
+      await db.prepare("UPDATE agents SET total_pnl = ? WHERE id = ?")
+        .bind(parseFloat(livePnl.toFixed(6)), agent.id).run();
+      pnlUpdated++;
+    } catch (e) {
+      console.error(`PnL update failed for ${agent.id}:`, e.message);
+    }
+  }
+
   // === DEATH CHECK DISABLED — re-enable when economy is stable ===
   const deaths = 0;
 
-  return Response.json({ processed: agents.results.length, results, deaths });
+  return Response.json({ processed: agentsList.length, results, deaths, pnlUpdated });
 }

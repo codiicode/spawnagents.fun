@@ -2,16 +2,21 @@ import { decode } from '../_lib/base58.js';
 import { generateKeypair, sendSol } from '../_lib/solana.js';
 
 const GENESIS_DNA = {
-  "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, focus: "memecoin", buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
-  "the-jackal": { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, focus: "memecoin", buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 },
-  "the-viper": { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, focus: "memecoin", buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 },
-  "the-sniper": { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, focus: "memecoin", buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 },
-  "the-surgeon": { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 },
-  "the-oracle": { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, focus: "memecoin", buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 },
-  "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
-  "the-phantom": { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, focus: "memecoin", buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 },
-  "the-specter": { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 },
-  "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
+  "the-berserker": { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 },
+  "the-monk": { degen: true, aggression: 0.88, patience: 0.2, risk_tolerance: 0.9, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 200, sell_loss_pct: 12, max_position_pct: 60, check_interval_min: 3 },
+  "the-gambler": { degen: true, aggression: 0.92, patience: 0.1, risk_tolerance: 0.99, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 250, sell_loss_pct: 50, max_position_pct: 85, check_interval_min: 2 },
+  "the-turtle": { degen: true, aggression: 0.85, patience: 0.25, risk_tolerance: 0.88, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 150, sell_loss_pct: 10, max_position_pct: 50, check_interval_min: 3 },
+  "the-beast": { degen: true, aggression: 0.98, patience: 0.05, risk_tolerance: 0.98, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 120, sell_loss_pct: 30, max_position_pct: 85, check_interval_min: 2 },
+  "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
+  "the-jackal": { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 },
+  "the-viper": { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 },
+  "the-sniper": { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 },
+  "the-surgeon": { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 },
+  "the-oracle": { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 },
+  "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
+  "the-phantom": { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 },
+  "the-specter": { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 },
+  "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
 };
 
 export async function onRequest(context) {
@@ -32,10 +37,33 @@ export async function onRequest(context) {
     return Response.json({ error: 'RPC_URL not configured' }, { status: 500 });
   }
 
-  // Expire old pending payments (>30 min)
-  await db.prepare(
-    "UPDATE payment_requests SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')"
-  ).run();
+  // Re-activate expired payment requests for any unclaimed/dead agents (can still be purchased)
+  const allGenesis = Object.keys(GENESIS_DNA);
+  for (const agentId of allGenesis) {
+    const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agentId).first();
+    if (!existing || existing.status === 'dead' || existing.status === 'unclaimed') {
+      await db.prepare(
+        "UPDATE payment_requests SET status = 'pending' WHERE agent_id = ? AND status = 'expired'"
+      ).bind(agentId).run();
+    }
+  }
+
+  // Expire old pending payments (>30 min) — but not for unclaimed/dead agents
+  const aliveAgents = await db.prepare(
+    "SELECT id FROM agents WHERE status = 'alive'"
+  ).all();
+  const aliveIds = new Set(aliveAgents.results.map(a => a.id));
+
+  const pendingToExpire = await db.prepare(
+    "SELECT id, agent_id FROM payment_requests WHERE status = 'pending' AND created_at < datetime('now', '-30 minutes')"
+  ).all();
+
+  for (const pr of pendingToExpire.results) {
+    // Only expire if agent is alive (already claimed) — keep pending for unclaimed/dead/new
+    if (aliveIds.has(pr.agent_id)) {
+      await db.prepare("UPDATE payment_requests SET status = 'expired' WHERE id = ?").bind(pr.id).run();
+    }
+  }
 
   // Get active pending payments
   const pending = await db.prepare(
@@ -79,8 +107,8 @@ export async function onRequest(context) {
       const lamportsReceived = postBalances[recipientIdx] - preBalances[recipientIdx];
       const solReceived = lamportsReceived / 1_000_000_000;
 
-      // Allow 0.5% tolerance for fees
-      if (solReceived < pr.amount * 0.995) continue;
+      // Allow 5% tolerance (users may round or send slightly different amount)
+      if (solReceived < pr.amount * 0.95) continue;
 
       // Find buyer wallet (first signer)
       const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
@@ -92,12 +120,10 @@ export async function onRequest(context) {
 
       // Check if agent already claimed (race condition guard)
       const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
-      if (existingAgent && existingAgent.status !== 'dead') continue;
+      if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') continue;
 
-      // If agent was dead, remove old record so it can be re-claimed
-      if (existingAgent && existingAgent.status === 'dead') {
-        await db.prepare('DELETE FROM agents WHERE id = ? AND status = ?').bind(pr.agent_id, 'dead').run();
-      }
+      // If agent was dead/unclaimed, we'll UPDATE instead of INSERT below
+      const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
 
       // Claim agent
       const dna = GENESIS_DNA[pr.agent_id];
@@ -112,8 +138,8 @@ export async function onRequest(context) {
         await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
       }
 
-      // Send 85% of purchase price to agent wallet as trading capital
-      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+      // Send 90% of purchase price to agent wallet as trading capital
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
       const tradingCapital = pr.amount * (1 - feePct);
 
       const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
@@ -139,10 +165,16 @@ export async function onRequest(context) {
         continue;
       }
 
-      // Funding succeeded — create agent
-      await db.prepare(
-        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+      // Funding succeeded — create or reclaim agent
+      if (reclaimExisting) {
+        await db.prepare(
+          "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0 WHERE id = ?"
+        ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+      } else {
+        await db.prepare(
+          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+        ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+      }
 
       // Log event
       await db.prepare(
@@ -170,7 +202,7 @@ export async function onRequest(context) {
   if (stillPending.results.length > 0) {
     try {
       const protocolAddr = context.env.PROTOCOL_WALLET;
-      const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 15 }]);
+      const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 30 }]);
       const amountMatched = new Set();
 
       // Get already-used tx signatures to prevent double-matching
@@ -197,13 +229,13 @@ export async function onRequest(context) {
 
           const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
 
-          // Skip micro amounts (login range) — only match agent purchases (≥1.5 SOL)
-          if (solReceived < 1.5) continue;
+          // Skip micro amounts (login range) — only match agent purchases (≥0.3 SOL)
+          if (solReceived < 0.3) continue;
 
           for (const pr of stillPending.results) {
             if (amountMatched.has(pr.id)) continue;
-            // Match within 0.5% tolerance
-            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.005) {
+            // Match within 5% tolerance (users may round amounts)
+            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
               const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
               // Update payment request
@@ -213,13 +245,11 @@ export async function onRequest(context) {
 
               // Check if agent already claimed
               const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
-              if (existingAgent && existingAgent.status !== 'dead') {
+              if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') {
                 amountMatched.add(pr.id);
                 continue;
               }
-              if (existingAgent && existingAgent.status === 'dead') {
-                await db.prepare('DELETE FROM agents WHERE id = ? AND status = ?').bind(pr.agent_id, 'dead').run();
-              }
+              const reclaimExisting2 = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
 
               const dna = GENESIS_DNA[pr.agent_id];
               if (!dna) { amountMatched.add(pr.id); continue; }
@@ -228,16 +258,22 @@ export async function onRequest(context) {
               const kv = context.env.AGENT_KEYS;
               if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-              const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+              const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
               const tradingCapital = pr.amount * (1 - feePct);
               const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 
               if (protocolSecret) {
                 try {
                   const fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
-                  await db.prepare(
-                    "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-                  ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+                  if (reclaimExisting2) {
+                    await db.prepare(
+                      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0 WHERE id = ?"
+                    ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+                  } else {
+                    await db.prepare(
+                      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+                    ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+                  }
                   await db.prepare(
                     "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
                   ).bind(pr.agent_id, JSON.stringify({
@@ -283,12 +319,13 @@ export async function onRequest(context) {
       const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
       if (!protocolSecret || !kv) continue;
 
-      // Check if agent already exists (another retry might have succeeded)
-      const existing = await db.prepare('SELECT id FROM agents WHERE id = ?').bind(pf.agent_id).first();
-      if (existing) {
+      // Check if agent already exists and is alive (another retry might have succeeded)
+      const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pf.agent_id).first();
+      if (existing && existing.status !== 'dead' && existing.status !== 'unclaimed') {
         await db.prepare("UPDATE payment_requests SET status = 'confirmed' WHERE id = ?").bind(pf.id).run();
         continue;
       }
+      const reclaimRetry = existing && (existing.status === 'dead' || existing.status === 'unclaimed');
 
       // Get the saved keypair or generate new one
       let agentPubkey = await kv.get(`funding:${pf.id}:pubkey`);
@@ -299,16 +336,22 @@ export async function onRequest(context) {
         agentPubkey = keypair.publicKey;
       }
 
-      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
       const tradingCapital = pf.amount * (1 - feePct);
 
       const fundingTx = await sendSol(protocolSecret, agentPubkey, tradingCapital, rpcUrl);
       console.log(`Retry funded ${pf.agent_id} with ${tradingCapital} SOL, tx: ${fundingTx}`);
 
-      // Create agent now that funding succeeded
-      await db.prepare(
-        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-      ).bind(pf.agent_id, pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital).run();
+      // Create or reclaim agent now that funding succeeded
+      if (reclaimRetry) {
+        await db.prepare(
+          "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0 WHERE id = ?"
+        ).bind(pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital, pf.agent_id).run();
+      } else {
+        await db.prepare(
+          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+        ).bind(pf.agent_id, pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital).run();
+      }
 
       await db.prepare("UPDATE payment_requests SET status = 'confirmed' WHERE id = ?").bind(pf.id).run();
 

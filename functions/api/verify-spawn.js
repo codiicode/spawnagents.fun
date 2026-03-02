@@ -98,6 +98,7 @@ export async function onRequest(context) {
   const { childDna, mutations } = mutate(parentDna);
   const childGen = parent.generation + 1;
   const childId = `agent_${crypto.randomUUID().slice(0, 8)}`;
+  const childName = generateChildName(childDna);
 
   // Generate child wallet
   const keypair = await generateKeypair();
@@ -105,7 +106,7 @@ export async function onRequest(context) {
   if (kv) await kv.put(`agent:${childId}:secret`, keypair.secretKey);
 
   // Fund child wallet (SOL minus protocol fee)
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
   const tradingCapital = parseFloat((pending.sol_amount * (1 - feePct)).toFixed(6));
 
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
@@ -125,8 +126,8 @@ export async function onRequest(context) {
   // Insert child agent + spawn record + event, update pending status
   await db.batch([
     db.prepare(
-      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood) VALUES (?, ?, ?, ?, ?, ?, 'alive', ?, ?)"
-    ).bind(childId, pending.parent_id, childGen, pending.owner_wallet, keypair.publicKey, JSON.stringify(childDna), tradingCapital, pending.spawn_cost),
+      "INSERT INTO agents (id, name, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood) VALUES (?, ?, ?, ?, ?, ?, ?, 'alive', ?, ?)"
+    ).bind(childId, childName, pending.parent_id, childGen, pending.owner_wallet, keypair.publicKey, JSON.stringify(childDna), tradingCapital, pending.spawn_cost),
     db.prepare(
       "INSERT INTO spawns (parent_id, child_id, blood_burned, mutation_log) VALUES (?, ?, ?, ?)"
     ).bind(pending.parent_id, childId, pending.spawn_cost, JSON.stringify(mutations)),
@@ -144,6 +145,7 @@ export async function onRequest(context) {
     status: 'confirmed',
     child: {
       id: childId,
+      name: childName,
       parent_id: pending.parent_id,
       generation: childGen,
       dna: childDna,
@@ -152,6 +154,38 @@ export async function onRequest(context) {
       trading_capital: tradingCapital,
     },
   });
+}
+
+function generateChildName(dna) {
+  // Name based on dominant DNA traits
+  const aggressive = [
+    'The Fang', 'The Claw', 'The Blade', 'The Fury', 'The Ravager',
+    'The Mauler', 'The Striker', 'The Ripper', 'The Savage', 'The Wrath',
+    'The Hellion', 'The Brute', 'The Reaver', 'The Storm', 'The Inferno',
+  ];
+  const patient = [
+    'The Sage', 'The Warden', 'The Anchor', 'The Sentinel', 'The Arbiter',
+    'The Vigil', 'The Bastion', 'The Obelisk', 'The Monolith', 'The Shade',
+    'The Whisper', 'The Pilgrim', 'The Aegis', 'The Shroud', 'The Ember',
+  ];
+  const risky = [
+    'The Rogue', 'The Drifter', 'The Outlaw', 'The Wraith', 'The Jinx',
+    'The Maverick', 'The Chaos', 'The Hazard', 'The Tempest', 'The Vandal',
+    'The Scourge', 'The Menace', 'The Reckoning', 'The Blight', 'The Havoc',
+  ];
+  const balanced = [
+    'The Scout', 'The Prowler', 'The Stalker', 'The Seeker', 'The Hunter',
+    'The Watcher', 'The Shadow', 'The Ghost', 'The Nomad', 'The Ranger',
+    'The Cipher', 'The Vector', 'The Nexus', 'The Flux', 'The Pulse',
+  ];
+
+  let pool;
+  if (dna.aggression > 0.7) pool = aggressive;
+  else if (dna.patience > 0.6) pool = patient;
+  else if (dna.risk_tolerance > 0.65) pool = risky;
+  else pool = balanced;
+
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 async function rpcCall(url, method, params) {

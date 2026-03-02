@@ -1,17 +1,17 @@
 import { encode } from '../_lib/base58.js';
 
 const GENESIS_ARCHETYPES = {
-  "the-berserker": { name: "The Berserker", tier: "auction" },
-  "the-gambler": { name: "The Gambler", tier: "auction" },
-  "the-beast": { name: "The Beast", tier: "auction" },
-  "the-turtle": { name: "The Turtle", tier: "auction" },
-  "the-monk": { name: "The Monk", tier: "auction" },
-  "the-wolf": { name: "The Wolf", price: 4 },
-  "the-jackal": { name: "The Jackal", price: 4 },
-  "the-viper": { name: "The Viper", price: 4 },
-  "the-sniper": { name: "The Sniper", price: 3 },
-  "the-surgeon": { name: "The Surgeon", price: 3 },
-  "the-oracle": { name: "The Oracle", price: 3 },
+  "the-berserker": { name: "The Berserker", price: 1 },
+  "the-gambler": { name: "The Gambler", price: 1 },
+  "the-beast": { name: "The Beast", price: 1 },
+  "the-turtle": { name: "The Turtle", price: 1 },
+  "the-monk": { name: "The Monk", price: 1 },
+  "the-wolf": { name: "The Wolf", price: 2 },
+  "the-jackal": { name: "The Jackal", price: 2 },
+  "the-viper": { name: "The Viper", price: 2 },
+  "the-sniper": { name: "The Sniper", price: 2 },
+  "the-surgeon": { name: "The Surgeon", price: 2 },
+  "the-oracle": { name: "The Oracle", price: 2 },
   "the-hawk": { name: "The Hawk", price: 2 },
   "the-phantom": { name: "The Phantom", price: 2 },
   "the-specter": { name: "The Specter", price: 2 },
@@ -40,11 +40,9 @@ export async function onRequest(context) {
 
   const arch = GENESIS_ARCHETYPES[agent_id];
   if (!arch) return Response.json({ error: 'Unknown agent' }, { status: 404 });
-  if (arch.tier === 'auction') return Response.json({ error: 'Auction agents cannot be bought directly' }, { status: 400 });
-
-  // Check if already claimed (dead agents can be re-purchased)
+  // Check if already claimed (dead/unclaimed agents can be re-purchased)
   const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
-  if (existing && existing.status !== 'dead') return Response.json({ error: 'Already claimed' }, { status: 409 });
+  if (existing && existing.status !== 'dead' && existing.status !== 'unclaimed') return Response.json({ error: 'Already claimed' }, { status: 409 });
 
   // Generate reference (32 random bytes → base58)
   const refBytes = new Uint8Array(32);

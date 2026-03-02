@@ -86,9 +86,9 @@ export async function onRequest(context) {
             if (protoIdx < 0) continue;
 
             const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
-            if (solReceived < 1.5) continue; // skip micro amounts
+            if (solReceived < 0.3) continue; // skip micro amounts
 
-            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.005) {
+            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
               found = await verifyAndConfirm(context, db, rpcUrl, pr, sig.signature);
               if (found) break;
             }
@@ -135,7 +135,7 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   if (recipientIdx < 0) return false;
 
   const solReceived = (tx.meta.postBalances[recipientIdx] - tx.meta.preBalances[recipientIdx]) / 1e9;
-  if (solReceived < pr.amount * 0.995) return false;
+  if (solReceived < pr.amount * 0.95) return false;
 
   const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
@@ -148,23 +148,26 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const { generateKeypair, sendSol } = await import('../_lib/solana.js');
 
   const GENESIS_DNA = {
-    "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, focus: "memecoin", buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
-    "the-jackal": { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, focus: "memecoin", buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 },
-    "the-viper": { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, focus: "memecoin", buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 },
-    "the-sniper": { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, focus: "memecoin", buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 },
-    "the-surgeon": { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 },
-    "the-oracle": { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, focus: "memecoin", buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 },
-    "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
-    "the-phantom": { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, focus: "memecoin", buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 },
-    "the-specter": { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, focus: "memecoin", buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 },
-    "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, focus: "memecoin", buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
+    "the-berserker": { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 },
+    "the-monk": { degen: true, aggression: 0.88, patience: 0.2, risk_tolerance: 0.9, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 200, sell_loss_pct: 12, max_position_pct: 60, check_interval_min: 3 },
+    "the-gambler": { degen: true, aggression: 0.92, patience: 0.1, risk_tolerance: 0.99, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 250, sell_loss_pct: 50, max_position_pct: 85, check_interval_min: 2 },
+    "the-turtle": { degen: true, aggression: 0.85, patience: 0.25, risk_tolerance: 0.88, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 150, sell_loss_pct: 10, max_position_pct: 50, check_interval_min: 3 },
+    "the-beast": { degen: true, aggression: 0.98, patience: 0.05, risk_tolerance: 0.98, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 120, sell_loss_pct: 30, max_position_pct: 85, check_interval_min: 2 },
+    "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
+    "the-jackal": { aggression: 0.7, patience: 0.3, risk_tolerance: 0.65, buy_threshold_holders: 250, buy_threshold_volume: 600, sell_profit_pct: 30, sell_loss_pct: 18, max_position_pct: 55, check_interval_min: 4 },
+    "the-viper": { aggression: 0.8, patience: 0.25, risk_tolerance: 0.75, buy_threshold_holders: 200, buy_threshold_volume: 500, sell_profit_pct: 22, sell_loss_pct: 20, max_position_pct: 65, check_interval_min: 3 },
+    "the-sniper": { aggression: 0.3, patience: 0.85, risk_tolerance: 0.4, buy_threshold_holders: 1500, buy_threshold_volume: 5000, sell_profit_pct: 50, sell_loss_pct: 8, max_position_pct: 35, check_interval_min: 10 },
+    "the-surgeon": { aggression: 0.45, patience: 0.7, risk_tolerance: 0.3, buy_threshold_holders: 1000, buy_threshold_volume: 3000, sell_profit_pct: 25, sell_loss_pct: 6, max_position_pct: 30, check_interval_min: 5 },
+    "the-oracle": { aggression: 0.25, patience: 0.88, risk_tolerance: 0.25, buy_threshold_holders: 2500, buy_threshold_volume: 8000, sell_profit_pct: 70, sell_loss_pct: 5, max_position_pct: 20, check_interval_min: 12 },
+    "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
+    "the-phantom": { aggression: 0.4, patience: 0.75, risk_tolerance: 0.35, buy_threshold_holders: 1200, buy_threshold_volume: 4000, sell_profit_pct: 45, sell_loss_pct: 7, max_position_pct: 25, check_interval_min: 8 },
+    "the-specter": { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, buy_threshold_holders: 1800, buy_threshold_volume: 6000, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 },
+    "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
   };
 
   const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
-  if (existingAgent && existingAgent.status !== 'dead') return true; // already claimed
-  if (existingAgent && existingAgent.status === 'dead') {
-    await db.prepare('DELETE FROM agents WHERE id = ? AND status = ?').bind(pr.agent_id, 'dead').run();
-  }
+  if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') return true; // already claimed
+  const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
 
   const dna = GENESIS_DNA[pr.agent_id];
   if (!dna) return true;
@@ -173,7 +176,7 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.15');
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
   const tradingCapital = pr.amount * (1 - feePct);
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 
@@ -184,9 +187,15 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
 
   try {
     const fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
-    await db.prepare(
-      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-    ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+    if (reclaimExisting) {
+      await db.prepare(
+        "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0 WHERE id = ?"
+      ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+    } else {
+      await db.prepare(
+        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+    }
     await db.prepare(
       "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
     ).bind(pr.agent_id, JSON.stringify({

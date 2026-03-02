@@ -99,6 +99,29 @@ export async function getJupiterSwapTx(quoteResponse, userPublicKey) {
   return data.swapTransaction; // base64
 }
 
+// PumpPortal: get a serialized swap tx for pump.fun bonding curve (or auto-routed)
+// Returns base64-encoded tx, same format as Jupiter — sign with signAndSendSwapTx
+export async function getPumpPortalTx(publicKey, action, mint, amount, opts = {}) {
+  const res = await fetch('https://pumpportal.fun/api/trade-local', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      publicKey,
+      action,           // "buy" or "sell"
+      mint,
+      amount,           // SOL amount (if denominatedInSol) or token amount
+      denominatedInSol: opts.denominatedInSol !== undefined ? opts.denominatedInSol : (action === 'buy'),
+      slippage: opts.slippage || 15,
+      priorityFee: opts.priorityFee || 0.0005,
+      pool: opts.pool || 'auto',
+    }),
+  });
+  if (!res.ok) return null;
+  // Response is raw bytes of the serialized transaction
+  const buf = await res.arrayBuffer();
+  return bytesToBase64(new Uint8Array(buf));
+}
+
 // Sign a Jupiter swap tx and send it on-chain
 export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
   const keypairBytes = decode(secretKeyB58); // 64 bytes
@@ -125,7 +148,7 @@ export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
   const signedBase64 = bytesToBase64(signedTx);
   const result = await rpcCall(rpcUrl, 'sendTransaction', [
     signedBase64,
-    { encoding: 'base64', skipPreflight: false },
+    { encoding: 'base64', skipPreflight: true, preflightCommitment: 'confirmed' },
   ]);
 
   return result; // tx signature string

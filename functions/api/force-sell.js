@@ -1,4 +1,4 @@
-import { getTokenBalances, getJupiterQuote, getJupiterSwapTx, signAndSendSwapTx, setJupiterApiKey, SOL_MINT } from "../_lib/solana.js";
+import { getTokenBalances, getJupiterQuote, getJupiterSwapTx, signAndSendSwapTx, getPumpPortalTx, setJupiterApiKey, SOL_MINT, sendSol, getBalance } from "../_lib/solana.js";
 import { getTokenData } from "../_lib/market-data.js";
 
 export async function onRequest(context) {
@@ -10,11 +10,77 @@ export async function onRequest(context) {
   const rpcUrl = context.env.RPC_URL;
   const kv = context.env.AGENT_KEYS;
   const url = new URL(context.request.url);
-  const mode = url.searchParams.get("mode") || "old"; // "old" = age filter, "small" = value filter, "symbol" = specific token
+  const mode = url.searchParams.get("mode") || "old";
+
+  // Withdraw mode: send all SOL from agent wallet to a target address
+  if (mode === "withdraw") {
+    const agentId = url.searchParams.get("agent_id");
+    const toAddress = url.searchParams.get("to");
+    if (!agentId || !toAddress) return Response.json({ error: "Need agent_id and to params" }, { status: 400 });
+
+    const agent = await db.prepare("SELECT * FROM agents WHERE id = ?").bind(agentId).first();
+    if (!agent) return Response.json({ error: "Agent not found" }, { status: 404 });
+
+    const agentSecret = await kv.get(`agent:${agentId}:secret`);
+    if (!agentSecret) return Response.json({ error: "No secret key" }, { status: 404 });
+
+    const balance = await getBalance(agent.agent_wallet, rpcUrl);
+    const sendAmount = balance - 0.001; // keep 0.001 for tx fee
+    if (sendAmount <= 0) return Response.json({ error: "Insufficient balance", balance });
+
+    try {
+      const txSig = await sendSol(agentSecret, toAddress, sendAmount, rpcUrl);
+      return Response.json({ success: true, agent_id: agentId, sent: sendAmount, to: toAddress, tx: txSig });
+    } catch (e) {
+      return Response.json({ error: e.message, balance }, { status: 500 });
+    }
+  }
   const maxValueUsd = parseFloat(url.searchParams.get("max_usd") || "10");
   const maxAgeHours = parseFloat(url.searchParams.get("max_age_hours") || "240"); // 10 days
   const targetSymbol = url.searchParams.get("symbol")?.toUpperCase();
 
+  const DEGEN_IDS = new Set(["the-berserker", "the-gambler", "the-beast", "the-turtle", "the-monk"]);
+
+  // Degen mode: sell all degen holdings over a mcap threshold via PumpPortal
+  if (mode === "degen") {
+    const maxMcap = parseFloat(url.searchParams.get("max_mcap") || "150000");
+    const results = [];
+
+    for (const agentId of DEGEN_IDS) {
+      const agent = await db.prepare("SELECT * FROM agents WHERE id = ? AND status = 'alive'").bind(agentId).first();
+      if (!agent) continue;
+      const agentSecret = await kv.get(`agent:${agentId}:secret`);
+      if (!agentSecret) continue;
+
+      const tokens = await getTokenBalances(agent.agent_wallet, rpcUrl).catch(() => []);
+      for (const token of tokens) {
+        const data = await getTokenData(token.mint).catch(() => null);
+        const mcap = data?.market_cap || 0;
+        if (mcap <= maxMcap && mcap > 0) continue; // under cap, keep it
+
+        try {
+          const ppTx = await getPumpPortalTx(agent.agent_wallet, 'sell', token.mint, token.amount, {
+            denominatedInSol: false, slippage: 25, pool: 'auto',
+          });
+          if (!ppTx) { results.push({ agent: agentId, token: data?.symbol || token.mint.slice(0,6), mcap, error: 'pumpportal tx failed' }); continue; }
+
+          const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
+          await db.batch([
+            db.prepare(
+              "INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade, tx_signature) VALUES (?, ?, 'sell', 0, ?, 0, 0, ?)"
+            ).bind(agentId, token.mint, token.amount, txSig),
+            db.prepare("UPDATE agents SET total_trades = total_trades + 1, last_trade_at = datetime('now') WHERE id = ?").bind(agentId),
+          ]);
+          results.push({ agent: agentId, token: data?.symbol || token.mint.slice(0,6), mcap, amount: token.amount, tx: txSig });
+        } catch (e) {
+          results.push({ agent: agentId, token: data?.symbol || token.mint.slice(0,6), mcap, error: e.message });
+        }
+      }
+    }
+    return Response.json({ forced_sells: results.length, results });
+  }
+
+  // --- Original modes (Jupiter) ---
   const agents = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
   const results = [];
 

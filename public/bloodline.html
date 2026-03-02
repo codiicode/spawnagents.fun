@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #08050a;
+      --bg: #0a0608;
       --surface: rgba(180, 30, 50, 0.04);
       --surface-hover: rgba(180, 30, 50, 0.08);
       --border: rgba(180, 30, 50, 0.12);
@@ -23,6 +23,8 @@
       --blood-bright: #e63950;
       --blood-deep: #8b1528;
       --blood-dim: rgba(196, 30, 58, 0.15);
+      --blood-glow: rgba(196, 30, 58, 0.08);
+      --blood-glow-strong: rgba(196, 30, 58, 0.15);
       --text: #ede8ea;
       --text-muted: #9e9396;
       --text-dim: #6b5f63;
@@ -47,6 +49,11 @@
       overflow: hidden;
       height: 100vh;
       -webkit-font-smoothing: antialiased;
+    }
+
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(8, 4, 6, 0.6) 100%);
     }
 
     /* === AMBIENT BACKGROUND === */
@@ -288,22 +295,22 @@
     /* Edges */
     .edge-line {
       fill: none;
-      stroke-width: 1;
+      stroke-width: 2;
       transition: opacity 0.3s;
     }
 
     .edge-royalty {
       fill: none;
-      stroke: var(--blood);
-      stroke-width: 1;
+      stroke: var(--green);
+      stroke-width: 1.5;
       stroke-dasharray: 3 6;
-      opacity: 0.2;
+      opacity: 0.5;
     }
 
     @keyframes royalty-flow {
       to { stroke-dashoffset: -18; }
     }
-    .edge-royalty { animation: royalty-flow 4s linear infinite; }
+    .edge-royalty { animation: royalty-flow 2s linear infinite; }
 
     /* Nodes */
     .node-group {
@@ -315,31 +322,33 @@
       transition: filter 0.2s;
     }
 
-    .node-outer {
+    .node-border {
       fill: none;
       stroke-width: 1;
-      transition: stroke 0.2s;
+      transition: stroke 0.2s, filter 0.2s;
     }
 
-    .node-inner {
-      fill: rgba(8, 5, 10, 0.9);
+    .node-bg {
+      transition: fill 0.2s;
     }
 
-    .node-genesis .node-outer { stroke: var(--blood); }
-    .node-genesis .node-inner { fill: rgba(139, 21, 40, 0.08); }
+    .node-genesis .node-border { stroke: var(--blood); stroke-width: 1.5; }
+    .node-genesis .node-bg { fill: rgba(139, 21, 40, 0.12); }
 
-    .node-alive-profit .node-outer { stroke: rgba(74, 158, 106, 0.35); }
-    .node-alive-loss .node-outer { stroke: rgba(196, 64, 64, 0.3); }
+    .node-alive-profit .node-border { stroke: rgba(74, 158, 106, 0.5); }
+    .node-alive-profit .node-bg { fill: rgba(74, 158, 106, 0.06); }
+    .node-alive-loss .node-border { stroke: rgba(196, 64, 64, 0.4); }
+    .node-alive-loss .node-bg { fill: rgba(196, 64, 64, 0.06); }
 
-    .node-unclaimed .node-outer { stroke: var(--text-dim); opacity: 0.5; stroke-dasharray: 4 3; }
-    .node-unclaimed .node-inner { fill: rgba(20, 16, 22, 0.5); }
-    .node-dead .node-outer { stroke: var(--text-dim); opacity: 0.4; }
-    .node-dead .node-inner { fill: rgba(20, 16, 22, 0.7); }
+    .node-unclaimed .node-border { stroke: var(--text-dim); opacity: 0.5; stroke-dasharray: 4 3; }
+    .node-unclaimed .node-bg { fill: rgba(20, 16, 22, 0.6); }
+    .node-dead .node-border { stroke: var(--text-dim); opacity: 0.4; }
+    .node-dead .node-bg { fill: rgba(20, 16, 22, 0.7); }
 
-    .node-selected .node-outer {
+    .node-selected .node-border {
       stroke: var(--blood-bright);
-      stroke-width: 1.5;
-      filter: drop-shadow(0 0 6px rgba(230, 57, 80, 0.3));
+      stroke-width: 2;
+      filter: drop-shadow(0 0 8px rgba(230, 57, 80, 0.4));
     }
 
     /* Alive pulse */
@@ -349,7 +358,7 @@
     }
     .pulse-ring {
       fill: none;
-      stroke-width: 0.5;
+      stroke-width: 0.8;
       opacity: 0;
       animation: node-pulse 3s ease-in-out infinite;
     }
@@ -360,18 +369,18 @@
     /* Node text */
     .node-label {
       font-family: var(--font-mono);
-      font-size: 9px;
+      font-size: 10px;
       fill: var(--text);
       text-anchor: middle;
-      font-weight: 500;
-      letter-spacing: 0.02em;
+      font-weight: 600;
+      letter-spacing: 0.04em;
     }
     .node-unclaimed .node-label { fill: var(--text-dim); }
     .node-dead .node-label { fill: var(--text-dim); }
 
     .node-gen-badge {
       font-family: var(--font-mono);
-      font-size: 7.5px;
+      font-size: 8px;
       font-weight: 600;
       letter-spacing: 0.1em;
       text-anchor: middle;
@@ -379,7 +388,7 @@
 
     .node-pnl-text {
       font-family: var(--font-mono);
-      font-size: 8.5px;
+      font-size: 9.5px;
       font-weight: 500;
       text-anchor: middle;
     }
@@ -731,9 +740,189 @@
     footer a { color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
     footer a:hover { color: var(--blood); }
     .footer-links { display: flex; gap: 20px; }
+
+    /* === BLOOD VEINS === */
+    .vein-bg-tree {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 0; opacity: 0.06;
+    }
+    .vein-bg-tree .vein { fill: none; stroke-linecap: round; }
+    .vein-bg-tree .vein-main {
+      stroke: rgba(139, 21, 40, 0.5); stroke-width: 2;
+      stroke-dasharray: 1200; stroke-dashoffset: 1200;
+      animation: vein-flow-slow 12s ease-in-out infinite;
+    }
+    .vein-bg-tree .vein-branch {
+      stroke: rgba(139, 21, 40, 0.3); stroke-width: 1.2;
+      stroke-dasharray: 400; stroke-dashoffset: 400;
+      animation: vein-flow-slow 12s ease-in-out 1s infinite;
+    }
+    @keyframes vein-flow-slow {
+      0% { stroke-dashoffset: 1200; opacity: 0.2; }
+      30% { stroke-dashoffset: 0; opacity: 0.6; }
+      50% { stroke-dashoffset: 0; opacity: 0.4; }
+      70% { stroke-dashoffset: -1200; opacity: 0.6; }
+      100% { stroke-dashoffset: -1200; opacity: 0.2; }
+    }
+
+    /* === SOUND TOGGLE === */
+    .nav-sound {
+      background: none; border: 1px solid var(--border); color: var(--text-dim);
+      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
+      font-family: var(--font-mono); line-height: 1;
+    }
+    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
+    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
+
+    /* === TREE HEARTBEAT === */
+    @keyframes tree-heartbeat {
+      0%, 100% { background: transparent; }
+      15% { background: rgba(139, 21, 40, 0.015); }
+      30% { background: transparent; }
+      45% { background: rgba(139, 21, 40, 0.01); }
+    }
+    .tree-viewport { animation: tree-heartbeat 2.5s ease-in-out infinite; }
+
+    /* === NODE BREATHING === */
+    @keyframes node-breathe {
+      0%, 100% { scale: 1; }
+      50% { scale: 1.02; }
+    }
+    .breathing .node-body {
+      animation: node-breathe 4s ease-in-out infinite;
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    /* === BLOOD FLOW EDGES === */
+    .edge-animated {
+      stroke-dasharray: 8 12;
+      animation: blood-flow 3s linear infinite, edge-pulse 3s ease-in-out infinite;
+    }
+    .edge-animated.edge-dead {
+      animation: none;
+      stroke-dasharray: none;
+    }
+    @keyframes blood-flow {
+      to { stroke-dashoffset: -40; }
+    }
+    @keyframes edge-pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 0.9; }
+    }
+
+    /* === LINEAGE HOVER === */
+    .lineage-active .node-group:not(.lineage-lit) { opacity: 0.15; transition: opacity 0.3s; }
+    .lineage-active .edge-line:not(.lineage-lit) { opacity: 0.05 !important; transition: opacity 0.3s; }
+    .lineage-active .edge-royalty:not(.lineage-lit) { opacity: 0.05 !important; }
+    .lineage-active .lineage-lit.node-group { opacity: 1; }
+    .lineage-active .lineage-lit.edge-line {
+      opacity: 0.8 !important;
+      filter: drop-shadow(0 0 4px rgba(196, 30, 58, 0.4));
+    }
+
+    /* === STATUS DOTS === */
+    .status-dot { pointer-events: none; }
+    .hb-dot-green { animation: hb-pulse-green 2s ease-in-out infinite; }
+    .hb-dot-amber { animation: hb-pulse-amber 2.5s ease-in-out infinite; }
+    .hb-dot-red { opacity: 0.6; }
+    .hb-dot-idle { opacity: 0.3; }
+    @keyframes hb-pulse-green {
+      0%, 100% { opacity: 0.6; r: 4; }
+      50% { opacity: 1; r: 5; }
+    }
+    @keyframes hb-pulse-amber {
+      0%, 100% { opacity: 0.5; r: 4; }
+      50% { opacity: 0.9; r: 4.5; }
+    }
+
+    /* === CURSOR BLOOD TRAIL === */
+    .blood-trail-dot {
+      position: fixed;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(196, 30, 58, 0.4), transparent 70%);
+      pointer-events: none;
+      z-index: 9997;
+      animation: blood-trail-fade 500ms ease-out forwards;
+    }
+    @keyframes blood-trail-fade {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.3); opacity: 0; }
+    }
+
+    /* === TRADE HISTORY === */
+    .trade-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 0;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      border-left: 2px solid var(--text-dim);
+      padding-left: 8px;
+    }
+    .trade-row + .trade-row { border-top: 1px solid rgba(180, 30, 50, 0.06); }
+    .trade-row.buy { border-left-color: var(--green); }
+    .trade-row.sell { border-left-color: var(--red); }
+    .trade-action { font-weight: 600; width: 26px; flex-shrink: 0; }
+    .trade-action.buy { color: var(--green); }
+    .trade-action.sell { color: var(--red); }
+    .trade-token { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trade-token a { color: inherit; text-decoration: none; transition: color 0.15s; }
+    .trade-token a:hover { color: var(--blood); }
+    .trade-amount { color: var(--text); font-weight: 500; flex-shrink: 0; }
+    .trade-pnl { font-weight: 500; flex-shrink: 0; }
+    .trade-pnl.pos { color: var(--green); }
+    .trade-pnl.neg { color: var(--red); }
+    .trade-meta { color: var(--text-dim); flex-shrink: 0; font-size: 9px; display: flex; gap: 6px; align-items: center; }
+    .trade-tx { color: var(--text-dim); text-decoration: none; font-size: 9px; transition: color 0.15s; }
+    .trade-tx:hover { color: var(--blood); }
+    .trades-empty { font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); }
+
+    /* === SHARE MODAL === */
+    .share-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+    }
+    .share-overlay.open { display: flex; }
+    .share-modal {
+      background: #0d0a10; border: 1px solid var(--border-strong);
+      padding: 24px; max-width: 660px; width: 95%; position: relative;
+    }
+    .share-modal canvas { width: 100%; height: auto; display: block; margin-bottom: 16px; border: 1px solid var(--border); }
+    .share-actions { display: flex; gap: 10px; }
+    .share-btn {
+      flex: 1; padding: 10px; background: none;
+      border: 1px solid var(--border); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .share-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .share-btn.primary { border-color: var(--blood-deep); color: var(--blood); }
+    .share-btn.primary:hover { background: var(--blood-deep); color: var(--text); border-color: var(--blood); }
+    .share-close {
+      position: absolute; top: 10px; right: 14px;
+      background: none; border: none; color: var(--text-dim);
+      font-size: 16px; cursor: pointer; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center; transition: color 0.2s;
+    }
+    .share-close:hover { color: var(--text); }
+
+    .detail-share-btn {
+      display: inline-block; padding: 4px 10px;
+      background: none; border: 1px solid var(--border);
+      color: var(--text-dim); font-family: var(--font-mono);
+      font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+      cursor: pointer; transition: all 0.2s; float: right; margin-top: -2px;
+    }
+    .detail-share-btn:hover { border-color: var(--blood-deep); color: var(--blood); }
   </style>
 </head>
 <body>
+<div class="vignette"></div>
 
 <!-- NAV -->
 <nav>
@@ -744,6 +933,7 @@
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
+    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -781,6 +971,18 @@
   </div>
 </div>
 
+<!-- SHARE MODAL -->
+<div class="share-overlay" id="shareOverlay" onclick="if(event.target===this)closeShareCard()">
+  <div class="share-modal">
+    <button class="share-close" onclick="closeShareCard()">&times;</button>
+    <canvas id="shareCanvas" width="600" height="340"></canvas>
+    <div class="share-actions">
+      <button class="share-btn" onclick="downloadShareCard()">Download PNG</button>
+      <button class="share-btn primary" onclick="tweetShareCard()">Post on X</button>
+    </div>
+  </div>
+</div>
+
 <!-- APP -->
 <div class="app">
 
@@ -797,7 +999,16 @@
   </div>
 
   <!-- TREE VIEWPORT -->
-  <div class="tree-viewport" id="treeViewport">
+  <div class="tree-viewport" id="treeViewport" style="position:relative;">
+    <svg class="vein-bg-tree" viewBox="0 0 1600 900" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path class="vein vein-main" d="M-20,450 C200,350 400,550 600,400 S900,300 1100,500 S1400,350 1620,450"/>
+      <path class="vein vein-branch" d="M400,550 C450,600 500,620 560,590"/>
+      <path class="vein vein-branch" d="M900,300 C940,250 980,230 1030,260"/>
+      <path class="vein vein-branch" d="M600,400 C640,370 680,350 720,375"/>
+      <path class="vein vein-main" d="M-20,200 C300,250 500,150 800,220 S1100,180 1300,250 S1500,200 1620,230" style="animation-delay:4s;"/>
+      <path class="vein vein-branch" d="M500,150 C530,120 560,110 600,130" style="animation-delay:4.5s;"/>
+      <path class="vein vein-branch" d="M1100,180 C1130,150 1160,140 1200,160" style="animation-delay:5s;"/>
+    </svg>
     <div class="tree-canvas" id="treeCanvas">
       <svg class="tree-svg" id="treeSvg"></svg>
     </div>
@@ -833,6 +1044,30 @@
 
 <script>
 // ============================================================
+// SPAWN SOUND ENGINE (compact)
+// ============================================================
+const SpawnAudio = (() => {
+  let ctx=null,enabled=false;
+  function getCtx(){if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();return ctx;}
+  function toggle(){
+    enabled=!enabled;localStorage.setItem('spawn_sound',enabled?'1':'0');
+    document.getElementById('soundBtn')?.classList.toggle('active',enabled);
+  }
+  function playClick(){
+    if(!enabled)return;const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+    o.type='sine';o.frequency.setValueAtTime(300,c.currentTime);o.frequency.exponentialRampToValueAtTime(80,c.currentTime+0.12);
+    g.gain.setValueAtTime(0.25,c.currentTime);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.15);
+    o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+0.18);
+  }
+  if(localStorage.getItem('spawn_sound')==='1'){
+    enabled=true;
+    requestAnimationFrame(()=>document.getElementById('soundBtn')?.classList.add('active'));
+  }
+  return {toggle,playClick};
+})();
+document.addEventListener('click',(e)=>{if(e.target.matches('button,a.nav-wallet'))SpawnAudio.playClick();});
+
+// ============================================================
 // DATA
 // ============================================================
 
@@ -854,6 +1089,28 @@ const GENESIS_BASE = [
   { id: "the-specter", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.35, patience: 0.8, risk_tolerance: 0.3, sell_profit_pct: 55, sell_loss_pct: 6, max_position_pct: 22, check_interval_min: 10 }},
   { id: "the-colossus", parent_id: null, generation: 0, status: "unclaimed", total_pnl: 0, total_trades: 0, dna: { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 }},
 ];
+
+const AGENT_IMAGES = {
+  'the-hawk': '/hawk.jpg',
+  'the-phantom': '/phantom.jpg',
+  'the-viper': '/viper.jpg',
+  'the-beast': '/the-beast.jpg',
+  'the-berserker': '/the-berserker.jpg',
+  'the-bull': '/the-bull.jpg',
+  'the-colossus': '/the-colossus.jpg',
+  'the-jackal': '/the-jackal.jpg',
+  'the-oracle': '/the-oracle.jpg',
+  'the-serpent': '/the-serpent.jpg',
+  'the-shark': '/the-shark.jpg',
+  'the-specter': '/the-specter.jpg',
+  'the-turtle': '/the-turtle.jpg',
+  'the-wolf': '/the-wolf.jpg',
+  'the-wraith': '/the-wraith.jpg',
+  'the-monk': '/the-monk.jpg',
+  'the-gambler': '/the-gambler.jpg',
+  'the-sniper': '/the-sniper.jpg',
+  'the-surgeon': '/the-surgeon.jpg',
+};
 
 let allAgents = [];
 let treeNodes = [];
@@ -885,10 +1142,10 @@ function buildForest(agents) {
 // LAYOUT ENGINE
 // ============================================================
 
-const NODE_W = 120;
-const NODE_H = 52;
-const H_GAP = 24;
-const V_GAP = 72;
+const NODE_W = 160;
+const NODE_H = 130;
+const H_GAP = 36;
+const V_GAP = 100;
 
 function layoutForest(roots) {
   const nodes = [];
@@ -932,7 +1189,7 @@ function layoutForest(roots) {
   let startX = 0;
   roots.forEach(r => {
     const subtreeWidth = r._leafCount * (NODE_W + H_GAP) - H_GAP;
-    position(r, startX + subtreeWidth / 2, 40);
+    position(r, startX + subtreeWidth / 2, 80);
     startX += subtreeWidth + NODE_W + H_GAP;
   });
 
@@ -965,12 +1222,15 @@ function getEdgeColor(from, to) {
   return 'rgba(196, 64, 64, 0.2)';
 }
 
-function formatName(id) {
+function formatName(id, name) {
+  if (name) return name;
   return id.replace('the-', '').replace(/-/g, ' ');
 }
 
 function renderTree(nodes, edges) {
   const svg = document.getElementById('treeSvg');
+  const AV_R = 32; // avatar radius
+  const AV_CY = -14; // avatar center Y
 
   if (!nodes.length) {
     svg.innerHTML = '';
@@ -989,18 +1249,23 @@ function renderTree(nodes, edges) {
   svg.style.width = maxX + 'px';
   svg.style.height = maxY + 'px';
 
-  // Build SVG content
   let html = '';
 
-  // Defs for gradients
+  // Defs: gradients + clip paths
   html += '<defs>';
   edges.forEach((e, i) => {
-    const fromColor = e.from.generation === 0 ? 'rgba(196, 30, 58, 0.3)' : 'rgba(180, 30, 50, 0.15)';
-    const toColor = e.to.status === 'dead' ? 'rgba(94, 82, 87, 0.15)' : fromColor;
-    html += `<linearGradient id="eg${i}" x1="0" y1="0" x2="0" y2="1">
+    const gy1 = e.from._y + NODE_H / 2;
+    const gy2 = e.to._y - NODE_H / 2;
+    const isGenEdge = e.from.generation === 0;
+    const fromColor = isGenEdge ? 'rgba(196, 30, 58, 0.8)' : 'rgba(180, 30, 50, 0.6)';
+    const toColor = e.to.status === 'dead' ? 'rgba(94, 82, 87, 0.2)' : fromColor;
+    html += `<linearGradient id="eg${i}" gradientUnits="userSpaceOnUse" x1="0" y1="${gy1}" x2="0" y2="${gy2}">
       <stop offset="0%" stop-color="${fromColor}"/>
       <stop offset="100%" stop-color="${toColor}"/>
     </linearGradient>`;
+  });
+  nodes.forEach(node => {
+    html += `<clipPath id="clip-${node.id}"><circle cx="0" cy="${AV_CY}" r="${AV_R}"/></clipPath>`;
   });
   html += '</defs>';
 
@@ -1009,60 +1274,88 @@ function renderTree(nodes, edges) {
     const x1 = e.from._x, y1 = e.from._y + NODE_H / 2;
     const x2 = e.to._x, y2 = e.to._y - NODE_H / 2;
     const midY = (y1 + y2) / 2;
+    const isDead = e.to.status === 'dead';
 
-    html += `<path class="edge-line" d="M${x1} ${y1} C${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}"
-      stroke="url(#eg${i})" opacity="${e.to.status === 'dead' ? 0.3 : 0.6}"/>`;
+    html += `<path class="edge-line edge-animated${isDead ? ' edge-dead' : ''}"
+      data-from="${e.from.id}" data-to="${e.to.id}"
+      d="M${x1} ${y1} C${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}"
+      stroke="url(#eg${i})"${isDead ? ' opacity="0.3"' : ''}
+      style="animation-delay: ${(Math.random() * 2).toFixed(1)}s"/>`;
 
     // Royalty flow (from profitable child upward)
     if (e.to.total_pnl > 0 && e.to.status === 'alive' && e.to.generation > 0) {
-      html += `<path class="edge-royalty" d="M${x2} ${y2} C${x2} ${midY}, ${x1} ${midY}, ${x1} ${y1}"/>`;
+      html += `<path class="edge-royalty" data-from="${e.from.id}" data-to="${e.to.id}"
+        d="M${x2} ${y2} C${x2} ${midY}, ${x1} ${midY}, ${x1} ${y1}"/>`;
     }
   });
 
   // Nodes
   nodes.forEach(node => {
     const cls = getNodeClass(node);
-    const x = node._x - NODE_W / 2;
-    const y = node._y - NODE_H / 2;
     const isSelected = selectedNode && selectedNode.id === node.id;
+    const canBreathe = node.status !== 'dead' && node.status !== 'unclaimed';
 
-    html += `<g class="node-group ${cls} ${isSelected ? 'node-selected' : ''}"
+    html += `<g class="node-group ${cls} ${isSelected ? 'node-selected' : ''} ${canBreathe ? 'breathing' : ''}"
       data-id="${node.id}" onclick="selectNode('${node.id}')"
-      transform="translate(${node._x}, ${node._y})">`;
+      transform="translate(${node._x}, ${node._y})"
+      ${canBreathe ? `style="--breathe-delay: ${(Math.random() * 4).toFixed(1)}s"` : ''}>`;
 
-    // Body group
-    html += '<g class="node-body">';
+    html += '<g class="node-body"'
+      + (canBreathe ? ` style="animation-delay: var(--breathe-delay)"` : '')
+      + '>';
 
-    // Pulse ring for alive agents
-    if (node.status === 'alive') {
-      html += `<rect class="pulse-ring" x="${-NODE_W/2 - 3}" y="${-NODE_H/2 - 3}"
-        width="${NODE_W + 6}" height="${NODE_H + 6}" rx="3"
-        style="animation-delay: ${Math.random() * 3}s"/>`;
+    // Pulse ring (circle)
+    if (node.status === 'alive' || node.generation === 0) {
+      html += `<circle class="pulse-ring" cx="0" cy="${AV_CY}" r="${AV_R + 4}"
+        style="animation-delay: ${(Math.random() * 3).toFixed(1)}s"/>`;
     }
 
-    // Outer rect
-    html += `<rect class="node-outer" x="${-NODE_W/2}" y="${-NODE_H/2}"
-      width="${NODE_W}" height="${NODE_H}" rx="2"/>`;
+    // Background circle
+    html += `<circle class="node-bg" cx="0" cy="${AV_CY}" r="${AV_R}"/>`;
 
-    // Inner rect
-    html += `<rect class="node-inner" x="${-NODE_W/2 + 0.5}" y="${-NODE_H/2 + 0.5}"
-      width="${NODE_W - 1}" height="${NODE_H - 1}" rx="1.5"/>`;
+    // Avatar image or initial
+    const imgPath = AGENT_IMAGES[node.id];
+    if (imgPath) {
+      html += `<image href="${imgPath}" x="${-AV_R}" y="${AV_CY - AV_R}" width="${AV_R * 2}" height="${AV_R * 2}"
+        clip-path="url(#clip-${node.id})" preserveAspectRatio="xMidYMid slice"/>`;
+    } else {
+      const initial = formatName(node.id, node.name).charAt(0).toUpperCase();
+      html += `<text x="0" y="${AV_CY + 5}" text-anchor="middle" fill="var(--text-dim)"
+        font-family="var(--font-mono)" font-size="18" font-weight="700">${initial}</text>`;
+    }
+
+    // Border circle
+    html += `<circle class="node-border" cx="0" cy="${AV_CY}" r="${AV_R}"/>`;
+
+    // Name
+    html += `<text class="node-label" y="30">${formatName(node.id, node.name)}</text>`;
+
+    // PnL
+    if (node.status === 'dead') {
+      html += `<text class="node-pnl-text" y="44" fill="var(--text-dim)">EXTINCT</text>`;
+    } else {
+      const pnlColor = node.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      const pnlSign = node.total_pnl >= 0 ? '+' : '';
+      html += `<text class="node-pnl-text" y="44" fill="${pnlColor}">${pnlSign}${node.total_pnl.toFixed(1)} SOL</text>`;
+    }
 
     // Gen badge
     const genText = node.generation === 0 ? 'GENESIS' : 'GEN ' + node.generation;
     const genColor = node.generation === 0 ? 'var(--blood)' : 'var(--text-dim)';
-    html += `<text class="node-gen-badge" y="-8" fill="${genColor}">${genText}</text>`;
+    html += `<text class="node-gen-badge" y="57" fill="${genColor}">${genText}</text>`;
 
-    // Name
-    html += `<text class="node-label" y="5">${formatName(node.id)}</text>`;
-
-    // PnL
-    if (node.status === 'dead') {
-      html += `<text class="node-pnl-text" y="18" fill="var(--text-dim)">EXTINCT</text>`;
-    } else {
-      const pnlColor = node.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
-      const pnlSign = node.total_pnl >= 0 ? '+' : '';
-      html += `<text class="node-pnl-text" y="18" fill="${pnlColor}">${pnlSign}${node.total_pnl.toFixed(1)} SOL</text>`;
+    // Status dot (top-right of avatar circle)
+    if (node.status === 'alive') {
+      let dotColor, dotClass;
+      if (node.last_trade_at) {
+        const elapsed = (Date.now() - new Date(node.last_trade_at).getTime()) / 60000;
+        if (elapsed < 5) { dotColor = 'var(--green)'; dotClass = 'hb-dot-green'; }
+        else if (elapsed < 30) { dotColor = '#d4a03a'; dotClass = 'hb-dot-amber'; }
+        else { dotColor = 'var(--red)'; dotClass = 'hb-dot-red'; }
+      } else {
+        dotColor = 'var(--text-dim)'; dotClass = 'hb-dot-idle';
+      }
+      html += `<circle class="status-dot ${dotClass}" cx="${AV_R - 4}" cy="${AV_CY - AV_R + 8}" r="5" fill="${dotColor}"/>`;
     }
 
     html += '</g></g>';
@@ -1070,12 +1363,11 @@ function renderTree(nodes, edges) {
 
   svg.innerHTML = html;
 
-  // Store for later use
   treeNodes = nodes;
   treeEdges = edges;
 
-  // Update minimap
   renderMinimap(nodes);
+  attachLineageHover();
 }
 
 // ============================================================
@@ -1131,10 +1423,10 @@ function selectNode(id) {
   html += '<div class="detail-lineage">';
   lineage.forEach((l, i) => {
     if (i > 0) html += '<span class="lineage-sep">/</span>';
-    html += `<span class="lineage-crumb" onclick="selectNode('${l.id}')">${formatName(l.id)}</span>`;
+    html += `<span class="lineage-crumb" onclick="selectNode('${l.id}')">${formatName(l.id, l.name)}</span>`;
   });
   html += '</div>';
-  html += `<div class="detail-name">${formatName(node.id)}</div>`;
+  html += `<div class="detail-name">${formatName(node.id, node.name)}</div>`;
   html += '<div class="detail-status-row">';
   html += `<span class="detail-gen ${node.generation === 0 ? 'g0' : 'gN'}">${node.generation === 0 ? 'Genesis' : 'Gen ' + node.generation}</span>`;
   html += `<span class="detail-alive ${node.status}">${node.status}</span>`;
@@ -1142,7 +1434,7 @@ function selectNode(id) {
 
   // Performance
   html += '<div class="detail-section">';
-  html += '<div class="detail-section-label">Performance</div>';
+  html += `<div class="detail-section-label">Performance<button class="detail-share-btn" onclick="openShareCard('${node.id}')">share</button></div>`;
   const pnlClass = node.total_pnl >= 0 ? 'pos' : 'neg';
   const pnlSign = node.total_pnl >= 0 ? '+' : '';
   html += `<div class="detail-kv"><span class="k">PnL</span><span class="v ${pnlClass}">${pnlSign}${node.total_pnl.toFixed(2)} SOL</span></div>`;
@@ -1152,6 +1444,12 @@ function selectNode(id) {
     const wallet = node.owner_wallet.length > 10 ? node.owner_wallet.slice(0, 4) + '...' + node.owner_wallet.slice(-4) : node.owner_wallet;
     html += `<div class="detail-kv"><span class="k">Owner</span><span class="v">${wallet}</span></div>`;
   }
+  html += '</div>';
+
+  // Trade History (loaded async)
+  html += '<div class="detail-section" id="detail-trades">';
+  html += '<div class="detail-section-label">Trade History</div>';
+  html += '<div class="trades-empty">loading...</div>';
   html += '</div>';
 
   // Portfolio (loaded async)
@@ -1197,7 +1495,7 @@ function selectNode(id) {
       const cPnlSign = child.total_pnl >= 0 ? '+' : '';
       html += `<div class="child-item" onclick="selectNode('${child.id}')">
         <div class="child-indicator ${child.status}"></div>
-        <span class="child-name">${formatName(child.id)}</span>
+        <span class="child-name">${formatName(child.id, child.name)}</span>
         <span class="child-pnl ${cPnlClass}">${cPnlSign}${child.total_pnl.toFixed(1)}</span>
       </div>`;
     });
@@ -1225,6 +1523,9 @@ function selectNode(id) {
   if (node.agent_wallet) {
     loadDetailPortfolio(node.id, node.agent_wallet);
   }
+
+  // Fetch trade history async
+  loadDetailTrades(node.id);
 }
 
 async function loadDetailPortfolio(agentId, wallet) {
@@ -1261,6 +1562,295 @@ function closeDetail() {
   const forest = buildForest(filtered);
   const { nodes, edges } = layoutForest(forest.roots);
   renderTree(nodes, edges);
+}
+
+// ============================================================
+// TRADE HISTORY
+// ============================================================
+
+function getTimeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return mins + 'm';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h';
+  const days = Math.floor(hrs / 24);
+  return days + 'd';
+}
+
+function truncateToken(addr) {
+  if (!addr || addr.length < 10) return addr || '?';
+  return addr.slice(0, 4) + '...' + addr.slice(-4);
+}
+
+async function loadDetailTrades(agentId) {
+  const el = document.getElementById('detail-trades');
+  if (!el) return;
+  try {
+    const r = await fetch(`/api/agents?id=${agentId}`);
+    if (!r.ok) { el.querySelector('.trades-empty').textContent = 'unavailable'; return; }
+    const data = await r.json();
+    const agent = data.agent || data;
+    const trades = agent.trades || [];
+    let h = '<div class="detail-section-label">Trade History</div>';
+    if (!trades.length) {
+      h += '<div class="trades-empty">no trades yet</div>';
+      el.innerHTML = h; return;
+    }
+    // Show most recent first, max 30
+    const sorted = trades.slice().sort((a, b) => new Date(b.created_at || b.timestamp) - new Date(a.created_at || a.timestamp)).slice(0, 30);
+    sorted.forEach(t => {
+      const action = (t.action || t.type || 'BUY').toUpperCase();
+      const isBuy = action === 'BUY';
+      const token = t.token_mint || t.token || '';
+      const solAmt = t.sol_amount != null ? parseFloat(t.sol_amount).toFixed(3) : '—';
+      const pnl = t.pnl != null && !isBuy ? parseFloat(t.pnl) : null;
+      const time = t.created_at || t.timestamp || '';
+      const tx = t.tx_signature || t.signature || '';
+      h += `<div class="trade-row ${isBuy ? 'buy' : 'sell'}">`;
+      h += `<span class="trade-action ${isBuy ? 'buy' : 'sell'}">${action}</span>`;
+      h += `<span class="trade-token">${token ? `<a href="https://solscan.io/token/${token}" target="_blank" title="${token}">${truncateToken(token)}</a>` : '—'}</span>`;
+      h += `<span class="trade-amount">${solAmt} SOL</span>`;
+      if (pnl !== null) {
+        const pCls = pnl >= 0 ? 'pos' : 'neg';
+        h += `<span class="trade-pnl ${pCls}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(3)}</span>`;
+      }
+      h += '<span class="trade-meta">';
+      if (time) h += `<span>${getTimeAgo(time)}</span>`;
+      if (tx) h += `<a class="trade-tx" href="https://solscan.io/tx/${tx}" target="_blank" title="${tx}">tx</a>`;
+      h += '</span></div>';
+    });
+    el.innerHTML = h;
+  } catch {
+    const empty = el.querySelector('.trades-empty');
+    if (empty) empty.textContent = 'failed to load';
+  }
+}
+
+// ============================================================
+// PNL SHARE CARD
+// ============================================================
+
+let shareAgentId = null;
+
+function openShareCard(agentId) {
+  shareAgentId = agentId;
+  const { map } = buildForest(allAgents);
+  const node = map[agentId];
+  if (!node) return;
+
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 600, H = 340;
+  canvas.width = W; canvas.height = H;
+
+  const imgPath = AGENT_IMAGES[agentId];
+  const pnlVal = node.total_pnl || 0;
+  const isProfit = pnlVal >= 0;
+  const accentColor = isProfit ? '#22ff66' : '#ff3344';
+  const accentDim = isProfit ? 'rgba(34, 255, 102, 0.15)' : 'rgba(255, 51, 68, 0.15)';
+
+  function drawOverlaysAndText() {
+    // Dark gradient — agent visible on left, dark on right for text
+    const darkGrad = ctx.createLinearGradient(0, 0, W, 0);
+    darkGrad.addColorStop(0, 'rgba(6, 3, 4, 0.05)');
+    darkGrad.addColorStop(0.3, 'rgba(6, 3, 4, 0.15)');
+    darkGrad.addColorStop(0.45, 'rgba(6, 3, 4, 0.6)');
+    darkGrad.addColorStop(0.6, 'rgba(6, 3, 4, 0.88)');
+    darkGrad.addColorStop(1, 'rgba(6, 3, 4, 0.95)');
+    ctx.fillStyle = darkGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle bottom vignette for footer readability
+    const botGrad = ctx.createLinearGradient(0, H - 50, 0, H);
+    botGrad.addColorStop(0, 'transparent');
+    botGrad.addColorStop(1, 'rgba(6, 3, 4, 0.7)');
+    ctx.fillStyle = botGrad;
+    ctx.fillRect(0, H - 50, W, 50);
+
+    // Subtle top vignette for branding readability
+    const topGrad = ctx.createLinearGradient(0, 0, 0, 50);
+    topGrad.addColorStop(0, 'rgba(6, 3, 4, 0.5)');
+    topGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(0, 0, W, 50);
+
+    // Colored accent glow (left edge, matching PnL color)
+    const accentGrad = ctx.createLinearGradient(0, 0, 120, 0);
+    accentGrad.addColorStop(0, accentDim);
+    accentGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = accentGrad;
+    ctx.fillRect(0, 0, 120, H);
+
+    // Left accent stripe
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 3, H);
+
+    // Border
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+    // === TOP ROW ===
+    // "SPAWN" branding
+    ctx.font = '700 15px Cinzel, serif';
+    ctx.fillStyle = '#e63950';
+    ctx.textAlign = 'left';
+    ctx.fillText('SPAWN', 20, 32);
+
+    // Gen badge
+    const genText = node.generation === 0 ? 'GENESIS' : 'GEN ' + node.generation;
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = node.generation === 0 ? '#e63950' : '#9e9396';
+    ctx.textAlign = 'right';
+    ctx.fillText(genText, W - 20, 32);
+
+    // === MAIN CONTENT (right side) ===
+    const textX = W * 0.42;
+
+    // Agent name (big, white)
+    ctx.font = '700 26px Cinzel, serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(formatName(node.id, node.name).toUpperCase(), textX, 100);
+
+    // Status line
+    const statusColor = node.status === 'alive' ? '#22ff66' : '#6b5f63';
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = statusColor;
+    ctx.fillText(node.status.toUpperCase(), textX, 122);
+
+    // Separator line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(textX, 135); ctx.lineTo(W - 20, 135); ctx.stroke();
+
+    // PnL label
+    ctx.font = '400 9px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#6b5f63';
+    ctx.letterSpacing = '2px';
+    ctx.fillText('PROFIT / LOSS', textX, 158);
+
+    // PnL (massive, sharp color)
+    const pnlSign = pnlVal >= 0 ? '+' : '';
+    ctx.font = '700 48px "JetBrains Mono", monospace';
+    ctx.fillStyle = accentColor;
+    ctx.fillText(`${pnlSign}${pnlVal.toFixed(2)}`, textX, 210);
+
+    // SOL suffix
+    const pnlWidth = ctx.measureText(`${pnlSign}${pnlVal.toFixed(2)}`).width;
+    ctx.font = '400 20px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText('SOL', textX + pnlWidth + 10, 210);
+
+    // PnL glow effect
+    ctx.shadowColor = accentColor;
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = 'transparent';
+    ctx.fillRect(textX, 170, 1, 1);
+    ctx.shadowBlur = 0;
+
+    // Stats row
+    const trades = node.total_trades || 0;
+    const children = node.children ? node.children.length : 0;
+    ctx.font = '500 12px "JetBrains Mono", monospace';
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(trades.toString(), textX, 245);
+    ctx.fillStyle = '#6b5f63';
+    ctx.fillText(' trades', textX + ctx.measureText(trades.toString()).width, 245);
+
+    const tradesWidth = ctx.measureText(trades + ' trades').width;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillText('  /  ', textX + tradesWidth, 245);
+
+    const sepWidth = ctx.measureText('  /  ').width;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(children.toString(), textX + tradesWidth + sepWidth, 245);
+    ctx.fillStyle = '#6b5f63';
+    ctx.fillText(' descendants', textX + tradesWidth + sepWidth + ctx.measureText(children.toString()).width, 245);
+
+    // === BOTTOM BAR ===
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.fillRect(0, H - 36, W, 36);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.beginPath(); ctx.moveTo(0, H - 36); ctx.lineTo(W, H - 36); ctx.stroke();
+
+    ctx.font = '400 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#6b5f63';
+    ctx.textAlign = 'left';
+    ctx.fillText('spawnagents.fun', 20, H - 12);
+
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#e63950';
+    ctx.textAlign = 'right';
+    ctx.fillText('$SPAWN', W - 20, H - 12);
+  }
+
+  if (imgPath) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      // Draw agent image full-bleed, cover left portion
+      const imgAspect = img.width / img.height;
+      const canvasAspect = W / H;
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (imgAspect > canvasAspect) {
+        sw = img.height * canvasAspect;
+        sx = (img.width - sw) / 2;
+      } else {
+        sh = img.width / canvasAspect;
+        sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      drawOverlaysAndText();
+    };
+    img.onerror = function () {
+      drawFallbackBg();
+      drawOverlaysAndText();
+    };
+    img.src = imgPath;
+  } else {
+    drawFallbackBg();
+    drawOverlaysAndText();
+  }
+
+  function drawFallbackBg() {
+    ctx.fillStyle = '#0a0608';
+    ctx.fillRect(0, 0, W, H);
+    // Big initial letter as background
+    ctx.font = '900 200px Cinzel, serif';
+    ctx.fillStyle = 'rgba(196, 30, 58, 0.06)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(formatName(node.id, node.name).charAt(0).toUpperCase(), W * 0.25, H * 0.5);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  document.getElementById('shareOverlay').classList.add('open');
+}
+
+function closeShareCard() {
+  document.getElementById('shareOverlay').classList.remove('open');
+  shareAgentId = null;
+}
+
+function downloadShareCard() {
+  const canvas = document.getElementById('shareCanvas');
+  const link = document.createElement('a');
+  link.download = `spawn-${shareAgentId || 'agent'}-pnl.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function tweetShareCard() {
+  const { map } = buildForest(allAgents);
+  const node = shareAgentId ? map[shareAgentId] : null;
+  const name = node ? formatName(node.id, node.name) : 'Agent';
+  const pnl = node ? (node.total_pnl >= 0 ? '+' : '') + node.total_pnl.toFixed(2) + ' SOL' : '';
+  const text = `${name} ${pnl} on @spawnagents\n\nAutonomous AI trading agents evolving on Solana.\n\nspawnagents.fun`;
+  window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
 }
 
 // ============================================================
@@ -1541,7 +2131,7 @@ function buildGenesisFilters(agents) {
   const genesis = agents.filter(a => a.generation === 0);
   const container = document.getElementById('genesisFilters');
   container.innerHTML = genesis.map(g =>
-    `<button class="genesis-btn" data-filter="${g.id}" onclick="filterLineage('${g.id}', this)">${formatName(g.id)}</button>`
+    `<button class="genesis-btn" data-filter="${g.id}" onclick="filterLineage('${g.id}', this)">${formatName(g.id, g.name)}</button>`
   ).join('');
 }
 
@@ -1550,25 +2140,15 @@ function buildGenesisFilters(agents) {
 // ============================================================
 
 async function fetchAgents() {
-  // Start with all 15 genesis agents as base
-  const genesisMap = {};
-  GENESIS_BASE.forEach(g => genesisMap[g.id] = { ...g });
-
-  // Fetch live data from API
+  // Only show agents that have been bought (not unclaimed)
   try {
     const r = await fetch('/api/agents');
     if (r.ok) {
       const d = await r.json();
-      if (d.agents?.length > 0) {
-        for (const agent of d.agents) {
-          // Overwrite genesis base with live data, or add descendants
-          genesisMap[agent.id] = agent;
-        }
-      }
+      if (d.agents?.length > 0) return d.agents.filter(a => a.status !== 'unclaimed' && a.status !== 'dead');
     }
   } catch {}
-
-  return Object.values(genesisMap);
+  return [];
 }
 
 // ============================================================
@@ -1595,6 +2175,75 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.addEventListener('resize', () => {
   updateMinimapViewport();
 });
+
+// ============================================================
+// LINEAGE HOVER
+// ============================================================
+
+function getAncestorIds(id) {
+  const { map } = buildForest(allAgents);
+  const ancestors = new Set();
+  let current = map[id];
+  while (current && current.parent_id && map[current.parent_id]) {
+    ancestors.add(current.parent_id);
+    current = map[current.parent_id];
+  }
+  return ancestors;
+}
+
+function attachLineageHover() {
+  const svg = document.getElementById('treeSvg');
+  const groups = svg.querySelectorAll('.node-group');
+
+  groups.forEach(g => {
+    g.addEventListener('mouseenter', () => {
+      const id = g.dataset.id;
+      const ancestors = getAncestorIds(id);
+      ancestors.add(id);
+
+      svg.classList.add('lineage-active');
+
+      groups.forEach(ng => {
+        if (ancestors.has(ng.dataset.id)) ng.classList.add('lineage-lit');
+      });
+
+      svg.querySelectorAll('.edge-line, .edge-royalty').forEach(edge => {
+        if (ancestors.has(edge.dataset.from) && ancestors.has(edge.dataset.to)) {
+          edge.classList.add('lineage-lit');
+        }
+      });
+    });
+
+    g.addEventListener('mouseleave', () => {
+      svg.classList.remove('lineage-active');
+      svg.querySelectorAll('.lineage-lit').forEach(el => el.classList.remove('lineage-lit'));
+    });
+  });
+}
+
+// ============================================================
+// CURSOR BLOOD TRAIL
+// ============================================================
+(function() {
+  if ('ontouchstart' in window) return;
+  let lastX = 0, lastY = 0, dots = 0;
+  document.addEventListener('mousemove', function(e) {
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    if (Math.sqrt(dx * dx + dy * dy) < 12) return;
+    lastX = e.clientX; lastY = e.clientY;
+    const dot = document.createElement('div');
+    dot.className = 'blood-trail-dot';
+    dot.style.left = (e.clientX - 4) + 'px';
+    dot.style.top = (e.clientY - 4) + 'px';
+    document.body.appendChild(dot);
+    dots++;
+    dot.addEventListener('animationend', () => { dot.remove(); dots--; });
+    if (dots > 20) {
+      const old = document.querySelector('.blood-trail-dot');
+      if (old) { old.remove(); dots--; }
+    }
+  });
+})();
 
 // ============================================================
 // MOBILE MENU
