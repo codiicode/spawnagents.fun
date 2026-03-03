@@ -106,7 +106,7 @@ export async function onRequest(context) {
   if (kv) await kv.put(`agent:${childId}:secret`, keypair.secretKey);
 
   // Fund child wallet (SOL minus protocol fee)
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
   const tradingCapital = parseFloat((pending.sol_amount * (1 - feePct)).toFixed(6));
 
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;

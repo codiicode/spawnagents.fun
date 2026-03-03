@@ -9,8 +9,8 @@ export async function onRequest(context) {
   const rpcUrl = context.env.RPC_URL;
   if (!rpcUrl) return Response.json({ error: "RPC_URL not configured" }, { status: 500 });
 
-  // SOL price from DexScreener (same as portfolio endpoint)
-  let solPrice = 130;
+  // SOL price from DexScreener — skip entire PnL cycle if fetch fails
+  let solPrice = 0;
   try {
     const res = await fetch("https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112");
     if (res.ok) {
@@ -19,6 +19,10 @@ export async function onRequest(context) {
       if (usdcPair) solPrice = parseFloat(usdcPair.priceUsd || 0);
     }
   } catch {}
+
+  if (solPrice <= 0) {
+    return Response.json({ skipped: true, reason: "Could not fetch SOL price" });
+  }
 
   const agents = await db.prepare("SELECT id, agent_wallet, initial_capital FROM agents WHERE status = 'alive'").all();
   const results = [];

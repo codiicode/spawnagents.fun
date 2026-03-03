@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — SPAWN</title>
+  <meta name="description" content="Track your autonomous AI trading agents on Solana. Portfolio value, PnL, trades, and more.">
+  <meta property="og:title" content="Dashboard — SPAWN">
+  <meta property="og:description" content="Track your autonomous AI trading agents on Solana. Portfolio value, PnL, trades, and more.">
+  <meta property="og:image" content="https://spawnagents.fun/og.jpg">
+  <meta property="og:url" content="https://spawnagents.fun/dashboard-preview.html">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@spawnagents">
+  <link rel="icon" href="/S.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+  <style>
+    :root {
+      --bg: #0e0a0c;
+      --surface: rgba(180, 30, 50, 0.05);
+      --surface-hover: rgba(180, 30, 50, 0.09);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --text: #ede8ea;
+      --text-muted: #9e9396;
+      --text-dim: #6b5f63;
+      --green: #4a9e6a;
+      --red: #c44040;
+      --font-display: 'Cinzel', serif;
+      --font-body: 'Sora', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
+    body { font-family: var(--font-body); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.7; -webkit-font-smoothing: antialiased; }
+    .vignette { position: fixed; inset: 0; pointer-events: none; z-index: 9998; background: radial-gradient(ellipse at center, transparent 50%, rgba(8,4,6,0.5) 100%); }
+
+    /* NAV */
+    nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px,4vw,48px); background: rgba(10,7,12,0.9); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); }
+    .nav-logo { font-family: var(--font-display); font-size: 14px; font-weight: 600; letter-spacing: 0.25em; color: var(--blood); text-decoration: none; }
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+    .nav-links a { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); text-decoration: none; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--text); }
+    .nav-wallet { color: var(--blood-deep) !important; border: 1px solid var(--border-strong); padding: 4px 10px; cursor: pointer; transition: all 0.2s; }
+    .nav-wallet:hover { color: var(--blood) !important; border-color: var(--blood); }
+    .nav-wallet.connected { color: var(--green) !important; border-color: rgba(74,158,106,0.3); }
+    .nav-wallet.connected:hover { color: var(--red) !important; border-color: rgba(196,64,64,0.3); }
+    .nav-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px; }
+    .nav-hamburger span { display: block; width: 18px; height: 1px; background: var(--text-muted); margin: 4px 0; transition: transform 0.2s, opacity 0.2s; }
+    .nav-hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(3px,3px); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(3px,-3px); }
+    .mobile-menu { display: none; position: fixed; top: 52px; left: 0; right: 0; background: rgba(10,7,12,0.96); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); padding: 16px clamp(20px,4vw,48px); z-index: 99; flex-direction: column; gap: 12px; }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); text-decoration: none; padding: 8px 0; }
+    @media (max-width: 640px) { .nav-hamburger { display: block; } .nav-links { display: none; } }
+
+    /* LOGIN MODAL */
+    .login-overlay { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); align-items: center; justify-content: center; }
+    .login-overlay.open { display: flex; }
+    .login-modal { background: #0d0a10; border: 1px solid var(--border-strong); padding: 36px; max-width: 420px; width: 90%; }
+    .login-modal h3 { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: 0.04em; margin-bottom: 6px; }
+    .login-modal .login-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 28px; }
+    .login-option { display: block; width: 100%; padding: 14px; background: var(--blood-deep); border: 1px solid var(--blood); color: var(--text); font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; cursor: pointer; text-align: center; transition: background 0.2s; margin-bottom: 10px; }
+    .login-option:hover { background: var(--blood); }
+    .login-or { text-align: center; font-size: 11px; color: var(--text-dim); margin-bottom: 10px; letter-spacing: 0.15em; text-transform: uppercase; }
+    .login-option-alt { display: block; width: 100%; padding: 14px; background: none; border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.06em; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .login-option-alt:hover { border-color: var(--border-strong); color: var(--text); }
+    .login-cancel { display: block; width: 100%; margin-top: 16px; background: none; border: none; color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; cursor: pointer; text-align: center; letter-spacing: 0.1em; transition: color 0.2s; }
+    .login-cancel:hover { color: var(--text-muted); }
+    .micro-info { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6; }
+    .micro-amount { font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--text); text-align: center; margin-bottom: 4px; }
+    .micro-amount-label { font-size: 11px; color: var(--text-dim); text-align: center; margin-bottom: 20px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .micro-dest { font-size: 10px; color: var(--text-muted); word-break: break-all; background: rgba(255,255,255,0.03); padding: 8px; border: 1px solid var(--border); cursor: pointer; margin-bottom: 20px; transition: border-color 0.2s; }
+    .micro-dest:hover { border-color: var(--text-muted); }
+    .micro-dest span { color: var(--text-dim); display: block; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+    .micro-status { text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+    .micro-status.polling { color: var(--text-dim); }
+    .micro-status.polling::after { content: ''; display: inline-block; width: 4px; height: 4px; background: var(--blood); border-radius: 50%; margin-left: 6px; animation: pulse 1.5s ease-in-out infinite; vertical-align: middle; }
+    .verify-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: none; border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; }
+    .verify-btn:hover { border-color: var(--blood); color: var(--text); }
+    .verify-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* MAIN */
+    .main { max-width: 1100px; margin: 0 auto; padding: 76px clamp(20px,4vw,48px) 40px; }
+    .page-title { font-family: var(--font-display); font-size: clamp(22px,4vw,32px); font-weight: 600; letter-spacing: 0.08em; color: var(--text); margin-bottom: 32px; }
+    .page-title span { color: var(--blood); }
+
+    /* CONNECT / EMPTY */
+    .connect-prompt { text-align: center; padding: 80px 20px; }
+    .connect-prompt p { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
+    .connect-btn { display: inline-block; padding: 12px 32px; background: var(--blood-deep); border: 1px solid var(--blood); color: var(--text); font-family: var(--font-mono); font-size: 13px; font-weight: 500; letter-spacing: 0.06em; cursor: pointer; transition: background 0.2s; }
+    .connect-btn:hover { background: var(--blood); }
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-state p { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; }
+    .empty-state a { display: inline-block; padding: 10px 24px; background: none; border: 1px solid var(--blood-deep); color: var(--blood); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-decoration: none; transition: all 0.2s; }
+    .empty-state a:hover { background: var(--blood-deep); color: var(--text); border-color: var(--blood); }
+
+    /* SKELETON */
+    .skeleton { background: linear-gradient(90deg, var(--border) 25%, rgba(180,30,50,0.06) 50%, var(--border) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 2px; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .skeleton-card { height: 100px; background: var(--surface); border: 1px solid var(--border); padding: 20px; }
+    .skeleton-line { height: 12px; margin-bottom: 10px; width: 60%; }
+    .skeleton-line.short { width: 40%; }
+    .skeleton-line.num { width: 30%; height: 28px; margin-bottom: 6px; }
+
+    /* STAT CARDS — 5 columns for royalties */
+    .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 40px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); padding: 20px 24px; transition: border-color 0.3s, box-shadow 0.3s; }
+    .stat-card:hover { border-color: var(--border-strong); box-shadow: 0 0 30px rgba(196,30,58,0.04); }
+    .stat-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+    .stat-value { font-family: var(--font-mono); font-size: 28px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .stat-value.positive { color: var(--green); }
+    .stat-value.negative { color: var(--red); }
+    .stat-value.blood { color: var(--blood); }
+
+    /* SECTION */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .section-title { font-family: var(--font-display); font-size: 17px; font-weight: 500; color: var(--text); letter-spacing: 0.06em; }
+    .section-action { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); background: none; border: 1px solid var(--border); padding: 4px 12px; cursor: pointer; transition: all 0.2s; }
+    .section-action:hover { border-color: var(--blood); color: var(--blood); }
+
+    /* AGENT GRID */
+    .agents-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 40px; }
+    .agent-card { background: var(--surface); border: 1px solid var(--border); padding: 20px; cursor: pointer; transition: border-color 0.3s, box-shadow 0.3s; position: relative; }
+    .agent-card:hover { border-color: var(--border-strong); box-shadow: 0 0 40px rgba(196,30,58,0.06); }
+    .agent-card-top { display: flex; gap: 16px; align-items: flex-start; }
+    .agent-avatar { width: 56px; height: 56px; border-radius: 2px; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+    .agent-avatar-placeholder { width: 56px; height: 56px; border-radius: 2px; background: var(--blood-dim); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--blood); }
+    .agent-info { flex: 1; min-width: 0; }
+    .agent-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .agent-card-name { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gen-badge { font-family: var(--font-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 6px; border: 1px solid var(--border-strong); color: var(--text-dim); flex-shrink: 0; }
+    .rank-badge { font-family: var(--font-mono); font-size: 9px; font-weight: 600; padding: 2px 6px; border: 1px solid rgba(196,30,58,0.3); color: var(--blood); flex-shrink: 0; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.alive { background: var(--green); animation: pulse 1.5s ease-in-out infinite; }
+    .status-dot.dead { background: var(--text-dim); }
+    .status-dot.idle { background: #d4a72c; }
+    .agent-meta { display: flex; gap: 16px; font-size: 12px; color: var(--text-muted); }
+    .agent-pnl { font-family: var(--font-mono); font-weight: 500; }
+    .agent-pnl.positive { color: var(--green); }
+    .agent-pnl.negative { color: var(--red); }
+    .agent-trades-count { color: var(--text-dim); }
+    .agent-value { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* HEARTBEAT / EKG */
+    .heartbeat { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .hb-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .hb-dot.active { background: var(--green); animation: hb-pulse-green 1.5s ease-in-out infinite; }
+    .hb-dot.scanning { background: #d4a532; animation: hb-pulse-amber 2.5s ease-in-out infinite; }
+    .hb-dot.idle { background: var(--blood-deep); opacity: 0.5; }
+    .hb-dot.dead { background: var(--text-dim); opacity: 0.3; }
+    .hb-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .hb-label.active { color: var(--green); }
+    .hb-label.scanning { color: #d4a532; }
+    .hb-label.idle { color: var(--blood-deep); }
+    .hb-label.dead { color: var(--text-dim); }
+    @keyframes hb-pulse-green { 0%, 100% { box-shadow: 0 0 0 0 rgba(74,158,106,0.4); } 50% { box-shadow: 0 0 0 4px rgba(74,158,106,0); } }
+    @keyframes hb-pulse-amber { 0%, 100% { box-shadow: 0 0 0 0 rgba(212,165,50,0.3); } 50% { box-shadow: 0 0 0 3px rgba(212,165,50,0); } }
+    .ekg-line { flex: 1; height: 16px; overflow: hidden; }
+    .ekg-line svg { width: 200%; height: 100%; animation: ekg-scroll 2s linear infinite; }
+    @keyframes ekg-scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+    /* DETAIL PANEL */
+    .detail-overlay { display: none; position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+    .detail-overlay.open { display: block; }
+    .detail-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 500px; max-width: 100%; background: #0d0a10; border-left: 1px solid var(--border); box-shadow: -8px 0 32px rgba(0,0,0,0.3); overflow-y: auto; z-index: 151; transform: translateX(100%); transition: transform 0.25s ease; scrollbar-width: thin; scrollbar-color: var(--blood-deep) transparent; }
+    .detail-panel.open { transform: translateX(0); }
+    .detail-close { position: sticky; top: 0; display: flex; justify-content: flex-end; padding: 16px 20px 8px; background: #0d0a10; z-index: 1; }
+    .detail-close button { background: none; border: 1px solid var(--border); color: var(--text-dim); font-size: 14px; width: 32px; height: 32px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+    .detail-close button:hover { border-color: var(--blood); color: var(--blood); }
+    .detail-header { padding: 0 24px 24px; display: flex; gap: 20px; align-items: flex-start; }
+    .detail-avatar { width: 80px; height: 80px; border-radius: 2px; object-fit: cover; border: 1px solid var(--border); }
+    .detail-avatar-placeholder { width: 80px; height: 80px; border-radius: 2px; background: var(--blood-dim); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 22px; font-weight: 600; color: var(--blood); }
+    .detail-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--text); letter-spacing: 0.04em; margin-bottom: 4px; }
+    .detail-badges { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .detail-wallet { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+    .detail-wallet a { color: var(--blood); text-decoration: none; font-size: 10px; }
+    .detail-wallet a:hover { color: var(--blood-bright); }
+    .copy-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 12px; padding: 0; transition: color 0.2s; }
+    .copy-btn:hover { color: var(--blood); }
+    .detail-section { padding: 0 24px 24px; }
+    .detail-section-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+    .detail-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-stats-3col { grid-template-columns: 1fr 1fr 1fr; }
+    .detail-stat { background: rgba(255,255,255,0.02); border: 1px solid var(--border); padding: 12px; }
+    .detail-stat-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+    .detail-stat-value { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--text); }
+
+    /* HOLDINGS TABLE */
+    .holdings-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .holdings-table th { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); text-align: left; padding: 8px 0; border-bottom: 1px solid var(--border); font-weight: 500; }
+    .holdings-table th:last-child, .holdings-table td:last-child { text-align: right; }
+    .holdings-table td { padding: 8px 0; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+    .holdings-table td:first-child { color: var(--text); font-weight: 500; }
+    .holdings-empty { padding: 16px 0; text-align: center; color: var(--text-dim); font-size: 12px; }
+
+    /* TRADES */
+    .trade-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .trade-item:last-child { border-bottom: none; }
+    .trade-badge { font-family: var(--font-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; flex-shrink: 0; }
+    .trade-badge.buy { color: var(--green); border: 1px solid rgba(74,158,106,0.3); }
+    .trade-badge.sell { color: var(--red); border: 1px solid rgba(196,64,64,0.3); }
+    .trade-token { color: var(--text); font-weight: 500; }
+    .trade-amount { color: var(--text-muted); flex: 1; }
+    .trade-time { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+    .trade-tx { color: var(--blood); text-decoration: none; font-size: 10px; font-family: var(--font-mono); flex-shrink: 0; }
+    .trade-tx:hover { color: var(--blood-bright); }
+
+    /* CHILDREN */
+    .child-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+    .child-item:last-child { border-bottom: none; }
+
+    /* DETAIL ACTIONS */
+    .detail-actions { display: flex; gap: 8px; padding: 0 24px 24px; flex-wrap: wrap; }
+    .detail-action-btn { flex: 1; min-width: 120px; padding: 10px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; cursor: pointer; text-align: center; text-decoration: none; transition: all 0.2s; border: 1px solid var(--border-strong); background: none; color: var(--text-muted); }
+    .detail-action-btn:hover { border-color: var(--blood); color: var(--blood); }
+    .detail-action-btn.primary { background: var(--blood-deep); border-color: var(--blood); color: var(--text); }
+    .detail-action-btn.primary:hover { background: var(--blood); }
+    .detail-action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* WITHDRAW INLINE */
+    .withdraw-inline { padding: 0 24px 24px; }
+    .withdraw-inline input { width: 100%; padding: 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-strong); color: var(--text); font-family: var(--font-mono); font-size: 14px; text-align: center; margin-bottom: 8px; outline: none; }
+    .withdraw-inline input:focus { border-color: var(--blood); }
+    .withdraw-inline .w-status { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+    .withdraw-inline .w-status.error { color: var(--red); }
+    .withdraw-inline .w-status.ok { color: var(--green); }
+
+    /* SHARE CARD */
+    .share-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+    }
+    .share-overlay.open { display: flex; }
+    .share-modal {
+      background: #0d0a10; border: 1px solid var(--border-strong);
+      padding: 24px; max-width: 660px; width: 95%; position: relative;
+    }
+    .share-modal canvas { width: 100%; height: auto; display: block; margin-bottom: 16px; border: 1px solid var(--border); }
+    .share-actions { display: flex; gap: 10px; }
+    .share-btn {
+      flex: 1; padding: 10px; background: none;
+      border: 1px solid var(--border); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 11px;
+      letter-spacing: 0.06em; cursor: pointer; transition: all 0.2s; text-align: center;
+    }
+    .share-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .share-btn.primary { border-color: var(--blood-deep); color: var(--blood); }
+    .share-btn.primary:hover { background: var(--blood-deep); color: var(--text); border-color: var(--blood); }
+    .share-close {
+      position: absolute; top: 10px; right: 14px;
+      background: none; border: none; color: var(--text-dim);
+      font-size: 16px; cursor: pointer; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center; transition: color 0.2s;
+    }
+    .share-close:hover { color: var(--text); }
+    .portfolio-share-btn {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-dim); background: none;
+      border: 1px solid var(--border); padding: 4px 12px; cursor: pointer; transition: all 0.2s;
+    }
+    .portfolio-share-btn:hover { border-color: var(--blood); color: var(--blood); }
+
+    /* DNA RADAR */
+    .radar-container { display: flex; justify-content: center; padding: 8px 0 4px; }
+
+    /* BLOODLINE MINI TREE */
+    .tree-node { display: flex; flex-direction: column; align-items: center; }
+    .tree-connector { width: 1px; height: 16px; background: var(--border-strong); }
+    .tree-branch { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .tree-agent { padding: 6px 10px; border: 1px solid var(--border); font-size: 11px; cursor: pointer; transition: all 0.2s; text-align: center; }
+    .tree-agent:hover { border-color: var(--blood); }
+    .tree-agent.current { border-color: var(--blood); background: var(--blood-dim); }
+    .tree-agent .t-name { color: var(--text); font-weight: 500; font-size: 11px; }
+    .tree-agent .t-gen { color: var(--text-dim); font-size: 9px; font-family: var(--font-mono); }
+
+    /* ACTIVITY */
+    .activity-section { margin-top: 8px; margin-bottom: 40px; }
+    .activity-feed { border: 1px solid var(--border); max-height: 320px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--blood-deep) transparent; }
+    .activity-item { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 12px; transition: background 0.2s; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-item:hover { background: var(--surface-hover); }
+    .activity-action { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; flex-shrink: 0; }
+    .activity-action.buy { color: var(--green); border: 1px solid rgba(74,158,106,0.3); }
+    .activity-action.sell { color: var(--red); border: 1px solid rgba(196,64,64,0.3); }
+    .activity-action.death { color: var(--text-dim); border: 1px solid var(--border); }
+    .activity-action.spawn { color: var(--blood); border: 1px solid var(--blood-dim); }
+    .activity-agent { color: var(--text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 70px; }
+    .activity-detail { color: var(--text-muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .activity-time { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+    .activity-tx { color: var(--blood); text-decoration: none; font-size: 10px; font-family: var(--font-mono); flex-shrink: 0; }
+    .activity-tx:hover { color: var(--blood-bright); }
+    .activity-empty { padding: 24px; text-align: center; color: var(--text-dim); font-size: 12px; }
+
+    /* FOOTER */
+    footer { border-top: 1px solid var(--border); padding: 36px clamp(20px,4vw,48px); display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-dim); margin-top: 40px; }
+    footer a { color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
+    footer a:hover { color: var(--blood); }
+    .footer-links { display: flex; gap: 20px; }
+    .sound-toggle { background: none; border: 1px solid var(--border-strong); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; padding: 4px 10px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
+    .sound-toggle:hover { border-color: var(--blood); color: var(--blood); }
+    .sound-toggle.off { border-color: var(--border); color: var(--text-dim); opacity: 0.5; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* RESPONSIVE */
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .agents-grid { grid-template-columns: repeat(2, 1fr); }
+      .detail-panel { width: 100%; }
+      .stat-value { font-size: 22px; }
+      .stat-card { padding: 16px 18px; }
+      .agent-avatar, .agent-avatar-placeholder { width: 44px; height: 44px; }
+      .agent-card-name { font-size: 13px; }
+    }
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .stats-grid .stat-card:last-child { grid-column: 1 / -1; }
+      .stat-value { font-size: 18px; }
+      .stat-label { font-size: 9px; }
+      .stat-card { padding: 14px; }
+      .agents-grid { grid-template-columns: 1fr; }
+      .agent-avatar, .agent-avatar-placeholder { width: 40px; height: 40px; font-size: 12px; }
+      .agent-card-top { gap: 12px; }
+      .agent-name-row { flex-wrap: wrap; gap: 4px; }
+      .section-header { flex-wrap: wrap; gap: 8px; }
+      .portfolio-share-btn { font-size: 9px; padding: 3px 8px; }
+      .detail-header { flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+      .detail-avatar, .detail-avatar-placeholder { width: 60px; height: 60px; }
+      .detail-title { font-size: 18px; }
+      .detail-badges { justify-content: center; }
+      .detail-wallet { justify-content: center; flex-wrap: wrap; }
+      .detail-stats-3col { grid-template-columns: 1fr 1fr; }
+      .detail-section { padding: 0 16px 20px; }
+      .holdings-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .holdings-table table { min-width: 340px; }
+      .trade-item { flex-wrap: wrap; gap: 6px; }
+      .trade-amount { flex: none; width: 100%; font-size: 11px; }
+      .activity-item { flex-wrap: wrap; gap: 6px; }
+      .activity-detail { flex: none; width: 100%; order: 5; font-size: 11px; }
+      .detail-action-btn { min-height: 36px; font-size: 10px; }
+      footer { flex-wrap: wrap; justify-content: center; gap: 12px; text-align: center; }
+      .footer-links { justify-content: center; }
+      .share-modal { padding: 16px; width: 98%; }
+    }
+    @media (max-width: 360px) {
+      .login-modal { padding: 20px; }
+      .login-modal h3 { font-size: 18px; }
+      footer { flex-direction: column; gap: 8px; }
+      .detail-section { padding: 0 12px 16px; }
+      .detail-header { padding: 0 12px 16px; }
+      .detail-actions { padding: 0 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="vignette"></div>
+
+<nav>
+  <a href="/" class="nav-logo">SPAWN</a>
+  <div class="nav-links">
+    <a href="/genesis.html">agents</a>
+    <a href="/bloodline.html">bloodline</a>
+    <a href="/dashboard-preview.html" class="active">dashboard</a>
+    <a href="/how.html">how?</a>
+    <a href="https://x.com/spawnagents" target="_blank">X</a>
+    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">SOUND ON</button>
+    <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
+  </div>
+  <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="/genesis.html">agents</a>
+  <a href="/dashboard-preview.html" class="active">dashboard</a>
+  <a href="/bloodline.html">bloodline</a>
+  <a href="/how.html">how?</a>
+  <a href="https://x.com/spawnagents" target="_blank">X</a>
+  <button class="sound-toggle" id="soundToggleMobile" onclick="toggleSound()">SOUND ON</button>
+  <a href="#" class="nav-wallet" id="walletBtnMobile" onclick="handleWalletClick()">log in</a>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="login-overlay" id="loginOverlay" onclick="if(event.target===this)closeLoginModal()">
+  <div class="login-modal">
+    <div id="loginStep1">
+      <h3>Log In</h3>
+      <p class="login-sub">Verify ownership of your wallet</p>
+      <button class="login-option" onclick="loginPhantom()">Connect Wallet</button>
+      <div class="login-or">or</div>
+      <button class="login-option-alt" onclick="showMicroStep()">Verify with Transaction</button>
+      <button class="login-cancel" onclick="closeLoginModal()">cancel</button>
+    </div>
+    <div id="loginStep2" style="display:none">
+      <h3>Verify Wallet</h3>
+      <p class="micro-info">Send the exact amount below from your wallet to prove ownership.</p>
+      <div class="micro-amount" id="microAmount">&mdash;</div>
+      <div class="micro-amount-label">SOL</div>
+      <div class="micro-dest" id="microDest" onclick="copyAddr(this)"><span>send to</span>&mdash;</div>
+      <button class="verify-btn" id="loginVerifyBtn" onclick="verifyLogin()" style="display:none">I've sent it</button>
+      <div class="micro-status" id="microStatus"></div>
+      <button class="login-cancel" onclick="microBack()">back</button>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+  <h1 class="page-title"><span>My</span> Dashboard</h1>
+  <div id="connectPrompt" class="connect-prompt" style="display:none;"><p>Connect your wallet to view your agents</p><button class="connect-btn" onclick="handleWalletClick()">Connect Wallet</button></div>
+  <div id="loadingState" style="display:none;">
+    <div class="stats-grid"><div class="skeleton-card"><div class="skeleton skeleton-line num"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line num"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line num"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line num"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line num"></div><div class="skeleton skeleton-line short"></div></div></div>
+    <div class="agents-grid"><div class="skeleton-card"><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div></div><div class="skeleton-card"><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div></div></div>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none;"><p>You don't own any agents yet</p><a href="/genesis.html">Browse Genesis Agents</a></div>
+
+  <div id="dashboardContent" style="display:none;">
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="stat-label">Agents Owned</div><div class="stat-value" id="statAgents">0</div></div>
+      <div class="stat-card"><div class="stat-label">Portfolio Value</div><div class="stat-value" id="statValue">--</div></div>
+      <div class="stat-card"><div class="stat-label">Total PnL</div><div class="stat-value" id="statPnl">--</div></div>
+      <div class="stat-card"><div class="stat-label">Royalties</div><div class="stat-value positive" id="statRoyalties">--</div></div>
+      <div class="stat-card"><div class="stat-label">Trades</div><div class="stat-value" id="statTrades">0</div></div>
+    </div>
+    <div class="section-header"><div class="section-title">My Agents</div><div style="display:flex;gap:8px;"><button class="portfolio-share-btn" onclick="openPortfolioShareCard()">Share Portfolio PnL</button><button class="section-action" onclick="refreshData()">Refresh</button></div></div>
+    <div class="agents-grid" id="agentsGrid"></div>
+    <div class="activity-section">
+      <div class="section-header"><div class="section-title">Activity</div><button class="section-action" onclick="refreshEvents()">Refresh</button></div>
+      <div class="activity-feed" id="activityFeed"><div class="activity-empty">Loading activity...</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail()"></div>
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-close"><button onclick="closeDetail()">&times;</button></div>
+  <div id="detailContent"></div>
+</div>
+
+<div class="share-overlay" id="shareOverlay" onclick="if(event.target===this)closeShareCard()">
+  <div class="share-modal">
+    <button class="share-close" onclick="closeShareCard()">&times;</button>
+    <canvas id="shareCanvas" width="600" height="340"></canvas>
+    <div class="share-actions">
+      <button class="share-btn" onclick="downloadShareCard()">Download PNG</button>
+      <button class="share-btn primary" onclick="tweetShareCard()">Post on X</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>SPAWN &mdash; Autonomous Agent Ecosystem</span>
+  <div class="footer-links"><a href="/genesis.html">Agents</a><a href="/bloodline.html">Bloodline</a><a href="https://x.com/spawnagents" target="_blank">X</a></div>
+</footer>
+
+<script>
+const AGENT_IMAGES = {
+  'the-hawk':'/hawk.jpg','the-phantom':'/phantom.jpg','the-viper':'/viper.jpg',
+  'the-beast':'/the-beast.jpg','the-berserker':'/the-berserker.jpg','the-bull':'/the-bull.jpg',
+  'the-colossus':'/the-colossus.jpg','the-jackal':'/the-jackal.jpg','the-oracle':'/the-oracle.jpg',
+  'the-serpent':'/the-serpent.jpg','the-shark':'/the-shark.jpg','the-specter':'/the-specter.jpg',
+  'the-turtle':'/the-turtle.jpg','the-wolf':'/the-wolf.jpg','the-wraith':'/the-wraith.jpg',
+  'the-monk':'/the-monk.jpg','the-gambler':'/the-gambler.jpg','the-sniper':'/the-sniper.jpg',
+  'the-surgeon':'/the-surgeon.jpg',
+};
+
+let connectedWallet = null;
+let currentLoginId = null;
+let loginPollInterval = null;
+let allAgents = [];
+let myAgents = [];
+let allEvents = [];
+let portfolioData = {};
+let leaderboardRanks = {};
+
+// ============================================================
+// WALLET / LOGIN
+// ============================================================
+function updateWalletUI() {
+  ['walletBtn','walletBtnMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (connectedWallet) { el.textContent = connectedWallet.slice(0,4)+'...'+connectedWallet.slice(-4); el.classList.add('connected'); }
+    else { el.textContent = 'log in'; el.classList.remove('connected'); }
+  });
+}
+document.addEventListener('DOMContentLoaded', () => {
+  ['walletBtn','walletBtnMobile'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('mouseenter', () => { if (connectedWallet) el.textContent = 'log out'; });
+    el.addEventListener('mouseleave', () => { if (connectedWallet) el.textContent = connectedWallet.slice(0,4)+'...'+connectedWallet.slice(-4); });
+  });
+});
+function handleWalletClick() {
+  if (connectedWallet) { connectedWallet = null; localStorage.removeItem('spawn_wallet'); if (window.phantom?.solana) { try { window.phantom.solana.disconnect(); } catch {} } updateWalletUI(); showState('connect'); return; }
+  openLoginModal();
+}
+function openLoginModal() { document.getElementById('loginStep1').style.display='block'; document.getElementById('loginStep2').style.display='none'; document.getElementById('loginOverlay').classList.add('open'); }
+function closeLoginModal() { document.getElementById('loginOverlay').classList.remove('open'); if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval=null; } currentLoginId=null; }
+async function loginPhantom() {
+  const provider = window.phantom?.solana || window.solflare;
+  if (!provider) { window.open('https://phantom.app/','_blank'); return; }
+  try { const resp = await provider.connect(); const key = resp?.publicKey || provider.publicKey; if (!key) return; connectedWallet = key.toString(); localStorage.setItem('spawn_wallet', connectedWallet); updateWalletUI(); closeLoginModal(); loadDashboard(); } catch (e) { console.error('Login error:', e); }
+}
+async function showMicroStep() {
+  document.getElementById('loginStep1').style.display='none'; document.getElementById('loginStep2').style.display='block';
+  document.getElementById('microStatus').textContent='requesting...'; document.getElementById('microStatus').className='micro-status';
+  try { const res = await fetch('/api/login',{method:'POST'}); const data = await res.json(); if (data.error) { document.getElementById('microStatus').textContent='error: '+data.error; return; }
+    currentLoginId=data.id; document.getElementById('microAmount').textContent=data.micro_amount; document.getElementById('microDest').innerHTML='<span>send to</span>'+data.send_to; document.getElementById('loginVerifyBtn').style.display='block'; document.getElementById('microStatus').textContent=''; document.getElementById('microStatus').className='micro-status';
+  } catch (e) { document.getElementById('microStatus').textContent='error: '+e.message; }
+}
+async function verifyLogin() {
+  const btn=document.getElementById('loginVerifyBtn'), status=document.getElementById('microStatus');
+  btn.disabled=true; btn.textContent='checking...'; status.textContent='Searching for your transaction on-chain...'; status.className='micro-status polling';
+  try { const res = await fetch('/api/login-status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:currentLoginId})}); const data = await res.json();
+    if (data.status==='verified' && data.wallet) { if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval=null; } connectedWallet=data.wallet; localStorage.setItem('spawn_wallet',connectedWallet); updateWalletUI(); closeLoginModal(); loadDashboard(); }
+    else { status.textContent='Not found yet — it can take a minute.'; status.className='micro-status'; btn.textContent="I've sent it"; btn.disabled=false; }
+  } catch { status.textContent='Error — try again.'; status.className='micro-status'; btn.textContent="I've sent it"; btn.disabled=false; }
+}
+function microBack() { if (loginPollInterval) { clearInterval(loginPollInterval); loginPollInterval=null; } currentLoginId=null; document.getElementById('loginStep2').style.display='none'; document.getElementById('loginStep1').style.display='block'; }
+function copyAddr(el) { const addr=el.textContent.replace(/send to|copied!/gi,'').trim(); navigator.clipboard.writeText(addr).catch(()=>{}); el.style.borderColor='var(--green)'; const span=el.querySelector('span'); if(span) span.textContent='copied!'; setTimeout(()=>{el.style.borderColor='';if(span)span.textContent='send to';},1200); }
+function checkWallet() { const saved=localStorage.getItem('spawn_wallet'); if(saved){connectedWallet=saved;updateWalletUI();} }
+function toggleMobileMenu() { document.getElementById('hamburgerBtn').classList.toggle('open'); document.getElementById('mobileMenu').classList.toggle('open'); }
+
+// ============================================================
+// STATE + HELPERS
+// ============================================================
+function showState(s) {
+  document.getElementById('connectPrompt').style.display = s==='connect'?'':'none';
+  document.getElementById('loadingState').style.display = s==='loading'?'':'none';
+  document.getElementById('emptyState').style.display = s==='empty'?'':'none';
+  document.getElementById('dashboardContent').style.display = s==='dashboard'?'':'none';
+}
+function timeAgo(d) { if(!d)return'--'; const ms=Date.now()-new Date(d+(d.endsWith('Z')?'':'Z')).getTime(); const m=Math.floor(ms/60000); if(m<1)return'just now'; if(m<60)return m+'m ago'; const h=Math.floor(m/60); if(h<24)return h+'h ago'; return Math.floor(h/24)+'d ago'; }
+function formatUsd(v) { if(v==null)return'--'; return '$'+v.toFixed(2); }
+function formatSol(v) { if(v==null)return'--'; return (v>=0?'+':'')+v.toFixed(3)+' SOL'; }
+function truncAddr(a) { if(!a)return'--'; return a.slice(0,4)+'...'+a.slice(-4); }
+function getAgentStatus(a) { if(a.status==='dead')return'dead'; if(!a.last_trade_at)return'idle'; const m=(Date.now()-new Date(a.last_trade_at+'Z').getTime())/60000; return m<30?'alive':'idle'; }
+
+function getHeartbeatHtml(agent) {
+  const lt = agent.last_trade_at;
+  let state='dead', label='NO DATA';
+  if (lt) { const m=(Date.now()-new Date(lt+'Z').getTime())/60000; if(m<5){state='active';label='ACTIVE';}else if(m<30){state='scanning';label='SCANNING';}else{state='idle';label='IDLE';} }
+  const ekg = state==='active' ? '<div class="ekg-line"><svg viewBox="0 0 200 16" preserveAspectRatio="none"><polyline fill="none" stroke="rgba(74,158,106,0.5)" stroke-width="1" points="0,8 15,8 20,2 25,14 30,6 35,8 50,8 65,8 70,2 75,14 80,6 85,8 100,8 115,8 120,2 125,14 130,6 135,8 150,8 165,8 170,2 175,14 180,6 185,8 200,8"/></svg></div>' : '';
+  return `<div class="heartbeat"><div class="hb-dot ${state}"></div><span class="hb-label ${state}">${label}</span>${ekg}</div>`;
+}
+
+function getAgentImage(agent) {
+  if (AGENT_IMAGES[agent.id]) return AGENT_IMAGES[agent.id];
+  let cur = agent; const visited = new Set();
+  while (cur && cur.parent_id && !visited.has(cur.parent_id)) { visited.add(cur.parent_id); const p = allAgents.find(a=>a.id===cur.parent_id); if(!p)break; if(AGENT_IMAGES[p.id])return AGENT_IMAGES[p.id]; cur=p; }
+  return null;
+}
+
+function getAgentName(id) { const a=allAgents.find(x=>x.id===id); return a?(a.name||a.id):(id||'--'); }
+
+// ============================================================
+// DASHBOARD LOAD (LIVE DATA)
+// ============================================================
+async function loadDashboard() {
+  if (!connectedWallet) { showState('connect'); return; }
+  showState('loading');
+
+  try {
+    // Fetch all agents and events from API
+    const [agentsRes, eventsRes] = await Promise.all([
+      fetch('/api/agents'),
+      fetch('/api/events?limit=50'),
+    ]);
+    const agentsData = await agentsRes.json();
+    const eventsData = await eventsRes.json();
+
+    allAgents = agentsData.agents || [];
+    allEvents = (eventsData.events || []).filter(e => !e.agent_id?.startsWith('test-'));
+
+    // Filter to only agents owned by connected wallet
+    myAgents = allAgents.filter(a => a.owner_wallet === connectedWallet);
+
+    if (myAgents.length === 0) { showState('empty'); return; }
+
+    // Build leaderboard ranks from all agents sorted by PnL
+    const sorted = [...allAgents].filter(a => a.status === 'alive').sort((a, b) => (b.total_pnl || 0) - (a.total_pnl || 0));
+    leaderboardRanks = {};
+    sorted.forEach((a, i) => { leaderboardRanks[a.id] = i + 1; });
+
+    portfolioData = {};
+
+    showState('dashboard');
+    renderStats();
+    renderAgentsGrid();
+    renderActivityFeed();
+    loadAgentPortfolios();
+  } catch (e) {
+    console.error('Dashboard load error:', e);
+    showState('empty');
+  }
+}
+
+// ============================================================
+// RENDER: Stats (with royalties)
+// ============================================================
+function renderStats() {
+  document.getElementById('statAgents').textContent = myAgents.length;
+  const totalPnl = myAgents.reduce((s,a)=>s+(a.total_pnl||0),0);
+  const totalTrades = myAgents.reduce((s,a)=>s+(a.total_trades||0),0);
+  const totalRoyalties = myAgents.reduce((s,a)=>s+(a.total_royalties_paid||0),0);
+  const pnlEl = document.getElementById('statPnl');
+  pnlEl.textContent = formatSol(totalPnl);
+  pnlEl.className = 'stat-value '+(totalPnl>=0?'positive':'negative');
+  document.getElementById('statTrades').textContent = totalTrades;
+  document.getElementById('statRoyalties').textContent = formatSol(totalRoyalties);
+  document.getElementById('statValue').textContent = 'loading...';
+  document.getElementById('statValue').style.fontSize = '18px';
+}
+
+// ============================================================
+// RENDER: Agent Grid (with heartbeat + leaderboard badge)
+// ============================================================
+function renderAgentsGrid() {
+  const grid = document.getElementById('agentsGrid');
+  grid.innerHTML = myAgents.map(agent => {
+    const img = getAgentImage(agent);
+    const name = agent.name || agent.id;
+    const gen = agent.generation || 0;
+    const status = getAgentStatus(agent);
+    const pnl = agent.total_pnl || 0;
+    const trades = agent.total_trades || 0;
+    const rank = leaderboardRanks[agent.id];
+    const avatarHtml = img ? `<img class="agent-avatar" src="${img}" alt="${name}" loading="lazy">` : `<div class="agent-avatar-placeholder">G${gen}</div>`;
+    const rankHtml = rank ? `<div class="rank-badge">#${rank}</div>` : '';
+
+    return `<div class="agent-card" onclick="openAgentDetail('${agent.id}')">
+      <div class="agent-card-top">
+        ${avatarHtml}
+        <div class="agent-info">
+          <div class="agent-name-row">
+            <div class="agent-card-name">${name}</div>
+            <div class="gen-badge">gen ${gen}</div>
+            ${rankHtml}
+            <div class="status-dot ${status}"></div>
+          </div>
+          <div class="agent-meta">
+            <span class="agent-pnl ${pnl>=0?'positive':'negative'}">${formatSol(pnl)}</span>
+            <span class="agent-trades-count">${trades} trades</span>
+          </div>
+          <div class="agent-value" id="agent-value-${agent.id}">loading value...</div>
+        </div>
+      </div>
+      ${getHeartbeatHtml(agent)}
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// LOAD: Portfolios
+// ============================================================
+async function loadAgentPortfolios() {
+  let totalValue = 0;
+  const fetches = myAgents.map(async (agent) => {
+    try {
+      const res = await fetch(`/api/agent-portfolio?agent_id=${agent.id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      portfolioData[agent.id] = data;
+      const val = data.total_value_usd || 0;
+      totalValue += val;
+      const el = document.getElementById(`agent-value-${agent.id}`);
+      if (el) el.textContent = formatUsd(val);
+    } catch {}
+  });
+  await Promise.all(fetches);
+  const valEl = document.getElementById('statValue');
+  valEl.textContent = formatUsd(totalValue);
+  valEl.style.fontSize = '';
+}
+
+// ============================================================
+// RENDER: Activity Feed
+// ============================================================
+function renderActivityFeed() {
+  const feed = document.getElementById('activityFeed');
+  const myIds = new Set(myAgents.map(a=>a.id));
+  const relevant = allEvents.filter(e => { const d=typeof e.data==='string'?JSON.parse(e.data):(e.data||{}); return myIds.has(e.agent_id||d.agent_id); });
+  if (relevant.length===0) { feed.innerHTML='<div class="activity-empty">No recent activity</div>'; return; }
+  feed.innerHTML = relevant.slice(0,30).map(e => {
+    const d=typeof e.data==='string'?JSON.parse(e.data):(e.data||{}); const action=d.action||e.type||'trade';
+    const agentName=getAgentName(e.agent_id||d.agent_id); const token=d.token_symbol||d.symbol||(d.token_address?d.token_address.slice(0,6):'');
+    const amount=d.amount_sol?d.amount_sol.toFixed(3)+' SOL':''; const tx=d.tx_signature||d.signature||'';
+    const txLink=tx?`<a class="activity-tx" href="https://solscan.io/tx/${tx}" target="_blank">tx</a>`:'';
+    let cls='death'; if(action==='buy')cls='buy';else if(action==='sell')cls='sell';else if(action==='spawn')cls='spawn';
+    return `<div class="activity-item"><span class="activity-action ${cls}">${action}</span><span class="activity-agent">${agentName}</span><span class="activity-detail">${token} ${amount}</span><span class="activity-time">${timeAgo(e.created_at)}</span>${txLink}</div>`;
+  }).join('');
+}
+
+// ============================================================
+// DNA RADAR CHART (canvas)
+// ============================================================
+function drawRadarChart(canvas, dna) {
+  if (!dna || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width = 220;
+  const h = canvas.height = 220;
+  const cx = w/2, cy = h/2, r = 80;
+
+  const params = [
+    { key: 'aggression', label: 'AGG', max: 1 },
+    { key: 'patience', label: 'PAT', max: 1 },
+    { key: 'risk_tolerance', label: 'RISK', max: 1 },
+    { key: 'sell_profit_pct', label: 'TP%', max: 200 },
+    { key: 'sell_loss_pct', label: 'SL%', max: 50 },
+    { key: 'max_position_pct', label: 'POS%', max: 80 },
+  ];
+  const n = params.length;
+  const angleStep = (Math.PI * 2) / n;
+
+  // Grid rings
+  ctx.strokeStyle = 'rgba(180,30,50,0.1)';
+  ctx.lineWidth = 1;
+  for (let ring = 1; ring <= 4; ring++) {
+    ctx.beginPath();
+    const rr = r * ring / 4;
+    for (let i = 0; i <= n; i++) {
+      const a = i * angleStep - Math.PI/2;
+      const x = cx + rr * Math.cos(a);
+      const y = cy + rr * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Axis lines
+  ctx.strokeStyle = 'rgba(180,30,50,0.15)';
+  for (let i = 0; i < n; i++) {
+    const a = i * angleStep - Math.PI/2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+    ctx.stroke();
+  }
+
+  // Data polygon
+  ctx.beginPath();
+  params.forEach((p, i) => {
+    const val = Math.min((dna[p.key] || 0) / p.max, 1);
+    const a = i * angleStep - Math.PI/2;
+    const x = cx + r * val * Math.cos(a);
+    const y = cy + r * val * Math.sin(a);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(196,30,58,0.15)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(196,30,58,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Dots + Labels
+  ctx.fillStyle = '#c41e3a';
+  params.forEach((p, i) => {
+    const val = Math.min((dna[p.key] || 0) / p.max, 1);
+    const a = i * angleStep - Math.PI/2;
+    const x = cx + r * val * Math.cos(a);
+    const y = cy + r * val * Math.sin(a);
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+
+    // Label
+    const lx = cx + (r + 18) * Math.cos(a);
+    const ly = cy + (r + 18) * Math.sin(a);
+    ctx.font = '9px "JetBrains Mono"';
+    ctx.fillStyle = '#6b5f63';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.label, lx, ly);
+    ctx.fillStyle = '#c41e3a';
+  });
+}
+
+// ============================================================
+// COMPUTE WIN RATE + TRADE STATS
+// ============================================================
+function computeTradeStats(trades) {
+  if (!trades || trades.length === 0) return { winRate: 0, wins: 0, losses: 0, bestTrade: 0, streak: 0 };
+  let wins = 0, losses = 0, bestTrade = 0, streak = 0, currentStreak = 0;
+  // Group sells by their pnl
+  const sells = trades.filter(t => t.action === 'sell');
+  sells.forEach(t => {
+    const pnl = t.pnl || 0;
+    if (pnl > 0) { wins++; currentStreak = currentStreak > 0 ? currentStreak + 1 : 1; }
+    else if (pnl < 0) { losses++; currentStreak = currentStreak < 0 ? currentStreak - 1 : -1; }
+    if (pnl > bestTrade) bestTrade = pnl;
+    if (Math.abs(currentStreak) > Math.abs(streak)) streak = currentStreak;
+  });
+  const total = wins + losses;
+  return { winRate: total > 0 ? Math.round((wins / total) * 100) : 0, wins, losses, bestTrade, streak };
+}
+
+// ============================================================
+// MINI BLOODLINE TREE
+// ============================================================
+function renderMiniTree(agent, children) {
+  // Find parent
+  const parent = agent.parent_id ? allAgents.find(a => a.id === agent.parent_id) : null;
+  let html = '<div style="display:flex;flex-direction:column;align-items:center;gap:0;">';
+
+  if (parent) {
+    const pName = parent.name || parent.id;
+    html += `<div class="tree-agent" onclick="openAgentDetail('${parent.id}')"><div class="t-name">${pName}</div><div class="t-gen">gen ${parent.generation||0}</div></div>`;
+    html += '<div class="tree-connector"></div>';
+  }
+
+  const name = agent.name || agent.id;
+  html += `<div class="tree-agent current"><div class="t-name">${name}</div><div class="t-gen">gen ${agent.generation||0}</div></div>`;
+
+  if (children && children.length > 0) {
+    html += '<div class="tree-connector"></div>';
+    html += '<div class="tree-branch">';
+    children.forEach(c => {
+      const cName = c.name || c.id;
+      html += `<div class="tree-agent" onclick="openAgentDetail('${c.id}')"><div class="t-name">${cName}</div><div class="t-gen">gen ${c.generation}</div></div>`;
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ============================================================
+// AGENT DETAIL PANEL (all 8 features integrated)
+// ============================================================
+async function openAgentDetail(id) {
+  const panel = document.getElementById('detailPanel');
+  const overlay = document.getElementById('detailOverlay');
+  const content = document.getElementById('detailContent');
+  content.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-dim);">Loading...</div>';
+  overlay.classList.add('open');
+  panel.classList.add('open');
+
+  try {
+    const agent = allAgents.find(a => a.id === id);
+    if (!agent) { content.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-dim);">Agent not found</div>'; return; }
+    const children = allAgents.filter(a => a.parent_id === id);
+    // Fetch trades from events
+    let trades = [];
+    try {
+      const evRes = await fetch(`/api/events?limit=50`);
+      const evData = await evRes.json();
+      trades = (evData.events || []).filter(e => e.agent_id === id && (e.type === 'trade' || e.type === 'buy' || e.type === 'sell'));
+    } catch {}
+
+    const img = getAgentImage(agent);
+    const name = agent.name || agent.id;
+    const gen = agent.generation || 0;
+    const status = getAgentStatus(agent);
+    const portfolio = portfolioData[agent.id];
+    const rank = leaderboardRanks[agent.id];
+    const dna = typeof agent.dna === 'string' ? JSON.parse(agent.dna) : (agent.dna || {});
+    const tradeStats = computeTradeStats(trades);
+
+    const avatarHtml = img ? `<img class="detail-avatar" src="${img}" alt="${name}">` : `<div class="detail-avatar-placeholder">G${gen}</div>`;
+
+    let html = `
+      <div class="detail-header">
+        ${avatarHtml}
+        <div>
+          <div class="detail-title">${name}</div>
+          <div class="detail-badges">
+            <div class="gen-badge">gen ${gen}</div>
+            ${rank ? `<div class="rank-badge">#${rank}</div>` : ''}
+            <div class="status-dot ${status}"></div>
+          </div>
+          <div class="detail-wallet">
+            <span>${truncAddr(agent.agent_wallet)}</span>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText('${agent.agent_wallet||''}');this.textContent='ok';setTimeout(()=>this.textContent='copy',1000)">copy</button>
+            ${agent.agent_wallet?`<a href="https://solscan.io/account/${agent.agent_wallet}" target="_blank">solscan</a>`:''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats: 3x2 grid with win rate -->
+      <div class="detail-section">
+        <div class="detail-section-title">Stats</div>
+        <div class="detail-stats detail-stats-3col">
+          <div class="detail-stat">
+            <div class="detail-stat-label">PnL</div>
+            <div class="detail-stat-value" style="color:${(agent.total_pnl||0)>=0?'var(--green)':'var(--red)'}">${formatSol(agent.total_pnl||0)}</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Trades</div>
+            <div class="detail-stat-value">${agent.total_trades||0}</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Win Rate</div>
+            <div class="detail-stat-value" style="color:${tradeStats.winRate>=50?'var(--green)':'var(--red)'}">${tradeStats.winRate}%</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Best Trade</div>
+            <div class="detail-stat-value" style="font-size:13px;color:var(--green);">${tradeStats.bestTrade>0?('+'+tradeStats.bestTrade.toFixed(3)+' SOL'):'--'}</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Streak</div>
+            <div class="detail-stat-value" style="color:${tradeStats.streak>=0?'var(--green)':'var(--red)'}">${tradeStats.streak>0?'+'+tradeStats.streak:tradeStats.streak}</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Royalties</div>
+            <div class="detail-stat-value" style="font-size:13px;color:var(--blood);">${(agent.total_royalties_paid||0)>0?formatSol(agent.total_royalties_paid):'0 SOL'}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DNA Radar Chart -->
+      <div class="detail-section">
+        <div class="detail-section-title">DNA Profile</div>
+        <div class="radar-container"><canvas id="radarCanvas"></canvas></div>
+      </div>`;
+
+    // Holdings
+    html += `<div class="detail-section"><div class="detail-section-title">Holdings</div>`;
+    if (portfolio && (portfolio.tokens?.length > 0 || portfolio.sol_balance !== undefined)) {
+      html += `<table class="holdings-table"><thead><tr><th>Token</th><th>Amount</th><th>Value</th><th>PnL</th></tr></thead><tbody>`;
+      html += `<tr><td>SOL</td><td style="font-family:var(--font-mono);font-size:11px;">${(portfolio.sol_balance||0).toFixed(4)}</td><td style="font-family:var(--font-mono);font-size:11px;">${formatUsd(portfolio.sol_value_usd||0)}</td><td>--</td></tr>`;
+      (portfolio.tokens||[]).forEach(t => {
+        const pc = t.pnl_usd>=0?'var(--green)':'var(--red)';
+        html += `<tr><td>${t.symbol}</td><td style="font-family:var(--font-mono);font-size:11px;">${t.amount.toFixed(2)}</td><td style="font-family:var(--font-mono);font-size:11px;">${formatUsd(t.value_usd)}</td><td style="font-family:var(--font-mono);font-size:11px;color:${pc}">${t.pnl_usd!==0?formatUsd(t.pnl_usd):'--'}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+      if (portfolio.total_value_usd) html += `<div style="margin-top:8px;display:flex;justify-content:space-between;font-size:12px;font-weight:600;"><span style="color:var(--text-dim);">TOTAL</span><span style="color:var(--blood);font-family:var(--font-mono);">${formatUsd(portfolio.total_value_usd)}</span></div>`;
+    } else {
+      html += `<div class="holdings-empty" id="detail-holdings-${agent.id}">Loading holdings...</div>`;
+      if (!portfolioData[agent.id]) loadDetailPortfolio(agent.id);
+    }
+    html += `</div>`;
+
+    // Recent trades
+    html += `<div class="detail-section"><div class="detail-section-title">Recent Trades</div>`;
+    if (trades.length > 0) {
+      html += trades.slice(0,10).map(t => {
+        const action=t.action||'trade'; const symbol=t.token_symbol||(t.token_address?t.token_address.slice(0,6):'--');
+        const amount=t.amount_sol?t.amount_sol.toFixed(3)+' SOL':''; const tx=t.tx_signature||'';
+        const txLink=tx?`<a class="trade-tx" href="https://solscan.io/tx/${tx}" target="_blank">tx</a>`:'';
+        return `<div class="trade-item"><span class="trade-badge ${action}">${action}</span><span class="trade-token">${symbol}</span><span class="trade-amount">${amount}</span><span class="trade-time">${timeAgo(t.created_at)}</span>${txLink}</div>`;
+      }).join('');
+    } else { html += '<div class="holdings-empty">No trades yet</div>'; }
+    html += '</div>';
+
+    // Mini Bloodline Tree
+    html += `<div class="detail-section"><div class="detail-section-title">Bloodline</div>${renderMiniTree(agent, children)}</div>`;
+
+    // Actions: Spawn + Withdraw + Links
+    const canSpawn = (agent.total_pnl || 0) >= 0.4;
+    const isOwner = connectedWallet && connectedWallet === agent.owner_wallet;
+    html += `<div class="detail-actions">`;
+    if (canSpawn && isOwner) html += `<button class="detail-action-btn primary" onclick="handleSpawn('${agent.id}','${name}',${gen})">Reproduce</button>`;
+    if (isOwner) html += `<button class="detail-action-btn" onclick="toggleWithdraw('${agent.id}')">Withdraw</button>`;
+    html += `<button class="detail-action-btn" onclick="openShareCard('${agent.id}')">Share PnL</button>`;
+    html += `<a class="detail-action-btn" href="/bloodline.html" target="_blank">Bloodline</a>`;
+    if (agent.agent_wallet) html += `<a class="detail-action-btn" href="https://solscan.io/account/${agent.agent_wallet}" target="_blank">Solscan</a>`;
+    html += `</div>`;
+
+    // Withdraw inline (hidden by default)
+    if (isOwner) {
+      html += `<div class="withdraw-inline" id="withdrawSection-${agent.id}" style="display:none;">
+        <div class="detail-section-title">Withdraw SOL</div>
+        <input type="number" id="withdrawAmount-${agent.id}" placeholder="Amount in SOL" step="0.01" min="0.01">
+        <button class="detail-action-btn primary" style="width:100%;" onclick="executeWithdraw('${agent.id}')">Send to my wallet</button>
+        <div class="w-status" id="withdrawStatus-${agent.id}"></div>
+      </div>`;
+    }
+
+    content.innerHTML = html;
+
+    // Draw radar chart after DOM insert
+    setTimeout(() => drawRadarChart(document.getElementById('radarCanvas'), dna), 50);
+
+  } catch (e) { content.innerHTML=`<div style="padding:40px;text-align:center;color:var(--red);">Error: ${e.message}</div>`; }
+}
+
+async function loadDetailPortfolio(agentId) {
+  try {
+    const res = await fetch(`/api/agent-portfolio?agent_id=${agentId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    portfolioData[agentId] = data;
+    const el = document.getElementById(`detail-holdings-${agentId}`);
+    if (el) el.textContent = `SOL: ${(data.sol_balance||0).toFixed(4)}`;
+  } catch {}
+}
+
+function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); document.getElementById('detailOverlay').classList.remove('open'); }
+
+// ============================================================
+// SPAWN (feature 7)
+// ============================================================
+async function handleSpawn(agentId, agentName, gen) {
+  if (!connectedWallet) { openLoginModal(); return; }
+  const childGen = gen + 1;
+  if (childGen > 5) { alert('Max generation reached (5)'); return; }
+  const sol = prompt(`Reproduce ${agentName}\n\nChild will be Gen ${childGen}.\nHow much SOL to deposit as trading capital? (min 1)`, '1');
+  if (!sol || parseFloat(sol) < 1) return;
+
+  try {
+    const res = await fetch('/api/spawn-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent_id: agentId, sol_amount: parseFloat(sol), owner_wallet: connectedWallet }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Spawn failed'); return; }
+    alert(`Spawn request created.\nSend ${data.spawn_cost_tokens?.toLocaleString() || '?'} $SPAWN + ${data.sol_amount} SOL to:\n${data.protocol_wallet}\n\nThen check spawn status.`);
+  } catch (e) { alert('Network error: ' + e.message); }
+}
+
+// ============================================================
+// WITHDRAW (feature 8)
+// ============================================================
+function toggleWithdraw(agentId) {
+  const el = document.getElementById(`withdrawSection-${agentId}`);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function executeWithdraw(agentId) {
+  const amountEl = document.getElementById(`withdrawAmount-${agentId}`);
+  const statusEl = document.getElementById(`withdrawStatus-${agentId}`);
+  const amount = parseFloat(amountEl.value);
+  if (!amount || amount <= 0) { statusEl.textContent = 'Enter a valid amount'; statusEl.className = 'w-status error'; return; }
+
+  const provider = window.phantom?.solana;
+  if (!provider) { statusEl.textContent = 'Phantom wallet not detected'; statusEl.className = 'w-status error'; return; }
+
+  try {
+    statusEl.textContent = 'Connecting wallet...'; statusEl.className = 'w-status';
+    const resp = await provider.connect();
+    const wallet = (resp?.publicKey || provider.publicKey).toString();
+    const nonce = Math.random().toString(36).slice(2, 10);
+    const message = `withdraw:${agentId}:${amount}:${nonce}`;
+
+    statusEl.textContent = 'Sign message in Phantom...';
+    const encoded = new TextEncoder().encode(message);
+    const signed = await provider.signMessage(encoded, 'utf8');
+    const sigBase64 = btoa(String.fromCharCode(...signed.signature));
+
+    statusEl.textContent = 'Processing withdrawal...';
+    const res = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, amount_sol: amount, method: 'phantom', signature: sigBase64, message }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.textContent = data.error || 'Failed'; statusEl.className = 'w-status error'; return; }
+    statusEl.textContent = 'Withdrawal submitted! TX: ' + (data.tx_signature ? data.tx_signature.slice(0,12)+'...' : 'pending');
+    statusEl.className = 'w-status ok';
+    amountEl.value = '';
+  } catch (e) {
+    statusEl.textContent = e.message || 'Cancelled'; statusEl.className = 'w-status error';
+  }
+}
+
+// ============================================================
+// PNL SHARE CARD
+// ============================================================
+
+let shareAgentId = null;
+let shareMode = 'agent'; // 'agent' or 'portfolio'
+
+function formatName(id, name) {
+  if (name) return name;
+  return id.replace('the-', '').replace(/-/g, ' ');
+}
+
+function openShareCard(agentId) {
+  shareAgentId = agentId;
+  shareMode = 'agent';
+  const agent = allAgents.find(a => a.id === agentId);
+  if (!agent) return;
+
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 600, H = 340;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = 'auto';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const imgPath = getAgentImage(agent);
+  const pnlVal = agent.total_pnl || 0;
+  const isProfit = pnlVal >= 0;
+  const accentColor = isProfit ? '#22ff66' : '#ff3344';
+  const accentDim = isProfit ? 'rgba(34, 255, 102, 0.15)' : 'rgba(255, 51, 68, 0.15)';
+
+  function drawOverlaysAndText() {
+    const darkGrad = ctx.createLinearGradient(0, 0, W, 0);
+    darkGrad.addColorStop(0, 'rgba(6, 3, 4, 0.05)');
+    darkGrad.addColorStop(0.3, 'rgba(6, 3, 4, 0.15)');
+    darkGrad.addColorStop(0.45, 'rgba(6, 3, 4, 0.6)');
+    darkGrad.addColorStop(0.6, 'rgba(6, 3, 4, 0.88)');
+    darkGrad.addColorStop(1, 'rgba(6, 3, 4, 0.95)');
+    ctx.fillStyle = darkGrad;
+    ctx.fillRect(0, 0, W, H);
+
+    const botGrad = ctx.createLinearGradient(0, H - 50, 0, H);
+    botGrad.addColorStop(0, 'transparent');
+    botGrad.addColorStop(1, 'rgba(6, 3, 4, 0.7)');
+    ctx.fillStyle = botGrad;
+    ctx.fillRect(0, H - 50, W, 50);
+
+    const topGrad = ctx.createLinearGradient(0, 0, 0, 50);
+    topGrad.addColorStop(0, 'rgba(6, 3, 4, 0.5)');
+    topGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(0, 0, W, 50);
+
+    const accentGrad = ctx.createLinearGradient(0, 0, 120, 0);
+    accentGrad.addColorStop(0, accentDim);
+    accentGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = accentGrad;
+    ctx.fillRect(0, 0, 120, H);
+
+    ctx.fillStyle = accentColor;
+    ctx.fillRect(0, 0, 3, H);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+    // TOP ROW
+    ctx.font = '700 15px Cinzel, serif';
+    ctx.fillStyle = '#e63950';
+    ctx.textAlign = 'left';
+    ctx.fillText('SPAWN', 20, 32);
+
+    const genText = agent.generation === 0 ? 'GENESIS' : 'GEN ' + agent.generation;
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = agent.generation === 0 ? '#e63950' : '#9e9396';
+    ctx.textAlign = 'right';
+    ctx.fillText(genText, W - 20, 32);
+
+    // MAIN CONTENT
+    const textX = W * 0.42;
+
+    ctx.font = '700 26px Cinzel, serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(formatName(agent.id, agent.name).toUpperCase(), textX, 100);
+
+    const statusColor = getAgentStatus(agent) === 'dead' ? '#6b5f63' : '#22ff66';
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = statusColor;
+    ctx.fillText(getAgentStatus(agent).toUpperCase(), textX, 122);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(textX, 135); ctx.lineTo(W - 20, 135); ctx.stroke();
+
+    ctx.font = '400 9px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#6b5f63';
+    ctx.fillText('PROFIT / LOSS', textX, 158);
+
+    const pnlSign = pnlVal >= 0 ? '+' : '';
+    ctx.font = '700 48px "JetBrains Mono", monospace';
+    ctx.fillStyle = accentColor;
+    ctx.fillText(`${pnlSign}${pnlVal.toFixed(2)}`, textX, 210);
+
+    const pnlWidth = ctx.measureText(`${pnlSign}${pnlVal.toFixed(2)}`).width;
+    ctx.font = '400 20px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText('SOL', textX + pnlWidth + 10, 210);
+
+    ctx.shadowColor = accentColor;
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = 'transparent';
+    ctx.fillRect(textX, 170, 1, 1);
+    ctx.shadowBlur = 0;
+
+    // Stats row
+    const trades = agent.total_trades || 0;
+    const children = allAgents.filter(a => a.parent_id === agentId).length;
+    ctx.font = '500 12px "JetBrains Mono", monospace';
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(trades.toString(), textX, 245);
+    ctx.fillStyle = '#6b5f63';
+    ctx.fillText(' trades', textX + ctx.measureText(trades.toString()).width, 245);
+
+    const tradesWidth = ctx.measureText(trades + ' trades').width;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillText('  /  ', textX + tradesWidth, 245);
+
+    const sepWidth = ctx.measureText('  /  ').width;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(children.toString(), textX + tradesWidth + sepWidth, 245);
+    ctx.fillStyle = '#6b5f63';
+    ctx.fillText(' descendants', textX + tradesWidth + sepWidth + ctx.measureText(children.toString()).width, 245);
+
+    // BOTTOM BAR
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+    ctx.fillRect(0, H - 36, W, 36);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.beginPath(); ctx.moveTo(0, H - 36); ctx.lineTo(W, H - 36); ctx.stroke();
+
+    ctx.font = '400 10px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#6b5f63';
+    ctx.textAlign = 'left';
+    ctx.fillText('spawnagents.fun', 20, H - 12);
+
+    ctx.font = '600 11px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#e63950';
+    ctx.textAlign = 'right';
+    ctx.fillText('$SPAWN', W - 20, H - 12);
+  }
+
+  if (imgPath) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function () {
+      const imgAspect = img.width / img.height;
+      const canvasAspect = W / H;
+      let sx = 0, sy = 0, sw = img.width, sh = img.height;
+      if (imgAspect > canvasAspect) { sw = img.height * canvasAspect; sx = (img.width - sw) / 2; }
+      else { sh = img.width / canvasAspect; sy = (img.height - sh) / 2; }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      drawOverlaysAndText();
+    };
+    img.onerror = function () { drawFallbackBg(); drawOverlaysAndText(); };
+    img.src = imgPath;
+  } else {
+    drawFallbackBg();
+    drawOverlaysAndText();
+  }
+
+  function drawFallbackBg() {
+    ctx.fillStyle = '#0a0608';
+    ctx.fillRect(0, 0, W, H);
+    ctx.font = '900 200px Cinzel, serif';
+    ctx.fillStyle = 'rgba(196, 30, 58, 0.06)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(formatName(agent.id, agent.name).charAt(0).toUpperCase(), W * 0.25, H * 0.5);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  document.getElementById('shareOverlay').classList.add('open');
+}
+
+function openPortfolioShareCard() {
+  shareAgentId = null;
+  shareMode = 'portfolio';
+
+  const canvas = document.getElementById('shareCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 600, H = 400;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = 'auto';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const totalPnl = myAgents.reduce((s, a) => s + (a.total_pnl || 0), 0);
+  const totalTrades = myAgents.reduce((s, a) => s + (a.total_trades || 0), 0);
+  const isProfit = totalPnl >= 0;
+  const accentColor = isProfit ? '#22ff66' : '#ff3344';
+  const accentDim = isProfit ? 'rgba(34, 255, 102, 0.15)' : 'rgba(255, 51, 68, 0.15)';
+
+  // Background
+  ctx.fillStyle = '#0a0608';
+  ctx.fillRect(0, 0, W, H);
+
+  // Big "P" decoration
+  ctx.font = '900 260px Cinzel, serif';
+  ctx.fillStyle = 'rgba(196, 30, 58, 0.04)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('P', W * 0.25, H * 0.45);
+  ctx.textBaseline = 'alphabetic';
+
+  // Accent glow
+  const accentGrad = ctx.createLinearGradient(0, 0, 120, 0);
+  accentGrad.addColorStop(0, accentDim);
+  accentGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = accentGrad;
+  ctx.fillRect(0, 0, 120, H);
+
+  // Left stripe
+  ctx.fillStyle = accentColor;
+  ctx.fillRect(0, 0, 3, H);
+
+  // Border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+  // TOP ROW
+  ctx.font = '700 15px Cinzel, serif';
+  ctx.fillStyle = '#e63950';
+  ctx.textAlign = 'left';
+  ctx.fillText('SPAWN', 20, 32);
+
+  ctx.font = '600 10px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#9e9396';
+  ctx.textAlign = 'right';
+  ctx.fillText('DASHBOARD', W - 20, 32);
+
+  // MAIN CONTENT
+  const textX = 40;
+
+  ctx.font = '700 26px Cinzel, serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.fillText('MY PORTFOLIO', textX, 80);
+
+  ctx.font = '600 11px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#9e9396';
+  ctx.fillText(myAgents.length + ' AGENTS', textX, 100);
+
+  // Separator
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(textX, 112); ctx.lineTo(W - 20, 112); ctx.stroke();
+
+  // PnL label
+  ctx.font = '400 9px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#6b5f63';
+  ctx.fillText('TOTAL PROFIT / LOSS', textX, 132);
+
+  // PnL value
+  const pnlSign = totalPnl >= 0 ? '+' : '';
+  ctx.font = '700 48px "JetBrains Mono", monospace';
+  ctx.fillStyle = accentColor;
+  ctx.fillText(`${pnlSign}${totalPnl.toFixed(2)}`, textX, 182);
+
+  const pnlWidth = ctx.measureText(`${pnlSign}${totalPnl.toFixed(2)}`).width;
+  ctx.font = '400 20px "JetBrains Mono", monospace';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  ctx.fillText('SOL', textX + pnlWidth + 10, 182);
+
+  // Glow
+  ctx.shadowColor = accentColor;
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = 'transparent';
+  ctx.fillRect(textX, 150, 1, 1);
+  ctx.shadowBlur = 0;
+
+  // Stats row
+  ctx.font = '500 12px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(totalTrades.toString(), textX, 210);
+  ctx.fillStyle = '#6b5f63';
+  ctx.fillText(' trades', textX + ctx.measureText(totalTrades.toString()).width, 210);
+  const tw = ctx.measureText(totalTrades + ' trades').width;
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillText('  /  ', textX + tw, 210);
+  const sw = ctx.measureText('  /  ').width;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(myAgents.length.toString(), textX + tw + sw, 210);
+  ctx.fillStyle = '#6b5f63';
+  ctx.fillText(' agents', textX + tw + sw + ctx.measureText(myAgents.length.toString()).width, 210);
+
+  // Separator before agent list
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+  ctx.beginPath(); ctx.moveTo(textX, 225); ctx.lineTo(W - 20, 225); ctx.stroke();
+
+  // Agent list
+  let listY = 245;
+  myAgents.forEach(a => {
+    const name = formatName(a.id, a.name);
+    const pnl = a.total_pnl || 0;
+    const pColor = pnl >= 0 ? '#22ff66' : '#ff3344';
+    const pSign = pnl >= 0 ? '+' : '';
+
+    ctx.font = '500 12px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ede8ea';
+    ctx.textAlign = 'left';
+    ctx.fillText(name, textX + 8, listY);
+
+    ctx.font = '600 12px "JetBrains Mono", monospace';
+    ctx.fillStyle = pColor;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${pSign}${pnl.toFixed(3)} SOL`, W - 30, listY);
+
+    listY += 22;
+  });
+
+  // BOTTOM BAR
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+  ctx.fillRect(0, H - 36, W, 36);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.beginPath(); ctx.moveTo(0, H - 36); ctx.lineTo(W, H - 36); ctx.stroke();
+
+  ctx.font = '400 10px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#6b5f63';
+  ctx.textAlign = 'left';
+  ctx.fillText('spawnagents.fun', 20, H - 12);
+
+  ctx.font = '600 11px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#e63950';
+  ctx.textAlign = 'right';
+  ctx.fillText('$SPAWN', W - 20, H - 12);
+
+  document.getElementById('shareOverlay').classList.add('open');
+}
+
+function closeShareCard() {
+  document.getElementById('shareOverlay').classList.remove('open');
+  shareAgentId = null;
+}
+
+function downloadShareCard() {
+  const canvas = document.getElementById('shareCanvas');
+  const link = document.createElement('a');
+  link.download = shareMode === 'portfolio' ? 'spawn-portfolio-pnl.png' : `spawn-${shareAgentId || 'agent'}-pnl.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+function tweetShareCard() {
+  let text;
+  if (shareMode === 'portfolio') {
+    const totalPnl = myAgents.reduce((s, a) => s + (a.total_pnl || 0), 0);
+    const pnlStr = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' SOL';
+    text = `My portfolio ${pnlStr} across ${myAgents.length} agents on @spawnagents\n\nAutonomous AI trading agents evolving on Solana.\n\nspawnagents.fun`;
+  } else {
+    const agent = allAgents.find(a => a.id === shareAgentId);
+    const name = agent ? formatName(agent.id, agent.name) : 'Agent';
+    const pnl = agent ? (agent.total_pnl >= 0 ? '+' : '') + agent.total_pnl.toFixed(2) + ' SOL' : '';
+    text = `${name} ${pnl} on @spawnagents\n\nAutonomous AI trading agents evolving on Solana.\n\nspawnagents.fun`;
+  }
+  window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+// ============================================================
+// REFRESH
+// ============================================================
+async function refreshData() { await loadDashboard(); }
+async function refreshEvents() {
+  try {
+    const res = await fetch('/api/events?limit=50');
+    const data = await res.json();
+    allEvents = (data.events || []).filter(e => !e.agent_id?.startsWith('test-'));
+    renderActivityFeed();
+  } catch {}
+}
+
+// ============================================================
+// AUDIO — Cyber UI sounds (Web Audio API, no files)
+// ============================================================
+let audioCtx = null;
+let sfxEnabled = localStorage.getItem('spawn_sfx') !== 'off';
+
+function getAudio() {
+  if (!sfxEnabled) return null;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function toggleSound() {
+  sfxEnabled = !sfxEnabled;
+  localStorage.setItem('spawn_sfx', sfxEnabled ? 'on' : 'off');
+  updateSoundButtons();
+  if (sfxEnabled) sfxClick();
+}
+
+function updateSoundButtons() {
+  ['soundToggle', 'soundToggleMobile'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.textContent = sfxEnabled ? 'SOUND ON' : 'SOUND OFF';
+    btn.classList.toggle('off', !sfxEnabled);
+  });
+}
+
+function initSoundToggle() { updateSoundButtons(); }
+
+function sfxClick() {
+  const ctx = getAudio(); if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(1800, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.06);
+  gain.gain.setValueAtTime(0.07, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.06);
+}
+
+function sfxOpen() {
+  const ctx = getAudio(); if (!ctx) return;
+  // Layer 1: rising tone
+  const osc1 = ctx.createOscillator();
+  const g1 = ctx.createGain();
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(200, ctx.currentTime);
+  osc1.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.12);
+  g1.gain.setValueAtTime(0.06, ctx.currentTime);
+  g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+  osc1.connect(g1); g1.connect(ctx.destination);
+  osc1.start(); osc1.stop(ctx.currentTime + 0.25);
+  // Layer 2: echo tick
+  const osc2 = ctx.createOscillator();
+  const g2 = ctx.createGain();
+  osc2.type = 'square';
+  osc2.frequency.setValueAtTime(1200, ctx.currentTime + 0.08);
+  osc2.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.15);
+  g2.gain.setValueAtTime(0, ctx.currentTime);
+  g2.gain.setValueAtTime(0.04, ctx.currentTime + 0.08);
+  g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+  osc2.connect(g2); g2.connect(ctx.destination);
+  osc2.start(); osc2.stop(ctx.currentTime + 0.2);
+}
+
+function sfxClose() {
+  const ctx = getAudio(); if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.05, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.15);
+}
+
+function sfxHover() {
+  const ctx = getAudio(); if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1400, ctx.currentTime);
+  osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.02);
+  gain.gain.setValueAtTime(0.015, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime + 0.04);
+}
+
+function sfxAccept() {
+  const ctx = getAudio(); if (!ctx) return;
+  // Two-note confirmation: low → high
+  [0, 0.08].forEach((delay, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    const freq = i === 0 ? 500 : 750;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+    g.gain.setValueAtTime(0, ctx.currentTime);
+    g.gain.setValueAtTime(0.06, ctx.currentTime + delay);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + delay + 0.12);
+  });
+}
+
+// Wire sounds to interactions
+document.addEventListener('DOMContentLoaded', () => {
+  // Delegate clicks
+  document.addEventListener('click', e => {
+    const el = e.target;
+    // Agent cards
+    if (el.closest('.agent-card')) { sfxOpen(); return; }
+    // Share buttons (open)
+    if (el.closest('.portfolio-share-btn') || el.closest('[onclick*="openShareCard"]')) { sfxAccept(); return; }
+    // Download / tweet
+    if (el.closest('.share-btn')) { sfxAccept(); return; }
+    // Close buttons
+    if (el.closest('.share-close') || el.closest('.detail-close button')) { sfxClose(); return; }
+    // Overlay close (clicking background)
+    if (el.classList.contains('share-overlay') || el.classList.contains('detail-overlay')) { sfxClose(); return; }
+    // Nav links, section actions, detail action buttons, login buttons
+    if (el.closest('.nav-wallet') || el.closest('.section-action') || el.closest('.detail-action-btn') || el.closest('.login-option') || el.closest('.login-option-alt') || el.closest('.connect-btn') || el.closest('.verify-btn') || el.closest('.tree-agent')) { sfxClick(); return; }
+  });
+
+  // Hover on agent cards
+  document.addEventListener('mouseover', e => {
+    if (e.target.closest('.agent-card') && !e.target.closest('.agent-card').dataset.hovered) {
+      e.target.closest('.agent-card').dataset.hovered = '1';
+      sfxHover();
+    }
+  });
+  document.addEventListener('mouseout', e => {
+    const card = e.target.closest('.agent-card');
+    if (card) delete card.dataset.hovered;
+  });
+});
+
+// ============================================================
+// KEYBOARD
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('shareOverlay').classList.contains('open')) { sfxClose(); closeShareCard(); return; }
+    if (document.getElementById('detailPanel').classList.contains('open')) { sfxClose(); closeDetail(); return; }
+    if (document.getElementById('loginOverlay').classList.contains('open')) { sfxClose(); closeLoginModal(); return; }
+  }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+checkWallet();
+if (connectedWallet) { loadDashboard(); } else { showState('connect'); }
+initSoundToggle();
+</script>
+</body>
+</html>

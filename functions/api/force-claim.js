@@ -57,7 +57,7 @@ export async function onRequest(context) {
   if (kv) await kv.put(`agent:${agent_id}:secret`, keypair.secretKey);
 
   // Fund agent (90% of payment)
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
   const tradingCapital = amount_sol * (1 - feePct);
 
   let fundingTx;

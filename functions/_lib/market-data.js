@@ -1,5 +1,4 @@
 const DEXSCREENER = 'https://api.dexscreener.com';
-const JUPITER_API = 'https://quote-api.jup.ag/v6';
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 // ============================================================
@@ -11,33 +10,7 @@ export async function discoverTokens() {
   const seen = new Set();
   const tokens = [];
 
-  // Source 1: Top boosted tokens (paid DexScreener promotions = active community)
-  try {
-    const res = await fetch(`${DEXSCREENER}/token-boosts/top/v1`);
-    if (res.ok) {
-      const boosts = await res.json();
-      const solAddrs = boosts
-        .filter(b => b.chainId === 'solana')
-        .map(b => b.tokenAddress)
-        .slice(0, 20);
-      await lookupAndAdd(solAddrs, tokens, seen);
-    }
-  } catch {}
-
-  // Source 2: Latest boosted tokens (freshest trending)
-  try {
-    const res = await fetch(`${DEXSCREENER}/token-boosts/latest/v1`);
-    if (res.ok) {
-      const boosts = await res.json();
-      const solAddrs = boosts
-        .filter(b => b.chainId === 'solana')
-        .map(b => b.tokenAddress)
-        .slice(0, 15);
-      await lookupAndAdd(solAddrs, tokens, seen);
-    }
-  } catch {}
-
-  // Source 3: Search for active Solana pairs
+  // Source 1: Search for active Solana pairs
   for (const q of ['SOL', 'solana pump']) {
     try {
       const res = await fetch(`${DEXSCREENER}/latest/dex/search?q=${encodeURIComponent(q)}`);
@@ -45,16 +18,13 @@ export async function discoverTokens() {
         const data = await res.json();
         for (const pair of (data.pairs || [])) {
           if (pair.chainId !== 'solana') continue;
-          if (seen.has(pair.baseToken.address)) continue;
-          seen.add(pair.baseToken.address);
-          const parsed = parsePair(pair);
-          if (parsed) tokens.push(parsed);
+          addBestPair(pair, tokens, seen);
         }
       }
     } catch {}
   }
 
-  // Source 4: Latest token profiles (catches fresh pump.fun migrations)
+  // Source 2: Latest token profiles (catches fresh pump.fun migrations)
   try {
     const res = await fetch(`${DEXSCREENER}/token-profiles/latest/v1`);
     if (res.ok) {
@@ -67,7 +37,7 @@ export async function discoverTokens() {
     }
   } catch {}
 
-  // Source 5: Search for recent pumpswap migrations + trending terms
+  // Source 3: Search for recent pumpswap migrations + trending terms
   for (const q of ['pumpswap', 'pump.fun', 'raydium SOL']) {
     try {
       const res = await fetch(`${DEXSCREENER}/latest/dex/search?q=${encodeURIComponent(q)}`);
@@ -75,66 +45,61 @@ export async function discoverTokens() {
         const data = await res.json();
         for (const pair of (data.pairs || []).slice(0, 30)) {
           if (pair.chainId !== 'solana') continue;
-          if (seen.has(pair.baseToken.address)) continue;
-          seen.add(pair.baseToken.address);
-          const parsed = parsePair(pair);
-          if (parsed) tokens.push(parsed);
+          addBestPair(pair, tokens, seen);
         }
       }
     } catch {}
   }
 
-  // Source 6: DexScreener new pairs on Solana (catches all fresh migrations)
+  // Source 4: DexScreener new pairs on Solana (catches fresh migrations)
   try {
     const res = await fetch(`${DEXSCREENER}/latest/dex/pairs/solana`);
     if (res.ok) {
       const data = await res.json();
       for (const pair of (data.pairs || []).slice(0, 40)) {
-        if (seen.has(pair.baseToken.address)) continue;
-        seen.add(pair.baseToken.address);
-        const parsed = parsePair(pair);
-        if (parsed) tokens.push(parsed);
+        addBestPair(pair, tokens, seen);
       }
     }
   } catch {}
 
-  // Source 7: pump.fun bonding curve tokens (not yet migrated)
+  // Source 5: pump.fun currently live — collect addresses, lookup real data via DexScreener
   try {
     const res = await fetch('https://frontend-api-v3.pump.fun/coins/currently-live?limit=20&offset=0&includeNsfw=false');
     if (res.ok) {
       const coins = await res.json();
-      for (const coin of coins) {
-        if (seen.has(coin.mint)) continue;
-        seen.add(coin.mint);
-        const mcap = coin.usd_market_cap || 0;
-        if (mcap < 1000) continue;
-        tokens.push({
-          address: coin.mint,
-          symbol: coin.symbol || '?',
-          name: coin.name || '',
-          price_usd: mcap > 0 && coin.total_supply ? mcap / (coin.total_supply / 1e6) : 0,
-          price_native: 0,
-          volume_24h: coin.volume_24h || mcap * 0.5,
-          volume_6h: coin.volume_6h || 0,
-          volume_1h: coin.volume_1h || mcap * 0.1,
-          liquidity_usd: mcap * 0.3,
-          market_cap: mcap,
-          txns_24h: coin.num_holders || 50,
-          txns_1h: 20,
-          txns_5m: 5,
-          price_change_5m: 0,
-          price_change_1h: 0,
-          price_change_6h: 0,
-          price_change_24h: 0,
-          pair_age_hours: coin.created_timestamp ? (Date.now() - coin.created_timestamp) / 3600000 : 1,
-          buy_sell_ratio_1h: 1.5,
-          dex: 'pumpfun',
-        });
-      }
+      const pumpAddrs = coins
+        .filter(c => (c.usd_market_cap || 0) >= 1000)
+        .map(c => c.mint)
+        .filter(a => !seen.has(a));
+      await lookupAndAdd(pumpAddrs, tokens, seen);
     }
   } catch {}
 
   return tokens;
+}
+
+// Add pair, keeping only the highest-liquidity pair per token address
+function addBestPair(pair, tokens, seen) {
+  const addr = pair.baseToken?.address;
+  if (!addr) return;
+
+  if (seen.has(addr)) {
+    // Check if this pair has higher liquidity than the existing one
+    const existingIdx = tokens.findIndex(t => t.address === addr);
+    if (existingIdx >= 0) {
+      const existingLiq = tokens[existingIdx].liquidity_usd || 0;
+      const newLiq = pair.liquidity?.usd || 0;
+      if (newLiq > existingLiq) {
+        const parsed = parsePair(pair);
+        if (parsed) tokens[existingIdx] = parsed;
+      }
+    }
+    return;
+  }
+
+  seen.add(addr);
+  const parsed = parsePair(pair);
+  if (parsed) tokens.push(parsed);
 }
 
 // Batch lookup token addresses via DexScreener /tokens/ endpoint
@@ -142,7 +107,6 @@ async function lookupAndAdd(addresses, tokens, seen) {
   const unseen = addresses.filter(a => !seen.has(a));
   if (unseen.length === 0) return;
 
-  // DexScreener supports comma-separated addresses, batches of 10
   for (let i = 0; i < unseen.length; i += 10) {
     const batch = unseen.slice(i, i + 10);
     try {
@@ -150,11 +114,21 @@ async function lookupAndAdd(addresses, tokens, seen) {
       if (!res.ok) continue;
       const data = await res.json();
 
+      // Group pairs by token, pick highest liquidity per token
+      const bestPairs = {};
       for (const pair of (data.pairs || [])) {
         if (pair.chainId !== 'solana') continue;
-        if (seen.has(pair.baseToken.address)) continue;
-        seen.add(pair.baseToken.address);
-        const parsed = parsePair(pair);
+        const addr = pair.baseToken.address;
+        const liq = pair.liquidity?.usd || 0;
+        if (!bestPairs[addr] || liq > (bestPairs[addr].liquidity?.usd || 0)) {
+          bestPairs[addr] = pair;
+        }
+      }
+
+      for (const addr of Object.keys(bestPairs)) {
+        if (seen.has(addr)) continue;
+        seen.add(addr);
+        const parsed = parsePair(bestPairs[addr]);
         if (parsed) tokens.push(parsed);
       }
     } catch {}
@@ -167,7 +141,6 @@ function parsePair(pair) {
 
   const txns = pair.txns || {};
   const h24 = txns.h24 || { buys: 0, sells: 0 };
-  const h6 = txns.h6 || { buys: 0, sells: 0 };
   const h1 = txns.h1 || { buys: 0, sells: 0 };
   const m5 = txns.m5 || { buys: 0, sells: 0 };
 
@@ -208,9 +181,13 @@ export async function getTokenData(tokenMint) {
     const res = await fetch(`${DEXSCREENER}/latest/dex/tokens/${tokenMint}`);
     if (!res.ok) return null;
     const data = await res.json();
-    const pair = (data.pairs || []).find(p => p.chainId === 'solana');
-    if (!pair) return null;
-    return parsePair(pair);
+    // Pick highest-liquidity Solana pair for this token
+    const solPairs = (data.pairs || []).filter(p => p.chainId === 'solana');
+    if (solPairs.length === 0) return null;
+    const bestPair = solPairs.reduce((best, p) =>
+      (p.liquidity?.usd || 0) > (best.liquidity?.usd || 0) ? p : best
+    );
+    return parsePair(bestPair);
   } catch { return null; }
 }
 
@@ -232,81 +209,41 @@ export async function getTokenPrice(tokenMint) {
 
 const RUGCHECK_API = 'https://api.rugcheck.xyz/v1';
 
-// Check if a token is safe to buy. Returns { safe, reasons[] }
 export async function checkTokenSafety(tokenAddress, dexData) {
   const reasons = [];
 
-  // --- Heuristic checks on DexScreener data (free, instant) ---
-
-  // Wash trading: extreme buy/sell ratio in 5 min
   if (dexData) {
-    const m5 = dexData.txns_5m || 0;
     const r1h = dexData.buy_sell_ratio_1h || 0;
+    if (r1h > 10) reasons.push('suspicious buy/sell ratio');
 
-    // >10:1 buy/sell ratio in last hour = likely manipulation
-    if (r1h > 10) {
-      reasons.push('suspicious buy/sell ratio');
-    }
-
-    // Volume spike: 5min volume > 40% of 24h volume = coordinated pump
     if (dexData.volume_1h > 0 && dexData.volume_24h > 0) {
-      if (dexData.volume_1h / dexData.volume_24h > 0.5) {
-        reasons.push('volume spike (1h > 50% of 24h)');
-      }
+      if (dexData.volume_1h / dexData.volume_24h > 0.5) reasons.push('volume spike (1h > 50% of 24h)');
     }
 
-    // Very high volume but very few transactions = few wallets faking volume
-    if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) {
-      reasons.push('high volume with few txns (likely wash trading)');
-    }
+    if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) reasons.push('high volume with few txns (likely wash trading)');
+    if (dexData.pair_age_hours < 1 && dexData.volume_24h > 200000) reasons.push('brand new with suspicious volume');
+    if (dexData.liquidity_usd !== undefined && dexData.liquidity_usd < 5000) reasons.push(`low liquidity ($${Math.round(dexData.liquidity_usd)})`);
 
-    // Extremely new with huge volume = likely coordinated launch/rug
-    if (dexData.pair_age_hours < 1 && dexData.volume_24h > 200000) {
-      reasons.push('brand new with suspicious volume');
-    }
-
-    // Low liquidity = easy to rug or manipulate
-    if (dexData.liquidity_usd !== undefined && dexData.liquidity_usd < 5000) {
-      reasons.push(`low liquidity ($${Math.round(dexData.liquidity_usd)})`);
-    }
-
-    // MC/liquidity ratio too high = inflated price with thin liquidity
     if (dexData.market_cap > 0 && dexData.liquidity_usd > 0) {
       const mcLiqRatio = dexData.market_cap / dexData.liquidity_usd;
-      if (mcLiqRatio > 20) {
-        reasons.push(`mc/liq ratio ${mcLiqRatio.toFixed(0)}x (inflated)`);
-      }
+      if (mcLiqRatio > 20) reasons.push(`mc/liq ratio ${mcLiqRatio.toFixed(0)}x (inflated)`);
     }
   }
 
-  // --- RugCheck API (comprehensive on-chain analysis) ---
   try {
     const res = await fetch(`${RUGCHECK_API}/tokens/${tokenAddress}/report/summary`);
     if (res.ok) {
       const report = await res.json();
 
-      // Rugged flag
       if (report.rugged) {
         reasons.push('flagged as rugged');
         return { safe: false, reasons, score: 0 };
       }
 
-      // Mint authority still active = can print more tokens
-      if (report.mintAuthority && report.mintAuthority !== '' && report.mintAuthority !== null) {
-        reasons.push('mint authority active');
-      }
+      if (report.mintAuthority && report.mintAuthority !== '' && report.mintAuthority !== null) reasons.push('mint authority active');
+      if (report.freezeAuthority && report.freezeAuthority !== '' && report.freezeAuthority !== null) reasons.push('freeze authority active');
+      if (report.transferFee && report.transferFee.pct > 0) reasons.push(`transfer fee ${report.transferFee.pct}%`);
 
-      // Freeze authority = can freeze your wallet
-      if (report.freezeAuthority && report.freezeAuthority !== '' && report.freezeAuthority !== null) {
-        reasons.push('freeze authority active');
-      }
-
-      // Transfer fee = tax token
-      if (report.transferFee && report.transferFee.pct > 0) {
-        reasons.push(`transfer fee ${report.transferFee.pct}%`);
-      }
-
-      // RugCheck risk flags (skip "Creator history of rugged tokens" — too many false positives)
       if (report.risks && report.risks.length > 0) {
         const dangers = report.risks.filter(r => r.level === 'danger');
         for (const d of dangers) {
@@ -316,55 +253,19 @@ export async function checkTokenSafety(tokenAddress, dexData) {
         }
       }
 
-      // Low holder count
-      if (report.totalHolders !== undefined && report.totalHolders < 30) {
-        reasons.push(`only ${report.totalHolders} holders`);
-      }
+      if (report.totalHolders !== undefined && report.totalHolders < 30) reasons.push(`only ${report.totalHolders} holders`);
 
-      // Top holder concentration (from topHolders if available)
       if (report.topHolders && Array.isArray(report.topHolders)) {
-        const top10Pct = report.topHolders
-          .slice(0, 10)
-          .reduce((sum, h) => sum + (h.pct || 0), 0);
-        if (top10Pct > 50) {
-          reasons.push(`top 10 holders own ${top10Pct.toFixed(0)}%`);
-        }
-        // Single wallet holding >25% = major rug risk
+        const top10Pct = report.topHolders.slice(0, 10).reduce((sum, h) => sum + (h.pct || 0), 0);
+        if (top10Pct > 50) reasons.push(`top 10 holders own ${top10Pct.toFixed(0)}%`);
         const biggestHolder = report.topHolders[0];
-        if (biggestHolder && (biggestHolder.pct || 0) > 25) {
-          reasons.push(`single wallet holds ${biggestHolder.pct.toFixed(0)}%`);
-        }
+        if (biggestHolder && (biggestHolder.pct || 0) > 25) reasons.push(`single wallet holds ${biggestHolder.pct.toFixed(0)}%`);
       }
 
-      // Score threshold — RugCheck score (higher = safer)
       const score = report.score || 0;
-      return {
-        safe: reasons.length === 0,
-        reasons,
-        score,
-        holders: report.totalHolders,
-      };
+      return { safe: reasons.length === 0, reasons, score, holders: report.totalHolders };
     }
   } catch {}
 
-  // If RugCheck fails, rely on heuristics only
-  return {
-    safe: reasons.length === 0,
-    reasons,
-    score: reasons.length === 0 ? 500 : 0,
-  };
-}
-
-// ============================================================
-// JUPITER QUOTE
-// ============================================================
-
-export async function getQuote(inputMint, outputMint, amountLamports) {
-  try {
-    const res = await fetch(
-      `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountLamports}&slippageBps=300`
-    );
-    if (!res.ok) return null;
-    return await res.json();
-  } catch { return null; }
+  return { safe: reasons.length === 0, reasons, score: reasons.length === 0 ? 500 : 0 };
 }

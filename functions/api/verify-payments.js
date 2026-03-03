@@ -1,5 +1,5 @@
 import { decode } from '../_lib/base58.js';
-import { generateKeypair, sendSol } from '../_lib/solana.js';
+import { generateKeypair, sendSol, getTokenBalances } from '../_lib/solana.js';
 
 const GENESIS_DNA = {
   "the-berserker": { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 },
@@ -67,7 +67,7 @@ export async function onRequest(context) {
 
   // Get active pending payments
   const pending = await db.prepare(
-    "SELECT id, agent_id, amount, reference, recipient FROM payment_requests WHERE status = 'pending'"
+    "SELECT id, agent_id, amount, reference, recipient, spawn_cost FROM payment_requests WHERE status = 'pending'"
   ).all();
 
   let confirmed = 0;
@@ -113,6 +113,15 @@ export async function onRequest(context) {
       // Find buyer wallet (first signer)
       const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
+      // Check $SPAWN token balance if required
+      if (pr.spawn_cost && pr.spawn_cost > 0) {
+        const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
+        const protocolAddr = context.env.PROTOCOL_WALLET;
+        const tokens = await getTokenBalances(protocolAddr, rpcUrl);
+        const spawnToken = tokens.find(t => t.mint === SPAWN_MINT);
+        if (!spawnToken || spawnToken.amount < pr.spawn_cost) continue; // wait for token
+      }
+
       // Update payment request
       await db.prepare(
         "UPDATE payment_requests SET status = 'confirmed', buyer_wallet = ?, tx_signature = ?, confirmed_at = datetime('now') WHERE id = ?"
@@ -139,7 +148,7 @@ export async function onRequest(context) {
       }
 
       // Send 90% of purchase price to agent wallet as trading capital
-      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
       const tradingCapital = pr.amount * (1 - feePct);
 
       const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
@@ -196,7 +205,7 @@ export async function onRequest(context) {
   // === FALLBACK: AMOUNT-MATCHING FOR MANUAL PAYMENTS ===
   // If reference-based search missed manual payments, try matching by unique amount
   const stillPending = await db.prepare(
-    "SELECT id, agent_id, amount, recipient FROM payment_requests WHERE status = 'pending'"
+    "SELECT id, agent_id, amount, recipient, spawn_cost FROM payment_requests WHERE status = 'pending'"
   ).all();
 
   if (stillPending.results.length > 0) {
@@ -236,6 +245,14 @@ export async function onRequest(context) {
             if (amountMatched.has(pr.id)) continue;
             // Match within 5% tolerance (users may round amounts)
             if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
+              // Check $SPAWN token balance if required
+              if (pr.spawn_cost && pr.spawn_cost > 0) {
+                const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
+                const tokens = await getTokenBalances(protocolAddr, rpcUrl);
+                const spawnToken = tokens.find(t => t.mint === SPAWN_MINT);
+                if (!spawnToken || spawnToken.amount < pr.spawn_cost) continue; // wait for token
+              }
+
               const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
               // Update payment request
@@ -258,7 +275,7 @@ export async function onRequest(context) {
               const kv = context.env.AGENT_KEYS;
               if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-              const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+              const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
               const tradingCapital = pr.amount * (1 - feePct);
               const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 
@@ -336,7 +353,7 @@ export async function onRequest(context) {
         agentPubkey = keypair.publicKey;
       }
 
-      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+      const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
       const tradingCapital = pf.amount * (1 - feePct);
 
       const fundingTx = await sendSol(protocolSecret, agentPubkey, tradingCapital, rpcUrl);

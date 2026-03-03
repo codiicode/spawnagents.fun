@@ -40,7 +40,7 @@ export async function onRequest(context) {
     if (!reference) return Response.json({ error: 'Missing reference' }, { status: 400 });
 
     const pr = await db.prepare(
-      'SELECT id, agent_id, amount, reference, recipient FROM payment_requests WHERE reference = ? AND status = ?'
+      'SELECT id, agent_id, amount, reference, recipient, spawn_cost FROM payment_requests WHERE reference = ? AND status = ?'
     ).bind(reference, 'pending').first();
 
     if (!pr) return Response.json({ error: 'No pending payment found' }, { status: 404 });
@@ -113,6 +113,18 @@ export async function onRequest(context) {
       });
     }
 
+    // Check if token is missing for detailed status
+    if (pr.spawn_cost && pr.spawn_cost > 0) {
+      try {
+        const { getTokenBalances } = await import('../_lib/solana.js');
+        const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
+        const protocolWallet = context.env.PROTOCOL_WALLET;
+        const tokens = await getTokenBalances(protocolWallet, rpcUrl);
+        const spawnBal = tokens.find(t => t.mint === SPAWN_MINT)?.amount || 0;
+        const hasToken = spawnBal >= pr.spawn_cost;
+        return Response.json({ status: 'pending', message: 'Payment not found on-chain yet', checks: { token: hasToken, sol: false } });
+      } catch {}
+    }
     return Response.json({ status: 'pending', message: 'Payment not found on-chain yet' });
   }
 
@@ -136,6 +148,16 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
 
   const solReceived = (tx.meta.postBalances[recipientIdx] - tx.meta.preBalances[recipientIdx]) / 1e9;
   if (solReceived < pr.amount * 0.95) return false;
+
+  // Check $SPAWN token balance if required
+  if (pr.spawn_cost && pr.spawn_cost > 0) {
+    const { getTokenBalances } = await import('../_lib/solana.js');
+    const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
+    const protocolWallet = context.env.PROTOCOL_WALLET;
+    const tokens = await getTokenBalances(protocolWallet, rpcUrl);
+    const spawnBal = tokens.find(t => t.mint === SPAWN_MINT)?.amount || 0;
+    if (spawnBal < pr.spawn_cost) return false; // wait for token
+  }
 
   const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
@@ -176,7 +198,7 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.10');
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
   const tradingCapital = pr.amount * (1 - feePct);
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 

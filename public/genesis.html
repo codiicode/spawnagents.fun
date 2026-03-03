@@ -1210,6 +1210,7 @@
   <div class="nav-links">
     <a href="/genesis.html" class="active">agents</a>
     <a href="/bloodline.html">bloodline</a>
+    <a href="/dashboard-preview.html">dashboard</a>
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
@@ -1221,6 +1222,7 @@
 </nav>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
+  <a href="/dashboard-preview.html">dashboard</a>
   <a href="/bloodline.html">bloodline</a>
   <a href="/how.html">how?</a>
   <a href="https://x.com/spawnagents" target="_blank">X</a>
@@ -1265,7 +1267,7 @@
   <div class="page-header-stats">
     <div class="page-header-stat"><strong id="avail-count">--</strong> / 15 available</div>
     <div class="page-header-stat"><strong>5</strong> degens</div>
-    <div class="page-header-stat"><strong>10</strong> fixed price</div>
+    <div class="page-header-stat"><strong>10</strong> standard</div>
   </div>
 </div>
 
@@ -1300,14 +1302,43 @@
     <button class="modal-close" onclick="closeModal()">&times;</button>
     <div class="modal-title" id="modalAgent"></div>
     <div class="modal-subtitle">Genesis Agent — SPAWN</div>
-    <div class="modal-amount" id="modalAmount"></div>
-    <div class="modal-amount-label">SOL</div>
-    <button class="pay-btn" id="modalPayBtn" onclick="handlePay()">Pay with Phantom</button>
-    <div class="modal-fallback">
-      <div class="modal-fallback-label">or send manually to:</div>
-      <div class="modal-fallback-addr" id="modalAddr" onclick="copyAddr(this)"></div>
-      <button class="verify-btn" id="verifyBtn" onclick="verifyManual()">I've sent it</button>
+
+    <!-- Phase 1: Token info + SOL input -->
+    <div id="buyPhase1">
+      <div class="spawn-modal-row">
+        <span class="k">$SPAWN cost</span>
+        <span class="v" id="modalSpawnCost">—</span>
+      </div>
+      <div class="spawn-modal-row">
+        <span class="k">Tier</span>
+        <span class="v" id="modalTier">—</span>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Amount (agent's trading capital)</div>
+        <input type="number" class="spawn-sol-input" id="buySolInput" placeholder="1.0" step="0.1" min="1" value="1">
+        <div class="spawn-sol-hint">Minimum 1 SOL — 95% goes to agent wallet, 5% protocol fee</div>
+      </div>
+      <button class="pay-btn" id="buyProceedBtn" onclick="handleBuyProceed()">Proceed to Payment</button>
     </div>
+
+    <!-- Phase 2: Payment instructions -->
+    <div id="buyPhase2" style="display:none;">
+      <div class="spawn-modal-row">
+        <span class="k">1. Send $SPAWN tokens</span>
+        <span class="v" id="modalTokenAmount">—</span>
+      </div>
+      <div class="spawn-modal-row">
+        <span class="k">2. Send SOL (exact amount)</span>
+        <span class="v" id="modalSolAmount">—</span>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Send both to:</div>
+        <div class="modal-fallback-addr" id="modalAddr" onclick="copyAddr(this)"></div>
+      </div>
+      <button class="pay-btn" id="modalPayBtn" onclick="handlePay()">Pay SOL with Phantom</button>
+      <button class="verify-btn" id="verifyBtn" onclick="verifyManual()">Verify Payments</button>
+    </div>
+
     <div class="modal-status" id="modalStatus"></div>
   </div>
 </div>
@@ -1367,7 +1398,7 @@
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
         <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 90% goes to child wallet, 10% protocol fee</div>
+        <div class="spawn-sol-hint">Minimum 1 SOL — 95% goes to child wallet, 5% protocol fee</div>
       </div>
       <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send $SPAWN + SOL</button>
     </div>
@@ -1464,8 +1495,8 @@ document.addEventListener('click', (e) => {
 const DEGEN_IDS = new Set(["the-berserker", "the-gambler", "the-beast", "the-turtle", "the-monk"]);
 
 const DEGEN_PRICES = {
-  "the-beast": 1, "the-berserker": 1, "the-turtle": 1,
-  "the-monk": 1, "the-gambler": 1,
+  "the-beast": 0.75, "the-berserker": 0.75, "the-turtle": 0.75,
+  "the-monk": 0.75, "the-gambler": 0.75,
 };
 
 const FIXED_TIERS = {
@@ -1607,7 +1638,7 @@ function agentCard(g, priceLabel) {
       <span class="agent-price-label">Price</span>
       <span class="agent-price-val">${priceLabel}</span>
     </div>
-    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" onclick="initBuy(this)">Buy &mdash; ${priceLabel}</button>` : ''}
+    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Buy &mdash; ${priceLabel} + SOL</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
   </div>`;
@@ -1630,10 +1661,10 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="degen">
     <div class="tier-header">
       <div class="tier-label">Degen</div>
-      <div class="tier-price">1 SOL each</div>
+      <div class="tier-price">1.5M $SPAWN + min 1 SOL to top up your agents wallet</div>
       <div class="tier-desc">${degens.filter(g => g.available).length} / ${degens.length} available &mdash; pump.fun hunters</div>
     </div>
-    <div class="agent-grid">${degens.map(g => agentCard(g, "1 SOL")).join("")}</div>
+    <div class="agent-grid">${degens.map(g => agentCard(g, "1.5M $SPAWN")).join("")}</div>
   </div>`;
 
   // Standard tier — all normal agents combined
@@ -1641,10 +1672,10 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="standard">
     <div class="tier-header">
       <div class="tier-label">Standard</div>
-      <div class="tier-price">2 SOL each</div>
+      <div class="tier-price">3M $SPAWN + min 1 SOL to top up your agents wallet</div>
       <div class="tier-desc">${standard.filter(g => g.available).length} / ${standard.length} available &mdash; Jupiter traders</div>
     </div>
-    <div class="agent-grid">${standard.map(g => agentCard(g, "2 SOL")).join("")}</div>
+    <div class="agent-grid">${standard.map(g => agentCard(g, "3M $SPAWN")).join("")}</div>
   </div>`;
 
   // Custom Agents
@@ -1955,74 +1986,105 @@ const { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = solanaWeb3;
 
 let pollInterval = null;
 let currentAgentId = null;
-let currentPayUrl = null;
 let currentReference = null;
 let currentRecipient = null;
 let currentAmount = null;
 let currentBlockhash = null;
+let currentSpawnCostBuy = 0;
+let currentBuyTier = null;
 
-async function initBuy(btn) {
+const SPAWN_COSTS_BUY = { degen: 1500000, standard: 3000000 };
+
+function initBuy(btn) {
+  // Require login
+  if (!connectedWallet) {
+    openLoginModal();
+    return;
+  }
+
   const agentId = btn.dataset.agent;
   const agentName = btn.dataset.name;
+  const tier = btn.dataset.tier || 'standard';
+  const spawnCost = SPAWN_COSTS_BUY[tier] || 3000000;
 
+  currentAgentId = agentId;
+  currentBuyTier = tier;
+  currentSpawnCostBuy = spawnCost;
+
+  // Show Phase 1
+  document.getElementById('modalAgent').textContent = agentName;
+  document.getElementById('modalSpawnCost').textContent = (spawnCost / 1000000).toFixed(1) + 'M $SPAWN';
+  document.getElementById('modalTier').textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
+  document.getElementById('buySolInput').value = '1';
+  document.getElementById('buyPhase1').style.display = '';
+  document.getElementById('buyPhase2').style.display = 'none';
+  document.getElementById('modalStatus').textContent = '';
+  document.getElementById('modalStatus').className = 'modal-status';
+  document.getElementById('payModal').classList.add('open');
+}
+
+async function handleBuyProceed() {
+  const solInput = parseFloat(document.getElementById('buySolInput').value);
+  if (!solInput || solInput < 1) {
+    document.getElementById('modalStatus').textContent = 'Minimum 1 SOL';
+    document.getElementById('modalStatus').className = 'modal-status error';
+    return;
+  }
+
+  const btn = document.getElementById('buyProceedBtn');
   btn.disabled = true;
-  btn.textContent = 'Initiating...';
+  btn.textContent = 'Creating payment...';
 
   try {
     const res = await fetch('/api/buy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: agentId }),
+      body: JSON.stringify({ agent_id: currentAgentId, sol_amount: solInput, owner_wallet: connectedWallet }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      btn.textContent = data.error || 'Error';
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = `Buy \u2014 ${btn.dataset.price}`;
-      }, 3000);
+      document.getElementById('modalStatus').textContent = data.error || 'Error';
+      document.getElementById('modalStatus').className = 'modal-status error';
+      btn.disabled = false;
+      btn.textContent = 'Proceed to Payment';
       return;
     }
 
-    currentAgentId = agentId;
+    currentReference = data.reference;
+    currentRecipient = data.recipient;
+    currentAmount = data.amount;
     currentBlockhash = data.blockhash;
-    showModal(agentName, data.amount, data.url, data.recipient, data.reference);
+    currentSpawnCostBuy = data.spawn_cost;
+
+    // Show Phase 2
+    document.getElementById('buyPhase1').style.display = 'none';
+    document.getElementById('buyPhase2').style.display = '';
+    document.getElementById('modalTokenAmount').textContent = (data.spawn_cost / 1000000).toFixed(1) + 'M';
+    document.getElementById('modalSolAmount').textContent = data.amount.toFixed(6) + ' SOL';
+    document.getElementById('modalAddr').textContent = data.recipient;
+    document.getElementById('modalStatus').textContent = 'Send $SPAWN tokens and SOL to the address above';
+    document.getElementById('modalStatus').className = 'modal-status waiting';
+
+    // Detect Phantom
+    const payBtn = document.getElementById('modalPayBtn');
+    if (window.phantom?.solana) {
+      payBtn.textContent = 'Pay SOL with Phantom';
+    } else {
+      payBtn.textContent = 'Pay SOL with wallet';
+    }
+
+    // Start polling
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(() => pollPayment(data.reference), 3000);
+
   } catch (e) {
-    btn.textContent = 'Network error';
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = `Buy \u2014 ${btn.dataset.price}`;
-    }, 3000);
+    document.getElementById('modalStatus').textContent = 'Network error';
+    document.getElementById('modalStatus').className = 'modal-status error';
+    btn.disabled = false;
+    btn.textContent = 'Proceed to Payment';
   }
-}
-
-function showModal(name, amount, payUrl, recipient, reference) {
-  currentPayUrl = payUrl;
-  currentReference = reference;
-  currentRecipient = recipient;
-  currentAmount = amount;
-
-  document.getElementById('modalAgent').textContent = name;
-  document.getElementById('modalAmount').textContent = parseFloat(amount).toFixed(6);
-  document.getElementById('modalAddr').textContent = recipient;
-  document.getElementById('modalStatus').textContent = '';
-  document.getElementById('modalStatus').className = 'modal-status';
-
-  // Detect Phantom
-  const payBtn = document.getElementById('modalPayBtn');
-  if (window.phantom?.solana) {
-    payBtn.textContent = 'Pay with Phantom';
-  } else {
-    payBtn.textContent = 'Open in wallet';
-  }
-
-  document.getElementById('payModal').classList.add('open');
-
-  // Start polling
-  if (pollInterval) clearInterval(pollInterval);
-  pollInterval = setInterval(() => pollPayment(reference), 3000);
 }
 
 async function handlePay() {
@@ -2030,10 +2092,8 @@ async function handlePay() {
   const provider = window.phantom?.solana;
 
   if (!provider) {
-    // Fallback: try solana: deeplink (works on mobile)
-    window.location.href = currentPayUrl;
-    status.textContent = 'Waiting for confirmation...';
-    status.className = 'modal-status waiting pulse';
+    status.textContent = 'Phantom wallet not detected. Send SOL manually to the address above.';
+    status.className = 'modal-status error';
     return;
   }
 
@@ -2107,9 +2167,13 @@ async function verifyManual() {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       showConfirmed(data);
     } else {
-      status.textContent = 'Not found yet — it can take a minute for the transaction to confirm on Solana.';
+      const checks = data.checks || {};
+      let msg = 'Not found yet — it can take a minute for the transaction to confirm on Solana.';
+      if (checks.token === true && checks.sol === false) msg = '$SPAWN received. Waiting for SOL payment...';
+      else if (checks.token === false && checks.sol === false) msg = 'Waiting for $SPAWN tokens and SOL payment...';
+      status.textContent = msg;
       status.className = 'modal-status waiting';
-      btn.textContent = "I've sent it";
+      btn.textContent = 'Verify Payments';
       btn.disabled = false;
     }
   } catch (e) {
@@ -2122,7 +2186,7 @@ async function verifyManual() {
 
 function showConfirmed(data) {
   const status = document.getElementById('modalStatus');
-  const feePct = 0.15;
+  const feePct = 0.05;
   const tradingCapital = (data.amount * (1 - feePct)).toFixed(2);
   const solscanUrl = data.agent_wallet ? `https://solscan.io/account/${data.agent_wallet}` : '';
 
@@ -2180,12 +2244,20 @@ function closeModal() {
     pollInterval = null;
   }
 
+  // Reset phases
+  document.getElementById('buyPhase1').style.display = '';
+  document.getElementById('buyPhase2').style.display = 'none';
+  const proceedBtn = document.getElementById('buyProceedBtn');
+  if (proceedBtn) { proceedBtn.disabled = false; proceedBtn.textContent = 'Proceed to Payment'; }
+  const vBtn = document.getElementById('verifyBtn');
+  if (vBtn) { vBtn.disabled = false; vBtn.textContent = 'Verify Payments'; vBtn.style.display = ''; }
+
   // Reset buy buttons
   if (currentAgentId) {
     const btn = document.querySelector(`[data-agent="${currentAgentId}"]`);
     if (btn && btn.disabled) {
       btn.disabled = false;
-      btn.textContent = `Buy \u2014 ${btn.dataset.price}`;
+      btn.textContent = `Buy \u2014 ${btn.dataset.price} + SOL`;
     }
     currentAgentId = null;
   }

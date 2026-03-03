@@ -1,21 +1,21 @@
 import { encode } from '../_lib/base58.js';
 
 const GENESIS_ARCHETYPES = {
-  "the-berserker": { name: "The Berserker", price: 1 },
-  "the-gambler": { name: "The Gambler", price: 1 },
-  "the-beast": { name: "The Beast", price: 1 },
-  "the-turtle": { name: "The Turtle", price: 1 },
-  "the-monk": { name: "The Monk", price: 1 },
-  "the-wolf": { name: "The Wolf", price: 2 },
-  "the-jackal": { name: "The Jackal", price: 2 },
-  "the-viper": { name: "The Viper", price: 2 },
-  "the-sniper": { name: "The Sniper", price: 2 },
-  "the-surgeon": { name: "The Surgeon", price: 2 },
-  "the-oracle": { name: "The Oracle", price: 2 },
-  "the-hawk": { name: "The Hawk", price: 2 },
-  "the-phantom": { name: "The Phantom", price: 2 },
-  "the-specter": { name: "The Specter", price: 2 },
-  "the-colossus": { name: "The Colossus", price: 2 },
+  "the-berserker": { name: "The Berserker", tier: "degen" },
+  "the-gambler": { name: "The Gambler", tier: "degen" },
+  "the-beast": { name: "The Beast", tier: "degen" },
+  "the-turtle": { name: "The Turtle", tier: "degen" },
+  "the-monk": { name: "The Monk", tier: "degen" },
+  "the-wolf": { name: "The Wolf", tier: "standard" },
+  "the-jackal": { name: "The Jackal", tier: "standard" },
+  "the-viper": { name: "The Viper", tier: "standard" },
+  "the-sniper": { name: "The Sniper", tier: "standard" },
+  "the-surgeon": { name: "The Surgeon", tier: "standard" },
+  "the-oracle": { name: "The Oracle", tier: "standard" },
+  "the-hawk": { name: "The Hawk", tier: "standard" },
+  "the-phantom": { name: "The Phantom", tier: "standard" },
+  "the-specter": { name: "The Specter", tier: "standard" },
+  "the-colossus": { name: "The Colossus", tier: "standard" },
 };
 
 export async function onRequest(context) {
@@ -35,14 +35,25 @@ export async function onRequest(context) {
     return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { agent_id } = body;
+  const { agent_id, sol_amount, owner_wallet } = body;
   if (!agent_id) return Response.json({ error: 'Missing agent_id' }, { status: 400 });
 
   const arch = GENESIS_ARCHETYPES[agent_id];
   if (!arch) return Response.json({ error: 'Unknown agent' }, { status: 404 });
+
+  // Validate SOL amount
+  const solVal = parseFloat(sol_amount);
+  if (!solVal || solVal < 1) return Response.json({ error: 'Minimum 1 SOL' }, { status: 400 });
+
   // Check if already claimed (dead/unclaimed agents can be re-purchased)
   const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
   if (existing && existing.status !== 'dead' && existing.status !== 'unclaimed') return Response.json({ error: 'Already claimed' }, { status: 409 });
+
+  // Determine $SPAWN cost based on tier
+  const degenCost = parseInt(context.env.DEGEN_SPAWN_COST || '1500000');
+  const standardCost = parseInt(context.env.STANDARD_SPAWN_COST || '3000000');
+  const spawn_cost = arch.tier === 'degen' ? degenCost : standardCost;
+  const spawn_mint = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
 
   // Generate reference (32 random bytes → base58)
   const refBytes = new Uint8Array(32);
@@ -50,20 +61,15 @@ export async function onRequest(context) {
   const reference = encode(refBytes);
 
   const id = crypto.randomUUID();
-  const baseAmount = arch.price;
 
   // Add unique micro-offset so manual payments can be matched by amount
-  // Range: 0.000001 – 0.009999 SOL — 9999 possible values
   const microOffset = (Math.floor(Math.random() * 9999) + 1) / 1_000_000;
-  const amount = parseFloat((baseAmount + microOffset).toFixed(6));
+  const amount = parseFloat((solVal + microOffset).toFixed(6));
 
-  // Build Solana Pay URL
-  const solanaPayUrl = `solana:${recipient}?amount=${amount}&reference=${reference}&label=SPAWN&message=${encodeURIComponent(arch.name)}`;
-
-  // Save to DB (amount = unique amount with micro-offset)
+  // Save to DB
   await db.prepare(
-    'INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(id, agent_id, amount, reference, recipient, 'pending').run();
+    'INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status, spawn_cost, owner_wallet) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, agent_id, amount, reference, recipient, 'pending', spawn_cost, owner_wallet || null).run();
 
   // Fetch recent blockhash for frontend transaction building
   let blockhash = null;
@@ -85,11 +91,13 @@ export async function onRequest(context) {
   }
 
   return Response.json({
-    url: solanaPayUrl,
     reference,
     amount,
     recipient,
     agent: arch.name,
+    tier: arch.tier,
+    spawn_cost,
+    spawn_mint,
     blockhash,
   });
 }
