@@ -179,12 +179,44 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           });
         }
       }
-      if (result && result.action === 'sell') sellResults.push(result);
+      if (result && result.action === 'sell') {
+        sellResults.push(result);
+        // Store breakeven SL: entry value of remaining tokens
+        // If token drops back to this value → sell (never go negative after TP1)
+        if (kv) {
+          const breakevenVal = totalBought * (1 - sellPct);
+          await kv.put(`breakeven:${agent.id}:${token.mint}`, breakevenVal.toString(), { expirationTtl: 86400 * 7 });
+        }
+      }
       continue;
     }
 
-    // Phase 2: Trailing stop on house money (value-based)
+    // Phase 2: House money — breakeven SL + trailing stop
     if (costRecovered && kv) {
+      // === BREAKEVEN SL: if price drops back to entry, sell everything ===
+      const breakevenKey = `breakeven:${agent.id}:${token.mint}`;
+      const breakevenVal = parseFloat(await kv.get(breakevenKey) || '0');
+      if (breakevenVal > 0 && fullOutSol <= breakevenVal) {
+        await kv.delete(breakevenKey);
+        await kv.delete(peakKey);
+        const beReason = `breakeven SL (entry ${breakevenVal.toFixed(4)} SOL, now ${fullOutSol.toFixed(4)} SOL)`;
+        let result;
+        if (isDegen) {
+          result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+            symbol: tokenData.symbol, reason: beReason,
+            pnlPct, tokenAmount: token.amount,
+            estimatedSol: fullOutSol,
+          }, kv, agent.id);
+        } else {
+          result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
+            token: token.mint, symbol: tokenData.symbol, reason: beReason,
+            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+          });
+        }
+        if (result && result.action === 'sell') sellResults.push(result);
+        continue;
+      }
+
       // Track SOL value peak for house money positions
       const valuePeakKey = `vpeak:${agent.id}:${token.mint}`;
       const storedValuePeak = parseFloat(await kv.get(valuePeakKey) || '0');
@@ -198,6 +230,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (dropFromPeak >= trailPct && valuePeak > 0.01) {
         await kv.delete(peakKey);
         await kv.delete(valuePeakKey);
+        await kv.delete(breakevenKey);
         const trailReason = `house money trail (peak ${valuePeak.toFixed(4)} SOL, now ${fullOutSol.toFixed(4)} SOL, drop ${dropFromPeak.toFixed(0)}% >= ${trailPct.toFixed(0)}%)`;
         let result;
         if (isDegen) {
