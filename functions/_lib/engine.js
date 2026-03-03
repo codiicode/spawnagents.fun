@@ -78,12 +78,32 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       continue;
     }
 
-    // Cost basis from DB
-    const costRow = await db.prepare(
-      "SELECT SUM(CASE WHEN action='buy' THEN amount_sol ELSE 0 END) as total_bought, SUM(CASE WHEN action='buy' THEN token_amount ELSE 0 END) as total_tokens_bought FROM trades WHERE agent_id = ? AND token_address = ?"
-    ).bind(agent.id, token.mint).first();
+    // Cost basis — position-aware (handles re-entry after full close)
+    const allTrades = await db.prepare(
+      "SELECT action, amount_sol, token_amount FROM trades WHERE agent_id = ? AND token_address = ? ORDER BY created_at ASC"
+    ).bind(agent.id, token.mint).all();
 
-    const totalBought = costRow?.total_bought || 0;
+    // Walk through trades to find the start of the current position
+    // When running token balance hits 0 = position was fully closed, reset cost tracking
+    let runningTokens = 0;
+    let positionStartIdx = 0;
+    for (let i = 0; i < allTrades.results.length; i++) {
+      const t = allTrades.results[i];
+      if (t.action === 'buy') runningTokens += t.token_amount || 0;
+      else if (t.action === 'sell') {
+        runningTokens -= t.token_amount || 0;
+        if (runningTokens <= 0) { runningTokens = 0; positionStartIdx = i + 1; }
+      }
+    }
+
+    // Sum only trades from current position onward
+    let totalBought = 0, totalSold = 0, sellCount = 0;
+    for (let i = positionStartIdx; i < allTrades.results.length; i++) {
+      const t = allTrades.results[i];
+      if (t.action === 'buy') totalBought += t.amount_sol || 0;
+      else if (t.action === 'sell') { totalSold += t.amount_sol || 0; sellCount++; }
+    }
+
     if (totalBought <= 0) continue;
 
     let fullOutSol, fullQuote;
@@ -96,22 +116,15 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (fullOutSol <= 0) fullOutSol = totalBought;
     }
 
-    // === FIX CRITICAL #1: Adjust cost basis for partial sells ===
-    const sellRow = await db.prepare(
-      "SELECT SUM(amount_sol) as total_sold, COUNT(*) as sell_count FROM trades WHERE agent_id = ? AND token_address = ? AND action = 'sell'"
-    ).bind(agent.id, token.mint).first();
-    const totalSold = sellRow?.total_sold || 0;
-    const sellCount = sellRow?.sell_count || 0;
-    // costRecovered: same logic for all agents now that degens track amount_sol
-    // Legacy fallback: if degen has old sells with amount_sol=0, use sellCount
+    // costRecovered: have we gotten back >= 90% of what we spent?
+    // Legacy fallback: old degen sells had amount_sol=0
     const costRecovered = totalSold > 0
       ? totalSold >= totalBought * 0.9
-      : (isDegen && sellCount > 0); // legacy degen sells had amount_sol=0
+      : (isDegen && sellCount > 0);
 
     // Adjusted cost: subtract what we already got back from sells
     const adjustedCost = Math.max(0, totalBought - totalSold);
     const costFullyRecovered = adjustedCost <= 0;
-    // When cost is fully recovered, use original cost as baseline so PnL stays meaningful
     const pnlBasis = costFullyRecovered ? totalBought : adjustedCost;
     const pnlPct = pnlBasis > 0
       ? ((fullOutSol / pnlBasis) - 1) * 100
