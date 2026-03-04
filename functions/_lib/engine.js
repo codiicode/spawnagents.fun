@@ -29,7 +29,7 @@ async function clearSellFails(kv, agentId, mint) {
 
 // candidates = pre-fetched token list from discoverTokens() (shared across agents)
 // kv = AGENT_KEYS KV namespace (used for trailing stop peak tracking)
-export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, candidates, kv) {
+export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, candidates, kv, marketRegime = null) {
   const dna = JSON.parse(agent.dna);
 
   const solBalance = await getBalance(agentPubkey, rpcUrl);
@@ -315,7 +315,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   // --- BUY SIGNALS ---
 
   // FIX: Scale buy cooldown with aggression (aggressive: 20min, conservative: 60min)
-  const buyCooldown = Math.round(20 + (1 - dna.aggression) * 40);
+  let buyCooldown = Math.round(20 + (1 - dna.aggression) * 40);
+  if (marketRegime?.regime === 'trending_down') buyCooldown = Math.round(buyCooldown * 1.5);
+  else if (marketRegime?.regime === 'choppy') buyCooldown = Math.round(buyCooldown * 1.2);
   const lastBuy = await db.prepare(
     "SELECT created_at FROM trades WHERE agent_id = ? AND action = 'buy' ORDER BY created_at DESC LIMIT 1"
   ).bind(agent.id).first();
@@ -327,11 +329,11 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   const SOL_RESERVE = 0.1;
   const availableSol = solBalance - SOL_RESERVE;
 
-  // FIX: Use availableSol for min trade, lower floor to 10%
-  const MIN_TRADE_SOL = Math.max(0.05, availableSol * 0.10);
+  // Min trade: at least 0.15 SOL (~$13) to make trades worthwhile after fees
+  const MIN_TRADE_SOL = Math.max(0.15, availableSol * 0.15);
 
-  // Don't trade if balance is too low — fees will eat everything
-  if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
+  // Don't trade if balance is too low
+  if (availableSol < 0.25) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
 
   const maxPositions = Math.round(2 + (1 - dna.aggression) * 2);
   const openPositions = tokenBalances.length;
@@ -340,11 +342,32 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   if (availableSol < MIN_TRADE_SOL) return { sells: sellResults, action: 'hold', reason: `insufficient balance (${availableSol.toFixed(3)} SOL)` };
   if (!candidates || candidates.length === 0) return { sells: sellResults, action: 'idle', reason: 'no candidates' };
 
-  // FIX: Distribute capital across remaining slots
+  // Distribute capital: go all-in on one position if balance is low
   const remainingSlots = maxPositions - openPositions;
   const maxPct = Math.min(dna.max_position_pct, 40) / 100;
   const perSlotAmount = availableSol / remainingSlots;
-  const tradeAmountSol = Math.max(MIN_TRADE_SOL, Math.min(perSlotAmount, availableSol * maxPct));
+  let tradeAmountSol = Math.max(MIN_TRADE_SOL, Math.min(perSlotAmount, availableSol * maxPct));
+
+  // Adaptive sizing: reduce after loss streaks
+  const recentClosed = await db.prepare(
+    `SELECT token_address,
+      SUM(CASE WHEN action='buy' THEN amount_sol ELSE 0 END) as bought,
+      SUM(CASE WHEN action='sell' THEN amount_sol ELSE 0 END) as sold,
+      MAX(created_at) as last_trade
+     FROM trades WHERE agent_id = ? AND created_at > datetime('now', '-7 days')
+     GROUP BY token_address HAVING sold > 0
+     ORDER BY last_trade DESC LIMIT 8`
+  ).bind(agent.id).all();
+
+  let consecutiveLosses = 0;
+  for (const pos of recentClosed.results) {
+    if (pos.sold < pos.bought * 0.98) consecutiveLosses++;
+    else break;
+  }
+
+  if (consecutiveLosses >= 5) tradeAmountSol = Math.max(MIN_TRADE_SOL, tradeAmountSol * 0.35);
+  else if (consecutiveLosses >= 3) tradeAmountSol = Math.max(MIN_TRADE_SOL, tradeAmountSol * 0.6);
+
   const tradeAmountLamports = Math.round(tradeAmountSol * 1e9);
 
   const heldMints = new Set(tokenBalances.map(t => t.mint));
@@ -360,12 +383,23 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).all();
   const maxedTokens = new Set(buyCountRows.results.map(r => r.token_address));
 
-  const filterStats = { total: candidates.length, held: 0, recentSold: 0, maxed: 0, sol: 0, mcap: 0, volume24h: 0, volume1h: 0, momentum: 0, txns: 0, liquidity: 0, tooNew: 0, tooOld: 0, passed: 0 };
+  // Token blacklist: tokens where agent sold at a loss (sold < 95% of bought)
+  const blacklistRows = await db.prepare(
+    `SELECT token_address,
+      SUM(CASE WHEN action='buy' THEN amount_sol ELSE 0 END) as bought,
+      SUM(CASE WHEN action='sell' THEN amount_sol ELSE 0 END) as sold
+     FROM trades WHERE agent_id = ?
+     GROUP BY token_address HAVING sold > 0 AND sold < bought * 0.95`
+  ).bind(agent.id).all();
+  const blacklistedTokens = new Set(blacklistRows.results.map(r => r.token_address));
+
+  const filterStats = { total: candidates.length, held: 0, recentSold: 0, maxed: 0, blacklisted: 0, sol: 0, mcap: 0, volume24h: 0, volume1h: 0, momentum: 0, txns: 0, liquidity: 0, tooNew: 0, tooOld: 0, passed: 0 };
   const scored = candidates
     .filter(t => {
       if (heldMints.has(t.address)) { filterStats.held++; return false; }
       if (recentlySold.has(t.address)) { filterStats.recentSold++; return false; }
       if (maxedTokens.has(t.address)) { filterStats.maxed++; return false; }
+      if (blacklistedTokens.has(t.address)) { filterStats.blacklisted++; return false; }
       if (t.address === SOL_MINT) { filterStats.sol++; return false; }
 
       const volFloor = isDegen ? 15000 : 50000;
@@ -403,7 +437,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       filterStats.passed++;
       return true;
     })
-    .map(t => ({ ...t, score: scoreToken(t, dna) }))
+    .map(t => ({ ...t, score: scoreToken(t, dna, marketRegime) }))
     .sort((a, b) => b.score - a.score);
 
   console.log(`Agent ${agent.id} filter: ${JSON.stringify(filterStats)}`);
@@ -455,13 +489,15 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
         const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
 
-        // Query on-chain balance to record actual token_amount
+        // Query on-chain balance to record actual token_amount (tx already confirmed by signAndSend)
         let tokenAmount = 0;
         try {
+          await new Promise(r => setTimeout(r, 2000));
           const postBuyBalances = await getTokenBalances(agentPubkey, rpcUrl);
           const bought = postBuyBalances.find(b => b.mint === t.address);
           if (bought) tokenAmount = bought.amount;
         } catch {}
+        if (tokenAmount <= 0) console.warn(`Agent ${agent.id}: token_amount=0 after degen buy of ${t.symbol}, tx=${txSig}`);
 
         return {
           sells: sellResults,
@@ -489,15 +525,21 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     try {
       const txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
 
-      // FIX: Query on-chain balance for actual token_amount (avoids decimal mismatch)
+      // Query on-chain balance for actual token_amount (tx already confirmed by signAndSend)
       let tokenAmount = 0;
       try {
+        await new Promise(r => setTimeout(r, 2000));
         const postBuyBalances = await getTokenBalances(agentPubkey, rpcUrl);
         const bought = postBuyBalances.find(b => b.mint === t.address);
         if (bought) tokenAmount = bought.amount;
-      } catch {
-        tokenAmount = 0; // fallback — will be corrected on next balance check
+      } catch {}
+      // Fallback: estimate from Jupiter quote
+      if (tokenAmount <= 0 && buyQuote?.outAmount) {
+        const decimals = buyQuote.outputMint?.decimals || 6;
+        tokenAmount = parseInt(buyQuote.outAmount) / (10 ** decimals);
+        console.warn(`Agent ${agent.id}: using quote fallback for token_amount of ${t.symbol}: ${tokenAmount}`);
       }
+      if (tokenAmount <= 0) console.warn(`Agent ${agent.id}: token_amount=0 after buy of ${t.symbol}, tx=${txSig}`);
 
       return {
         sells: sellResults,
@@ -522,7 +564,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 // SCORING — improved with caps and penalties
 // ============================================================
 
-function scoreToken(token, dna) {
+function scoreToken(token, dna, marketRegime = null) {
   let score = 0;
 
   // Volume relative to market cap (healthy ratio = 0.5-2x, wash trading > 10x)
@@ -573,6 +615,13 @@ function scoreToken(token, dna) {
 
   // Patient agents prefer tokens that survived the first few hours
   if (dna.patience > 0.7 && token.pair_age_hours > 6) score += 1;
+
+  // Market regime adjustment
+  if (marketRegime) {
+    if (marketRegime.regime === 'trending_down') score *= 0.6;
+    else if (marketRegime.regime === 'choppy') score *= 0.8;
+    else if (marketRegime.regime === 'trending_up') score *= 1 + marketRegime.confidence * 0.15;
+  }
 
   return score;
 }

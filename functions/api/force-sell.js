@@ -38,6 +38,53 @@ export async function onRequest(context) {
   const maxValueUsd = parseFloat(url.searchParams.get("max_usd") || "10");
   const maxAgeHours = parseFloat(url.searchParams.get("max_age_hours") || "240"); // 10 days
   const targetSymbol = url.searchParams.get("symbol")?.toUpperCase();
+  const targetMint = url.searchParams.get("mint");
+
+  // Mint mode: sell a specific token by mint address from all agents (works even if rugged/delisted)
+  if (mode === "mint" && targetMint) {
+    const agents = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
+    const results = [];
+    for (const agent of agents.results) {
+      const agentSecret = await kv.get(`agent:${agent.id}:secret`);
+      if (!agentSecret) continue;
+      const tokens = await getTokenBalances(agent.agent_wallet, rpcUrl).catch(() => []);
+      const token = tokens.find(t => t.mint === targetMint);
+      if (!token || token.amount <= 0) continue;
+
+      // Try PumpPortal first (pump tokens), then Jupiter
+      let txSig;
+      try {
+        const ppTx = await getPumpPortalTx(agent.agent_wallet, 'sell', targetMint, token.amount, {
+          denominatedInSol: false, slippage: 30, pool: 'auto',
+        });
+        if (ppTx) txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
+      } catch (e) { console.error(`PumpPortal fail for ${agent.id}:`, e.message); }
+
+      if (!txSig) {
+        try {
+          const quote = await getJupiterQuote(targetMint, SOL_MINT, token.rawAmount);
+          if (quote) {
+            const swapTx = await getJupiterSwapTx(quote, agent.agent_wallet);
+            if (swapTx) txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
+          }
+        } catch (e) { console.error(`Jupiter fail for ${agent.id}:`, e.message); }
+      }
+
+      if (txSig) {
+        await db.batch([
+          db.prepare(
+            "INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade, tx_signature) VALUES (?, ?, 'sell', 0, ?, 0, 0, ?)"
+          ).bind(agent.id, targetMint, token.amount, txSig),
+          db.prepare("UPDATE agents SET total_trades = total_trades + 1, last_trade_at = datetime('now') WHERE id = ?").bind(agent.id),
+          db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)").bind(agent.id, JSON.stringify({ action: 'sell', token: targetMint.slice(0,8), reason: 'FORCE SELL (rug)', tx: txSig })),
+        ]);
+        results.push({ agent: agent.id, amount: token.amount, tx: txSig });
+      } else {
+        results.push({ agent: agent.id, amount: token.amount, error: 'all sell methods failed' });
+      }
+    }
+    return Response.json({ forced_sells: results.filter(r => r.tx).length, results });
+  }
 
   const DEGEN_IDS = new Set(["the-berserker", "the-gambler", "the-beast", "the-turtle", "the-monk"]);
 

@@ -27,3 +27,25 @@ export function mutate(parentDna) {
   }
   return { childDna, mutations };
 }
+
+export function crossover(parentA, parentB) {
+  const childDna = {};
+  const mutations = [];
+
+  // For each mutable key: randomly pick from parent A or B, then apply ±10% mutation (half normal)
+  for (const key of MUTABLE_KEYS) {
+    const source = Math.random() < 0.5 ? 'A' : 'B';
+    const baseValue = source === 'A' ? parentA[key] : parentB[key];
+    const change = 1 + (Math.random() * 0.2 - 0.1); // ±10% (half of normal ±20%)
+    const newValue = clamp(baseValue * change, LIMITS[key].min, LIMITS[key].max);
+    childDna[key] = Number.isInteger(LIMITS[key].min) ? Math.round(newValue) : parseFloat(newValue.toFixed(3));
+    mutations.push({ param: key, from: baseValue, to: childDna[key], source, change_pct: parseFloat(((change - 1) * 100).toFixed(1)) });
+  }
+
+  // Copy non-mutable keys from parent A
+  for (const key of Object.keys(parentA)) {
+    if (!MUTABLE_KEYS.includes(key)) childDna[key] = parentA[key];
+  }
+
+  return { childDna, mutations };
+}

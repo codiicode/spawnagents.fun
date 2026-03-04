@@ -853,30 +853,48 @@
     }
 
     /* === TRADE HISTORY === */
-    .trade-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 0;
-      font-family: var(--font-mono);
-      font-size: 10px;
-      border-left: 2px solid var(--text-dim);
-      padding-left: 8px;
+    .trades-summary {
+      display: flex; gap: 12px; margin-bottom: 8px; padding: 6px 8px;
+      background: rgba(180,30,50,0.06); border-radius: 4px;
+      font-family: var(--font-mono); font-size: 10px;
     }
-    .trade-row + .trade-row { border-top: 1px solid rgba(180, 30, 50, 0.06); }
+    .trades-summary .stat-label { color: var(--text-dim); margin-right: 4px; }
+    .trades-summary .stat-val { font-weight: 600; }
+    .trades-summary .stat-val.pos { color: var(--green); }
+    .trades-summary .stat-val.neg { color: var(--red); }
+    .trade-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; font-family: var(--font-mono); font-size: 10px;
+      border-left: 2px solid var(--text-dim);
+      transition: background 0.15s;
+    }
+    .trade-row:hover { background: rgba(180,30,50,0.04); }
+    .trade-row + .trade-row { border-top: 1px solid rgba(180,30,50,0.06); }
     .trade-row.buy { border-left-color: var(--green); }
     .trade-row.sell { border-left-color: var(--red); }
-    .trade-action { font-weight: 600; width: 26px; flex-shrink: 0; }
+    .trade-row.sell.win { border-left-color: var(--green); }
+    .trade-action { font-weight: 700; width: 30px; flex-shrink: 0; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; }
     .trade-action.buy { color: var(--green); }
     .trade-action.sell { color: var(--red); }
-    .trade-token { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .trade-token a { color: inherit; text-decoration: none; transition: color 0.15s; }
-    .trade-token a:hover { color: var(--blood); }
-    .trade-amount { color: var(--text); font-weight: 500; flex-shrink: 0; }
-    .trade-pnl { font-weight: 500; flex-shrink: 0; }
-    .trade-pnl.pos { color: var(--green); }
-    .trade-pnl.neg { color: var(--red); }
-    .trade-meta { color: var(--text-dim); flex-shrink: 0; font-size: 9px; display: flex; gap: 6px; align-items: center; }
+    .trade-action.sell.win { color: var(--green); }
+    .trade-symbol { color: var(--text); font-weight: 600; flex-shrink: 0; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trade-symbol a { color: inherit; text-decoration: none; }
+    .trade-symbol a:hover { color: var(--blood); }
+    .trade-amount { color: var(--text-muted); flex-shrink: 0; }
+    .trade-pnl-badge {
+      font-weight: 700; flex-shrink: 0; font-size: 9px;
+      padding: 1px 5px; border-radius: 3px;
+    }
+    .trade-pnl-badge.pos { color: var(--green); background: rgba(74,158,106,0.12); }
+    .trade-pnl-badge.neg { color: var(--red); background: rgba(196,64,64,0.12); }
+    .trade-pnl-bar {
+      width: 40px; height: 3px; border-radius: 2px; flex-shrink: 0;
+      background: rgba(255,255,255,0.05); overflow: hidden;
+    }
+    .trade-pnl-bar-fill { height: 100%; border-radius: 2px; }
+    .trade-pnl-bar-fill.pos { background: var(--green); }
+    .trade-pnl-bar-fill.neg { background: var(--red); }
+    .trade-time { color: var(--text-dim); flex-shrink: 0; font-size: 9px; margin-left: auto; display: flex; gap: 6px; align-items: center; }
     .trade-tx { color: var(--text-dim); text-decoration: none; font-size: 9px; transition: color 0.15s; }
     .trade-tx:hover { color: var(--blood); }
     .trades-empty { font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); }
@@ -1590,41 +1608,83 @@ async function loadDetailTrades(agentId) {
   const el = document.getElementById('detail-trades');
   if (!el) return;
   try {
-    const r = await fetch(`/api/agents?id=${agentId}`);
-    if (!r.ok) { el.querySelector('.trades-empty').textContent = 'unavailable'; return; }
-    const data = await r.json();
-    const agent = data.agent || data;
-    const trades = agent.trades || [];
-    let h = '<div class="detail-section-label">Trade History</div>';
+    // Fetch both trades (for SOL amounts + token addresses) and events (for symbols + pnl_pct)
+    const [tradeRes, eventRes] = await Promise.all([
+      fetch(`/api/agents?id=${agentId}`),
+      fetch(`/api/events?agent_id=${agentId}&limit=60`),
+    ]);
+    if (!tradeRes.ok) { el.querySelector('.trades-empty').textContent = 'unavailable'; return; }
+    const tradeData = await tradeRes.json();
+    const trades = (tradeData.trades || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 40);
     if (!trades.length) {
-      h += '<div class="trades-empty">no trades yet</div>';
-      el.innerHTML = h; return;
+      el.innerHTML = '<div class="detail-section-label">Trade History</div><div class="trades-empty">no trades yet</div>';
+      return;
     }
-    // Show most recent first, max 30
-    const sorted = trades.slice().sort((a, b) => new Date(b.created_at || b.timestamp) - new Date(a.created_at || a.timestamp)).slice(0, 30);
-    sorted.forEach(t => {
-      const action = (t.action || t.type || 'BUY').toUpperCase();
-      const isBuy = action === 'BUY';
-      const token = t.token_mint || t.token || '';
-      const solAmt = t.sol_amount != null ? parseFloat(t.sol_amount).toFixed(3) : '—';
-      const pnl = t.pnl != null && !isBuy ? parseFloat(t.pnl) : null;
-      const time = t.created_at || t.timestamp || '';
-      const tx = t.tx_signature || t.signature || '';
-      h += `<div class="trade-row ${isBuy ? 'buy' : 'sell'}">`;
-      h += `<span class="trade-action ${isBuy ? 'buy' : 'sell'}">${action}</span>`;
-      h += `<span class="trade-token">${token ? `<a href="https://solscan.io/token/${token}" target="_blank" title="${token}">${truncateToken(token)}</a>` : '—'}</span>`;
-      h += `<span class="trade-amount">${solAmt} SOL</span>`;
-      if (pnl !== null) {
-        const pCls = pnl >= 0 ? 'pos' : 'neg';
-        h += `<span class="trade-pnl ${pCls}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(3)}</span>`;
+
+    // Build tx→event map for symbols and pnl_pct
+    const eventData = eventRes.ok ? await eventRes.json() : {};
+    const txMap = {};
+    for (const ev of (eventData.events || [])) {
+      try {
+        const d = typeof ev.data === 'string' ? JSON.parse(ev.data) : ev.data;
+        if (d.tx) txMap[d.tx] = d;
+      } catch {}
+    }
+
+    // Stats
+    let wins = 0, losses = 0, totalPnlSol = 0;
+    for (const t of trades) {
+      if (t.action === 'sell') {
+        const ev = txMap[t.tx_signature];
+        const pnlPct = ev?.pnl_pct || 0;
+        if (pnlPct > 0) wins++; else if (pnlPct < 0) losses++;
+        // Estimate PnL in SOL from the buy amount
+        totalPnlSol += (t.amount_sol || 0) * (pnlPct / 100);
       }
-      h += '<span class="trade-meta">';
-      if (time) h += `<span>${getTimeAgo(time)}</span>`;
-      if (tx) h += `<a class="trade-tx" href="https://solscan.io/tx/${tx}" target="_blank" title="${tx}">tx</a>`;
+    }
+    const totalTrades = trades.filter(t => t.action === 'sell').length;
+    const winRate = totalTrades > 0 ? Math.round((wins / totalTrades) * 100) : 0;
+
+    let h = '<div class="detail-section-label">Trade History</div>';
+
+    // Summary bar
+    h += '<div class="trades-summary">';
+    h += `<span><span class="stat-label">Trades</span><span class="stat-val">${trades.length}</span></span>`;
+    h += `<span><span class="stat-label">Win rate</span><span class="stat-val ${winRate >= 50 ? 'pos' : 'neg'}">${winRate}%</span></span>`;
+    h += `<span><span class="stat-label">W/L</span><span class="stat-val"><span class="pos">${wins}</span>/<span class="neg">${losses}</span></span></span>`;
+    h += '</div>';
+
+    // Trade rows
+    for (const t of trades) {
+      const isBuy = t.action === 'buy';
+      const ev = txMap[t.tx_signature] || {};
+      const symbol = ev.token || truncateToken(t.token_address);
+      const solAmt = t.amount_sol ? parseFloat(t.amount_sol).toFixed(4) : '—';
+      const pnlPct = ev.pnl_pct || 0;
+      const isWin = !isBuy && pnlPct > 0;
+
+      h += `<div class="trade-row ${isBuy ? 'buy' : 'sell'}${isWin ? ' win' : ''}">`;
+      h += `<span class="trade-action ${isBuy ? 'buy' : 'sell'}${isWin ? ' win' : ''}">${isBuy ? 'BUY' : 'SELL'}</span>`;
+      h += `<span class="trade-symbol"><a href="https://dexscreener.com/solana/${t.token_address}" target="_blank" title="${t.token_address}">${symbol}</a></span>`;
+      h += `<span class="trade-amount">${solAmt} SOL</span>`;
+
+      if (!isBuy && pnlPct !== 0) {
+        const cls = pnlPct >= 0 ? 'pos' : 'neg';
+        h += `<span class="trade-pnl-badge ${cls}">${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%</span>`;
+        // Mini PnL bar
+        const barW = Math.min(Math.abs(pnlPct), 100);
+        h += `<span class="trade-pnl-bar"><span class="trade-pnl-bar-fill ${cls}" style="width:${barW}%"></span></span>`;
+      }
+
+      h += '<span class="trade-time">';
+      if (t.created_at) h += `<span>${getTimeAgo(t.created_at)}</span>`;
+      if (t.tx_signature) h += `<a class="trade-tx" href="https://solscan.io/tx/${t.tx_signature}" target="_blank">tx</a>`;
       h += '</span></div>';
-    });
+    }
+
     el.innerHTML = h;
-  } catch {
+  } catch (e) {
+    console.error('Trade load error:', e);
     const empty = el.querySelector('.trades-empty');
     if (empty) empty.textContent = 'failed to load';
   }

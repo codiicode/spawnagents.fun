@@ -1,5 +1,5 @@
 import { processAgent } from "../_lib/engine.js";
-import { discoverTokens } from "../_lib/market-data.js";
+import { discoverTokens, setMoralisKey, setDiscoveryKV } from "../_lib/market-data.js";
 import { setJupiterApiKey } from "../_lib/solana.js";
 
 const MUTEX_KEY = 'cron:process-trades:lock';
@@ -7,6 +7,8 @@ const MUTEX_TTL = 180; // 3 min max lock
 
 export async function onRequest(context) {
   if (context.env.JUPITER_API_KEY) setJupiterApiKey(context.env.JUPITER_API_KEY);
+  if (context.env.MORALIS_API_KEY) setMoralisKey(context.env.MORALIS_API_KEY);
+  if (context.env.AGENT_KEYS) setDiscoveryKV(context.env.AGENT_KEYS);
   if (context.request.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   const secret = context.request.headers.get("x-cron-secret");
@@ -43,6 +45,25 @@ async function runTradingCycle(db, rpcUrl, kv) {
   const candidates = await discoverTokens();
   console.log(`Discovered ${candidates.length} candidate tokens`);
 
+  // Market regime detection — shared across all agents
+  function detectMarketRegime(candidates) {
+    if (!candidates || candidates.length < 5) return { regime: 'unknown', confidence: 0 };
+    const changes = candidates.map(c => c.price_change_1h || 0);
+    const avg = changes.reduce((s, v) => s + v, 0) / changes.length;
+    const variance = changes.reduce((s, v) => s + (v - avg) ** 2, 0) / changes.length;
+    const volatility = Math.sqrt(variance);
+    const greenPct = changes.filter(c => c > 0).length / changes.length;
+
+    let regime;
+    if (avg > 3 && greenPct > 0.6) regime = 'trending_up';
+    else if (avg < -3 && greenPct < 0.4) regime = 'trending_down';
+    else regime = 'choppy';
+
+    return { regime, confidence: Math.min(greenPct, 0.95), volatility, greenPct };
+  }
+  const marketRegime = detectMarketRegime(candidates);
+  console.log(`Market regime: ${JSON.stringify(marketRegime)}`);
+
   const agentsRaw = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
   // Shuffle so all agents get fair chance, cap at 15 per cycle
   const agentsList = agentsRaw.results.slice().sort(() => Math.random() - 0.5).slice(0, 15);
@@ -59,7 +80,7 @@ async function runTradingCycle(db, rpcUrl, kv) {
     }
 
     try {
-      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet, candidates, kv);
+      const decision = await processAgent(agent, db, rpcUrl, agentSecret, agent.agent_wallet, candidates, kv, marketRegime);
 
       // Process ALL sells from this cycle (engine now returns multiple)
       for (const sell of (decision.sells || [])) {

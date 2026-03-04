@@ -146,12 +146,31 @@ export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
 
   // Send
   const signedBase64 = bytesToBase64(signedTx);
-  const result = await rpcCall(rpcUrl, 'sendTransaction', [
+  const txSig = await rpcCall(rpcUrl, 'sendTransaction', [
     signedBase64,
     { encoding: 'base64', skipPreflight: true, preflightCommitment: 'confirmed' },
   ]);
 
-  return result; // tx signature string
+  // Confirm tx actually landed — poll up to 30s
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const statusRes = await rpcCall(rpcUrl, 'getSignatureStatuses', [[txSig], { searchTransactionHistory: false }]);
+      const status = statusRes?.value?.[0];
+      if (!status) continue; // not yet processed
+      if (status.err) {
+        throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`);
+      }
+      if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
+        return txSig;
+      }
+    } catch (e) {
+      if (e.message.startsWith('Transaction failed')) throw e;
+      // RPC error, retry
+    }
+  }
+  throw new Error(`Transaction not confirmed after ${maxAttempts * 3}s: ${txSig}`);
 }
 
 // Send SOL from one wallet to another (raw transfer, no Jupiter)

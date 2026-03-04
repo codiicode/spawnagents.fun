@@ -1,5 +1,5 @@
 import { getTokenBalances, generateKeypair, sendSol } from '../_lib/solana.js';
-import { mutate } from '../_lib/mutator.js';
+import { mutate, crossover } from '../_lib/mutator.js';
 
 const SPAWN_MINT = '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
 
@@ -95,7 +95,23 @@ export async function onRequest(context) {
   }
 
   const parentDna = JSON.parse(parent.dna);
-  const { childDna, mutations } = mutate(parentDna);
+
+  // 50% chance to use crossover with second-best agent
+  let childDna, mutations;
+  const useCrossover = Math.random() < 0.5;
+  if (useCrossover) {
+    const secondParent = await db.prepare(
+      "SELECT dna FROM agents WHERE status = 'alive' AND id != ? AND total_pnl > 0 ORDER BY fitness_score DESC LIMIT 1"
+    ).bind(pending.parent_id).first();
+    if (secondParent) {
+      const parentBDna = JSON.parse(secondParent.dna);
+      ({ childDna, mutations } = crossover(parentDna, parentBDna));
+    } else {
+      ({ childDna, mutations } = mutate(parentDna));
+    }
+  } else {
+    ({ childDna, mutations } = mutate(parentDna));
+  }
   const childGen = parent.generation + 1;
   const childId = `agent_${crypto.randomUUID().slice(0, 8)}`;
   const childName = generateChildName(childDna);

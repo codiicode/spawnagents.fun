@@ -1,30 +1,107 @@
 const DEXSCREENER = 'https://api.dexscreener.com';
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
+let _moralisKey = '';
+let _kv = null;
+export function setMoralisKey(key) { _moralisKey = key; }
+export function setDiscoveryKV(kv) { _kv = kv; }
+
+const MORALIS_CACHE_KEY = 'cache:moralis:graduated';
+const MORALIS_CACHE_TTL = 300; // 5 minutes
+
 // ============================================================
 // TOKEN DISCOVERY — fetches candidates from multiple sources
-// Call once per cron cycle, share across all agents
+// Priority: Moralis graduated (freshest) → GeckoTerminal new pools
+//           → DexScreener (enrichment + search) → pump.fun live
 // ============================================================
 
 export async function discoverTokens() {
   const seen = new Set();
   const tokens = [];
+  const sourceStats = { moralis: 0, gecko: 0, dex_new: 0, dex_search: 0, dex_profiles: 0, pump: 0 };
 
-  // Source 1: Search for active Solana pairs
-  for (const q of ['SOL', 'solana pump']) {
+  // Source 1: Moralis — recently graduated pump.fun tokens (BEST for early entry)
+  // Cached in KV for 5 min to stay within free tier (40k CU/day)
+  if (_moralisKey) {
     try {
-      const res = await fetch(`${DEXSCREENER}/latest/dex/search?q=${encodeURIComponent(q)}`);
-      if (res.ok) {
-        const data = await res.json();
-        for (const pair of (data.pairs || [])) {
-          if (pair.chainId !== 'solana') continue;
-          addBestPair(pair, tokens, seen);
+      let moralisAddrs = null;
+
+      // Check KV cache first
+      if (_kv) {
+        const cached = await _kv.get(MORALIS_CACHE_KEY);
+        if (cached) moralisAddrs = JSON.parse(cached);
+      }
+
+      // Fetch fresh if no cache
+      if (!moralisAddrs) {
+        const res = await fetch('https://solana-gateway.moralis.io/token/mainnet/exchange/pumpfun/graduated?limit=20', {
+          headers: { 'X-API-Key': _moralisKey, 'Accept': 'application/json' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const graduated = (data.result || data || []).filter(t => t.tokenAddress && t.liquidity);
+          moralisAddrs = graduated.map(t => t.tokenAddress);
+          // Cache in KV
+          if (_kv) await _kv.put(MORALIS_CACHE_KEY, JSON.stringify(moralisAddrs), { expirationTtl: MORALIS_CACHE_TTL });
         }
+      }
+
+      if (moralisAddrs) {
+        const addrs = moralisAddrs.filter(a => !seen.has(a));
+        await lookupAndAdd(addrs, tokens, seen);
+        sourceStats.moralis = addrs.length;
       }
     } catch {}
   }
 
-  // Source 2: Latest token profiles (catches fresh pump.fun migrations)
+  // Source 2: GeckoTerminal — new pools on Solana (fast, free, no key)
+  try {
+    const res = await fetch('https://api.geckoterminal.com/api/v2/networks/solana/new_pools?page=1', {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const pools = (data.data || []);
+      const addrs = pools
+        .map(p => {
+          // GeckoTerminal pool name format: "TOKEN / SOL" — extract base token address from relationships
+          const base = p.relationships?.base_token?.data?.id;
+          // ID format: "solana_TOKENADDRESS"
+          return base ? base.replace('solana_', '') : null;
+        })
+        .filter(a => a && !seen.has(a));
+      await lookupAndAdd(addrs, tokens, seen);
+      sourceStats.gecko = addrs.length;
+    }
+  } catch {}
+
+  // Source 3: DexScreener — new pairs on Solana
+  try {
+    const res = await fetch(`${DEXSCREENER}/latest/dex/pairs/solana`);
+    if (res.ok) {
+      const data = await res.json();
+      for (const pair of (data.pairs || []).slice(0, 40)) {
+        addBestPair(pair, tokens, seen);
+        sourceStats.dex_new++;
+      }
+    }
+  } catch {}
+
+  // Source 4: DexScreener — boosted tokens (paid promotion = often active)
+  try {
+    const res = await fetch(`${DEXSCREENER}/token-boosts/latest/v1`);
+    if (res.ok) {
+      const boosts = await res.json();
+      const solAddrs = boosts
+        .filter(b => b.chainId === 'solana')
+        .map(b => b.tokenAddress)
+        .filter(a => !seen.has(a))
+        .slice(0, 20);
+      await lookupAndAdd(solAddrs, tokens, seen);
+    }
+  } catch {}
+
+  // Source 5: DexScreener — latest token profiles
   try {
     const res = await fetch(`${DEXSCREENER}/token-profiles/latest/v1`);
     if (res.ok) {
@@ -32,13 +109,15 @@ export async function discoverTokens() {
       const solAddrs = profiles
         .filter(p => p.chainId === 'solana')
         .map(p => p.tokenAddress)
+        .filter(a => !seen.has(a))
         .slice(0, 20);
       await lookupAndAdd(solAddrs, tokens, seen);
+      sourceStats.dex_profiles = solAddrs.length;
     }
   } catch {}
 
-  // Source 3: Search for recent pumpswap migrations + trending terms
-  for (const q of ['pumpswap', 'pump.fun', 'raydium SOL']) {
+  // Source 6: DexScreener — search for trending terms
+  for (const q of ['SOL', 'solana pump', 'pumpswap']) {
     try {
       const res = await fetch(`${DEXSCREENER}/latest/dex/search?q=${encodeURIComponent(q)}`);
       if (res.ok) {
@@ -46,23 +125,13 @@ export async function discoverTokens() {
         for (const pair of (data.pairs || []).slice(0, 30)) {
           if (pair.chainId !== 'solana') continue;
           addBestPair(pair, tokens, seen);
+          sourceStats.dex_search++;
         }
       }
     } catch {}
   }
 
-  // Source 4: DexScreener new pairs on Solana (catches fresh migrations)
-  try {
-    const res = await fetch(`${DEXSCREENER}/latest/dex/pairs/solana`);
-    if (res.ok) {
-      const data = await res.json();
-      for (const pair of (data.pairs || []).slice(0, 40)) {
-        addBestPair(pair, tokens, seen);
-      }
-    }
-  } catch {}
-
-  // Source 5: pump.fun currently live — collect addresses, lookup real data via DexScreener
+  // Source 7: pump.fun currently live
   try {
     const res = await fetch('https://frontend-api-v3.pump.fun/coins/currently-live?limit=20&offset=0&includeNsfw=false');
     if (res.ok) {
@@ -72,9 +141,11 @@ export async function discoverTokens() {
         .map(c => c.mint)
         .filter(a => !seen.has(a));
       await lookupAndAdd(pumpAddrs, tokens, seen);
+      sourceStats.pump = pumpAddrs.length;
     }
   } catch {}
 
+  console.log(`Discovery: ${tokens.length} tokens — moralis:${sourceStats.moralis} gecko:${sourceStats.gecko} dex_new:${sourceStats.dex_new} dex_search:${sourceStats.dex_search} pump:${sourceStats.pump}`);
   return tokens;
 }
 
@@ -220,13 +291,41 @@ export async function checkTokenSafety(tokenAddress, dexData) {
       if (dexData.volume_1h / dexData.volume_24h > 0.5) reasons.push('volume spike (1h > 50% of 24h)');
     }
 
-    if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) reasons.push('high volume with few txns (likely wash trading)');
     if (dexData.pair_age_hours < 1 && dexData.volume_24h > 200000) reasons.push('brand new with suspicious volume');
     if (dexData.liquidity_usd !== undefined && dexData.liquidity_usd < 5000) reasons.push(`low liquidity ($${Math.round(dexData.liquidity_usd)})`);
 
     if (dexData.market_cap > 0 && dexData.liquidity_usd > 0) {
       const mcLiqRatio = dexData.market_cap / dexData.liquidity_usd;
       if (mcLiqRatio > 20) reasons.push(`mc/liq ratio ${mcLiqRatio.toFixed(0)}x (inflated)`);
+    }
+
+    // === WASH TRADING DETECTION ===
+    // Fake volume tokens have high $ volume but very few actual transactions
+    // Real tokens: avg $50-500/txn. Wash traded: avg $2000+/txn
+    if (dexData.txns_24h > 0 && dexData.volume_24h > 0) {
+      const avgTxnSize = dexData.volume_24h / dexData.txns_24h;
+      if (avgTxnSize > 2000) reasons.push(`wash trading: avg txn $${Math.round(avgTxnSize)} (fake volume)`);
+    }
+
+    // High volume but almost no transactions = clearly fake
+    if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) {
+      reasons.push('wash trading: high volume with <50 txns');
+    }
+
+    // 1h check: high volume but very few txns in last hour
+    if (dexData.volume_1h > 5000 && dexData.txns_1h < 10) {
+      reasons.push('wash trading: 1h volume with <10 txns');
+    }
+
+    // Volume way too high relative to liquidity (>15x = almost certainly fake)
+    if (dexData.liquidity_usd > 0 && dexData.volume_24h > 0) {
+      const volLiqRatio = dexData.volume_24h / dexData.liquidity_usd;
+      if (volLiqRatio > 15) reasons.push(`wash trading: vol/liq ${volLiqRatio.toFixed(0)}x`);
+    }
+
+    // Buy/sell ratio suspiciously close to 1.0 with high volume = bot wash
+    if (dexData.txns_1h >= 20 && r1h >= 0.85 && r1h <= 1.15 && dexData.volume_1h > 10000) {
+      reasons.push('wash trading: perfect buy/sell balance');
     }
   }
 
