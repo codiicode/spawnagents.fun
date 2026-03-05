@@ -26,18 +26,7 @@ export async function onRequest(context) {
     return Response.json({ status: 'expired', reason: 'Spawn request expired (30 min)' });
   }
 
-  // === VERIFY $SPAWN TOKEN PAYMENT ===
-  const protocolTokens = await getTokenBalances(protocolWallet, rpcUrl).catch(() => []);
-  const spawnToken = protocolTokens.find(t => t.mint === SPAWN_MINT);
-  const spawnBalance = spawnToken ? spawnToken.amount : 0;
-
-  if (spawnBalance < pending.spawn_cost) {
-    return Response.json({
-      status: 'pending',
-      checks: { token: false, sol: false },
-      reason: `Waiting for $SPAWN tokens (need ${pending.spawn_cost.toLocaleString()}, wallet has ${Math.floor(spawnBalance).toLocaleString()})`,
-    });
-  }
+  // $SPAWN token check SKIPPED — free spawn for now
 
   // === VERIFY SOL PAYMENT (micro-amount matching) ===
   let solVerified = false;
@@ -121,9 +110,8 @@ export async function onRequest(context) {
   const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${childId}:secret`, keypair.secretKey);
 
-  // Fund child wallet (SOL minus protocol fee)
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
-  const tradingCapital = parseFloat((pending.sol_amount * (1 - feePct)).toFixed(6));
+  // Fund child wallet — free spawn, 100% goes to child
+  const tradingCapital = parseFloat(pending.sol_amount.toFixed(6));
 
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
   if (!protocolSecret) {

@@ -59,45 +59,8 @@ export async function onRequest(context) {
       console.error('Reference lookup error:', e.message);
     }
 
-    // --- Try 2: Amount-matching fallback (for manual senders) ---
-    if (!found) {
-      try {
-        const protocolAddr = context.env.PROTOCOL_WALLET;
-        const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolAddr, { limit: 10 }]);
-
-        // Get already-used tx signatures to prevent double-matching
-        const usedTxs = await db.prepare(
-          "SELECT tx_signature FROM payment_requests WHERE tx_signature IS NOT NULL"
-        ).all();
-        const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
-
-        if (recentSigs?.length > 0) {
-          for (const sig of recentSigs) {
-            if (sig.err || usedSigs.has(sig.signature)) continue;
-            const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
-            if (!tx?.meta) continue;
-
-            const accounts = tx.transaction.message.accountKeys;
-            let protoIdx = -1;
-            for (let i = 0; i < accounts.length; i++) {
-              const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
-              if (pk === protocolAddr) { protoIdx = i; break; }
-            }
-            if (protoIdx < 0) continue;
-
-            const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
-            if (solReceived < 0.3) continue; // skip micro amounts
-
-            if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
-              found = await verifyAndConfirm(context, db, rpcUrl, pr, sig.signature);
-              if (found) break;
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Amount-matching error:', e.message);
-      }
-    }
+    // Amount-matching fallback REMOVED — caused duplicate confirmations.
+    // Only reference-based lookup is used now.
 
     if (found) {
       // Return confirmed status with agent wallet
@@ -113,18 +76,6 @@ export async function onRequest(context) {
       });
     }
 
-    // Check if token is missing for detailed status
-    if (pr.spawn_cost && pr.spawn_cost > 0) {
-      try {
-        const { getTokenBalances } = await import('../_lib/solana.js');
-        const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
-        const protocolWallet = context.env.PROTOCOL_WALLET;
-        const tokens = await getTokenBalances(protocolWallet, rpcUrl);
-        const spawnBal = tokens.find(t => t.mint === SPAWN_MINT)?.amount || 0;
-        const hasToken = spawnBal >= pr.spawn_cost;
-        return Response.json({ status: 'pending', message: 'Payment not found on-chain yet', checks: { token: hasToken, sol: false } });
-      } catch {}
-    }
     return Response.json({ status: 'pending', message: 'Payment not found on-chain yet' });
   }
 
@@ -149,24 +100,31 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const solReceived = (tx.meta.postBalances[recipientIdx] - tx.meta.preBalances[recipientIdx]) / 1e9;
   if (solReceived < pr.amount * 0.95) return false;
 
-  // Check $SPAWN token balance if required
-  if (pr.spawn_cost && pr.spawn_cost > 0) {
-    const { getTokenBalances } = await import('../_lib/solana.js');
-    const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
-    const protocolWallet = context.env.PROTOCOL_WALLET;
-    const tokens = await getTokenBalances(protocolWallet, rpcUrl);
-    const spawnBal = tokens.find(t => t.mint === SPAWN_MINT)?.amount || 0;
-    if (spawnBal < pr.spawn_cost) return false; // wait for token
-  }
-
   const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
-  // Update payment
+  // Check tx signature not already used by another payment
+  const existingTx = await db.prepare(
+    "SELECT id FROM payment_requests WHERE tx_signature = ? AND id != ?"
+  ).bind(txSignature, pr.id).first();
+  if (existingTx) return false; // tx already used
+
+  // Check agent is still claimable BEFORE marking payment confirmed
+  const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
+  if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') {
+    // Agent already claimed — mark payment as failed, don't take the money
+    await db.prepare(
+      "UPDATE payment_requests SET status = 'already_claimed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
+    ).bind(buyer, txSignature, pr.id).run();
+    return false;
+  }
+  const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
+
+  // Mark payment confirmed
   await db.prepare(
     "UPDATE payment_requests SET status = 'confirmed', buyer_wallet = ?, tx_signature = ?, confirmed_at = datetime('now') WHERE id = ?"
   ).bind(buyer, txSignature, pr.id).run();
 
-  // Claim agent (same logic as verify-payments.js)
+  // Claim agent
   const { generateKeypair, sendSol } = await import('../_lib/solana.js');
 
   const GENESIS_DNA = {
@@ -187,10 +145,6 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
     "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
   };
 
-  const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
-  if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') return true; // already claimed
-  const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
-
   const dna = GENESIS_DNA[pr.agent_id];
   if (!dna) return true;
 
@@ -198,8 +152,8 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
-  const tradingCapital = pr.amount * (1 - feePct);
+  // Free claim — 100% goes to agent wallet
+  const tradingCapital = pr.amount;
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 
   if (!protocolSecret) {

@@ -23,19 +23,13 @@ export async function onRequest(context) {
     return Response.json({ error: `Parent needs ${minPnl} SOL PnL (has ${parent.total_pnl.toFixed(3)})` }, { status: 400 });
   }
 
-  // 6h cooldown between spawns
-  const lastSpawn = await db.prepare(
-    'SELECT created_at FROM spawns WHERE parent_id = ? ORDER BY created_at DESC LIMIT 1'
-  ).bind(parent_id).first();
-  if (lastSpawn) {
-    const hours = (Date.now() - new Date(lastSpawn.created_at + 'Z').getTime()) / 3600000;
-    if (hours < 6) return Response.json({ error: `Cooldown: ${(6 - hours).toFixed(1)}h remaining` }, { status: 400 });
-  }
+  // No cooldown — spawn as many as you want
 
   // Calculate costs
   const childGen = parent.generation + 1;
   if (childGen > 5) return Response.json({ error: 'Max generation reached (5)' }, { status: 400 });
-  const spawnCost = SPAWN_COSTS[childGen] || 100000;
+  // Free spawn — no $SPAWN cost for now
+  const spawnCost = 0;
 
   // Min 1 SOL deposit
   const solDeposit = Math.max(1, parseFloat(sol_amount));

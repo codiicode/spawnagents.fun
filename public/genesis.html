@@ -7,9 +7,9 @@
   <meta name="description" content="15 unique AI trading agents with distinct DNA. Buy a genesis agent and earn royalties from every descendant.">
   <meta property="og:title" content="Genesis Agents — SPAWN">
   <meta property="og:description" content="15 unique AI trading agents. Buy a genesis and earn royalties from every descendant.">
-  <meta property="og:image" content="https://spawnagents.fun/S.jpg">
+  <meta property="og:image" content="https://spawnagents.fun/ogg.jpg">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://spawnagents.fun/S.jpg">
+  <meta name="twitter:image" content="https://spawnagents.fun/ogg.jpg">
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
@@ -1303,11 +1303,11 @@
     <div class="modal-title" id="modalAgent"></div>
     <div class="modal-subtitle">Genesis Agent — SPAWN</div>
 
-    <!-- Phase 1: Token info + SOL input -->
+    <!-- Phase 1: SOL input -->
     <div id="buyPhase1">
       <div class="spawn-modal-row">
-        <span class="k">$SPAWN cost</span>
-        <span class="v" id="modalSpawnCost">—</span>
+        <span class="k">Claim cost</span>
+        <span class="v" id="modalSpawnCost">FREE</span>
       </div>
       <div class="spawn-modal-row">
         <span class="k">Tier</span>
@@ -1316,7 +1316,7 @@
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Amount (agent's trading capital)</div>
         <input type="number" class="spawn-sol-input" id="buySolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 95% goes to agent wallet, 5% protocol fee</div>
+        <div class="spawn-sol-hint">Minimum 1 SOL — 100% goes to agent wallet</div>
       </div>
       <button class="pay-btn" id="buyProceedBtn" onclick="handleBuyProceed()">Proceed to Payment</button>
     </div>
@@ -1324,11 +1324,7 @@
     <!-- Phase 2: Payment instructions -->
     <div id="buyPhase2" style="display:none;">
       <div class="spawn-modal-row">
-        <span class="k">1. Send $SPAWN tokens</span>
-        <span class="v" id="modalTokenAmount">—</span>
-      </div>
-      <div class="spawn-modal-row">
-        <span class="k">2. Send SOL (exact amount)</span>
+        <span class="k">Send SOL (exact amount)</span>
         <span class="v" id="modalSolAmount">—</span>
       </div>
       <div style="margin-top:12px;">
@@ -1388,27 +1384,19 @@
         <span class="v" id="spawnChildGen">—</span>
       </div>
       <div class="spawn-modal-row">
-        <span class="k">$SPAWN cost</span>
-        <span class="v" id="spawnTokenCost">—</span>
-      </div>
-      <div class="spawn-modal-row">
         <span class="k">Parent PnL</span>
         <span class="v" id="spawnParentPnl">—</span>
       </div>
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
         <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 95% goes to child wallet, 5% protocol fee</div>
+        <div class="spawn-sol-hint">Minimum 1 SOL — 100% goes to child wallet</div>
       </div>
-      <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send $SPAWN + SOL</button>
+      <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send SOL</button>
     </div>
     <div id="spawnPayInfo" style="display:none;">
       <div class="spawn-modal-row">
-        <span class="k">1. Send $SPAWN tokens</span>
-        <span class="v" id="spawnTokenAmount">—</span>
-      </div>
-      <div class="spawn-modal-row">
-        <span class="k">2. Send SOL (exact amount)</span>
+        <span class="k">Send SOL (exact amount)</span>
         <span class="v" id="spawnSolAmount">—</span>
       </div>
       <div style="margin-top:12px;">
@@ -1616,9 +1604,7 @@ function agentCard(g, priceLabel) {
       <div class="agent-stat-row"><span class="k">take profit</span><span class="v">${d.sell_profit_pct}%</span></div>
       <div class="agent-stat-row"><span class="k">stop loss</span><span class="v">${d.sell_loss_pct}%</span></div>
       <div class="agent-stat-row"><span class="k">max position</span><span class="v">${d.max_position_pct}%</span></div>
-      <div class="agent-stat-row"><span class="k">check interval</span><span class="v">${d.check_interval_min}m</span></div>
-      <div class="agent-stat-row"><span class="k">min holders</span><span class="v">${d.buy_threshold_holders}</span></div>
-      <div class="agent-stat-row"><span class="k">min volume</span><span class="v">${d.buy_threshold_volume}</span></div>
+      <div class="agent-stat-row"><span class="k">min hold time</span><span class="v">${d.check_interval_min}m</span></div>
     </div>
 
     ${!g.available ? `<div class="agent-stats" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
@@ -1638,7 +1624,7 @@ function agentCard(g, priceLabel) {
       <span class="agent-price-label">Price</span>
       <span class="agent-price-val">${priceLabel}</span>
     </div>
-    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Buy &mdash; ${priceLabel} + SOL</button>` : ''}
+    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; FREE</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
   </div>`;
@@ -1661,10 +1647,10 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="degen">
     <div class="tier-header">
       <div class="tier-label">Degen</div>
-      <div class="tier-price">1.5M $SPAWN + min 1 SOL to top up your agents wallet</div>
+      <div class="tier-price">FREE — just deposit min 1 SOL</div>
       <div class="tier-desc">${degens.filter(g => g.available).length} / ${degens.length} available &mdash; pump.fun hunters</div>
     </div>
-    <div class="agent-grid">${degens.map(g => agentCard(g, "1.5M $SPAWN")).join("")}</div>
+    <div class="agent-grid">${degens.map(g => agentCard(g, "FREE")).join("")}</div>
   </div>`;
 
   // Standard tier — all normal agents combined
@@ -1672,10 +1658,10 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="standard">
     <div class="tier-header">
       <div class="tier-label">Standard</div>
-      <div class="tier-price">3M $SPAWN + min 1 SOL to top up your agents wallet</div>
+      <div class="tier-price">FREE — just deposit min 1 SOL</div>
       <div class="tier-desc">${standard.filter(g => g.available).length} / ${standard.length} available &mdash; Jupiter traders</div>
     </div>
-    <div class="agent-grid">${standard.map(g => agentCard(g, "3M $SPAWN")).join("")}</div>
+    <div class="agent-grid">${standard.map(g => agentCard(g, "FREE")).join("")}</div>
   </div>`;
 
   // Custom Agents
@@ -1993,7 +1979,7 @@ let currentBlockhash = null;
 let currentSpawnCostBuy = 0;
 let currentBuyTier = null;
 
-const SPAWN_COSTS_BUY = { degen: 1500000, standard: 3000000 };
+const SPAWN_COSTS_BUY = { degen: 0, standard: 0 };
 
 function initBuy(btn) {
   // Require login
@@ -2013,7 +1999,7 @@ function initBuy(btn) {
 
   // Show Phase 1
   document.getElementById('modalAgent').textContent = agentName;
-  document.getElementById('modalSpawnCost').textContent = (spawnCost / 1000000).toFixed(1) + 'M $SPAWN';
+  document.getElementById('modalSpawnCost').textContent = 'FREE';
   document.getElementById('modalTier').textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
   document.getElementById('buySolInput').value = '1';
   document.getElementById('buyPhase1').style.display = '';
@@ -2061,10 +2047,9 @@ async function handleBuyProceed() {
     // Show Phase 2
     document.getElementById('buyPhase1').style.display = 'none';
     document.getElementById('buyPhase2').style.display = '';
-    document.getElementById('modalTokenAmount').textContent = (data.spawn_cost / 1000000).toFixed(1) + 'M';
     document.getElementById('modalSolAmount').textContent = data.amount.toFixed(6) + ' SOL';
     document.getElementById('modalAddr').textContent = data.recipient;
-    document.getElementById('modalStatus').textContent = 'Send $SPAWN tokens and SOL to the address above';
+    document.getElementById('modalStatus').textContent = 'Send SOL to the address above';
     document.getElementById('modalStatus').className = 'modal-status waiting';
 
     // Detect Phantom
@@ -2587,7 +2572,6 @@ function initSpawn(btn) {
 
   document.getElementById('spawnModalAgent').textContent = agentName;
   document.getElementById('spawnChildGen').textContent = `Gen ${childGen}`;
-  document.getElementById('spawnTokenCost').textContent = tokenCost.toLocaleString() + ' $SPAWN';
   document.getElementById('spawnParentPnl').textContent = pnl.toFixed(3) + ' SOL';
   document.getElementById('spawnSolInput').value = '1';
   document.getElementById('spawnModalBody').style.display = '';
@@ -2626,7 +2610,7 @@ async function handleSpawnPay() {
     if (!res.ok) {
       showSpawnStatus(data.error || 'Request failed', 'error');
       btn.disabled = false;
-      btn.textContent = 'Send $SPAWN + SOL';
+      btn.textContent = 'Send SOL';
       return;
     }
 
@@ -2636,16 +2620,15 @@ async function handleSpawnPay() {
     // Show payment info
     document.getElementById('spawnModalBody').style.display = 'none';
     document.getElementById('spawnPayInfo').style.display = '';
-    document.getElementById('spawnTokenAmount').textContent = data.spawn_cost_tokens.toLocaleString();
     document.getElementById('spawnSolAmount').textContent = data.sol_amount.toFixed(6) + ' SOL';
     document.getElementById('spawnProtocolAddr').textContent = data.protocol_wallet;
 
-    showSpawnStatus('Send both payments to the address above, then click Verify', 'waiting');
+    showSpawnStatus('Send SOL to the address above, then click Verify', 'waiting');
 
   } catch (e) {
     showSpawnStatus('Network error: ' + e.message, 'error');
     btn.disabled = false;
-    btn.textContent = 'Send $SPAWN + SOL';
+    btn.textContent = 'Send SOL';
   }
 }
 

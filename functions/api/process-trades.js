@@ -3,7 +3,7 @@ import { discoverTokens, setMoralisKey, setDiscoveryKV } from "../_lib/market-da
 import { setJupiterApiKey } from "../_lib/solana.js";
 
 const MUTEX_KEY = 'cron:process-trades:lock';
-const MUTEX_TTL = 180; // 3 min max lock
+const MUTEX_TTL = 300; // 5 min max lock
 
 export async function onRequest(context) {
   if (context.env.JUPITER_API_KEY) setJupiterApiKey(context.env.JUPITER_API_KEY);
@@ -29,7 +29,13 @@ export async function onRequest(context) {
   // === MUTEX — prevent concurrent cron cycles ===
   const lock = await kv.get(MUTEX_KEY);
   if (lock) {
-    return Response.json({ skipped: true, reason: "Previous cycle still running" });
+    // Force-clear stale locks older than MUTEX_TTL (safety net if TTL fails)
+    const lockAge = (Date.now() - parseInt(lock)) / 1000;
+    if (lockAge < MUTEX_TTL) {
+      return Response.json({ skipped: true, reason: "Previous cycle still running", lock_age_s: Math.round(lockAge) });
+    }
+    // Stale lock — clear it and proceed
+    await kv.delete(MUTEX_KEY);
   }
   await kv.put(MUTEX_KEY, Date.now().toString(), { expirationTtl: MUTEX_TTL });
 

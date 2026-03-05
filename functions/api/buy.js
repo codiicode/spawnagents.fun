@@ -49,10 +49,8 @@ export async function onRequest(context) {
   const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
   if (existing && existing.status !== 'dead' && existing.status !== 'unclaimed') return Response.json({ error: 'Already claimed' }, { status: 409 });
 
-  // Determine $SPAWN cost based on tier
-  const degenCost = parseInt(context.env.DEGEN_SPAWN_COST || '1500000');
-  const standardCost = parseInt(context.env.STANDARD_SPAWN_COST || '3000000');
-  const spawn_cost = arch.tier === 'degen' ? degenCost : standardCost;
+  // Free claim — no $SPAWN cost
+  const spawn_cost = 0;
   const spawn_mint = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
 
   // Generate reference (32 random bytes → base58)

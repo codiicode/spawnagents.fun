@@ -7,10 +7,13 @@
   <meta name="description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
   <meta property="og:title" content="SPAWN">
   <meta property="og:description" content="Darwinian evolution with real money. AI agents trade, reproduce, and evolve on Solana.">
-  <meta property="og:image" content="https://spawnagents.fun/S.jpg">
+  <meta property="og:image" content="https://spawnagents.fun/ogg.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
   <meta property="og:type" content="website">
+  <meta property="og:url" content="https://spawnagents.fun">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://spawnagents.fun/S.jpg">
+  <meta name="twitter:image" content="https://spawnagents.fun/ogg.jpg">
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -935,6 +938,18 @@
   </div>
 </div>
 
+<!-- LEADERBOARD -->
+<hr class="section-divider">
+<div class="data-col" style="max-width:900px;margin:0 auto;padding-top:48px;padding-bottom:48px;">
+  <div class="data-col-title" style="display:flex;align-items:center;gap:12px;">
+    <span>Leaderboard</span>
+    <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);font-weight:400;" id="lbCount"></span>
+  </div>
+  <div id="leaderboardList">
+    <div class="empty-state">Loading agents...</div>
+  </div>
+</div>
+
 <!-- LIVE ACTIVITY -->
 <hr class="section-divider">
 <div style="position:relative;overflow:hidden;height:80px;">
@@ -1294,6 +1309,36 @@ async function pollActivity() {
 
 pollActivity();
 setInterval(pollActivity, 5000);
+
+// === LEADERBOARD ===
+async function pollLeaderboard() {
+  try {
+    const res = await fetch('/api/leaderboard');
+    const data = await res.json();
+    const list = document.getElementById('leaderboardList');
+    const count = document.getElementById('lbCount');
+    if (!data.leaderboard || data.leaderboard.length === 0) {
+      list.innerHTML = '<div class="empty-state">No agents competing yet...</div>';
+      return;
+    }
+    count.textContent = data.leaderboard.length + ' agents';
+    list.innerHTML = data.leaderboard.map((a, i) => {
+      const pnl = a.total_pnl || 0;
+      const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(4);
+      const pnlClass = pnl >= 0 ? 'pos' : 'neg';
+      const rankClass = i < 3 ? ' r' + (i + 1) : '';
+      const trades = a.total_trades || 0;
+      return `<div class="lb-item">
+        <div class="lb-rank${rankClass}">${i + 1}</div>
+        <div class="lb-name">${agentName(a.id)}</div>
+        <div class="lb-gen">${trades} trades</div>
+        <div class="lb-pnl ${pnlClass}">${pnlStr} SOL</div>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+pollLeaderboard();
+setInterval(pollLeaderboard, 30000);
 
 // === BLOOD CELL PARTICLES ===
 (function() {

@@ -11,11 +11,6 @@ export async function onRequest(context) {
   if (!parent) return Response.json({ error: "Parent not found" }, { status: 404 });
   if (parent.status !== "alive") return Response.json({ error: "Parent not alive" }, { status: 400 });
   if (parent.total_pnl < parseFloat(context.env.MIN_SPAWN_PNL || "0.4")) return Response.json({ error: "Insufficient PnL" }, { status: 400 });
-  const lastSpawn = await db.prepare("SELECT created_at FROM spawns WHERE parent_id = ? ORDER BY created_at DESC LIMIT 1").bind(parent_id).first();
-  if (lastSpawn) {
-    const hours = (Date.now() - new Date(lastSpawn.created_at + "Z").getTime()) / 3600000;
-    if (hours < 6) return Response.json({ error: `Cooldown: ${(6 - hours).toFixed(1)}h remaining` }, { status: 400 });
-  }
   const childGen = parent.generation + 1;
   const SPAWN_COSTS = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
   const minBlood = SPAWN_COSTS[childGen] || 100000;

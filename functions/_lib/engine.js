@@ -326,14 +326,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     if (minsSinceBuy < buyCooldown) return { sells: sellResults, action: 'hold', reason: `buy cooldown (${Math.round(buyCooldown - minsSinceBuy)}m left)` };
   }
 
-  const SOL_RESERVE = 0.1;
+  const SOL_RESERVE = 0.05;
   const availableSol = solBalance - SOL_RESERVE;
 
   // Min trade: at least 0.15 SOL (~$13) to make trades worthwhile after fees
   const MIN_TRADE_SOL = Math.max(0.15, availableSol * 0.15);
 
   // Don't trade if balance is too low
-  if (availableSol < 0.25) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
+  if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
 
   const maxPositions = Math.round(2 + (1 - dna.aggression) * 2);
   const openPositions = tokenBalances.length;
@@ -383,6 +383,23 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).all();
   const maxedTokens = new Set(buyCountRows.results.map(r => r.token_address));
 
+  // Global blacklist: known rugs/scams — no agent can buy these
+  const GLOBAL_BLACKLIST = new Set([
+    'BityzGkSmcU9SzFH26rzWQ5UX1cRBVywVcXEBxcQpump', // winston (rug)
+  ]);
+
+  // Cross-agent limit: max 2 agents can hold the same token
+  const crowdedRows = await db.prepare(
+    `SELECT token_address FROM (
+       SELECT agent_id, token_address,
+         SUM(CASE WHEN action='buy' THEN token_amount ELSE 0 END) - SUM(CASE WHEN action='sell' THEN token_amount ELSE 0 END) as net
+       FROM trades
+       WHERE agent_id IN (SELECT id FROM agents WHERE status = 'alive') AND agent_id != ?
+       GROUP BY agent_id, token_address HAVING net > 0
+     ) GROUP BY token_address HAVING COUNT(DISTINCT agent_id) >= 2`
+  ).bind(agent.id).all();
+  const crowdedTokens = new Set(crowdedRows.results.map(r => r.token_address));
+
   // Token blacklist: tokens where agent sold at a loss (sold < 95% of bought)
   const blacklistRows = await db.prepare(
     `SELECT token_address,
@@ -393,13 +410,15 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).all();
   const blacklistedTokens = new Set(blacklistRows.results.map(r => r.token_address));
 
-  const filterStats = { total: candidates.length, held: 0, recentSold: 0, maxed: 0, blacklisted: 0, sol: 0, mcap: 0, volume24h: 0, volume1h: 0, momentum: 0, txns: 0, liquidity: 0, tooNew: 0, tooOld: 0, passed: 0 };
+  const filterStats = { total: candidates.length, held: 0, recentSold: 0, maxed: 0, blacklisted: 0, crowded: 0, sol: 0, mcap: 0, volume24h: 0, volume1h: 0, momentum: 0, txns: 0, liquidity: 0, tooNew: 0, tooOld: 0, passed: 0 };
   const scored = candidates
     .filter(t => {
       if (heldMints.has(t.address)) { filterStats.held++; return false; }
       if (recentlySold.has(t.address)) { filterStats.recentSold++; return false; }
       if (maxedTokens.has(t.address)) { filterStats.maxed++; return false; }
+      if (GLOBAL_BLACKLIST.has(t.address)) { filterStats.blacklisted++; return false; }
       if (blacklistedTokens.has(t.address)) { filterStats.blacklisted++; return false; }
+      if (crowdedTokens.has(t.address)) { filterStats.crowded++; return false; }
       if (t.address === SOL_MINT) { filterStats.sol++; return false; }
 
       const volFloor = isDegen ? 15000 : 50000;
