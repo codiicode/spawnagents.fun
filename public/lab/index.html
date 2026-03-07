@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SPAWN LAB — Design Your Agent</title>
+  <link rel="icon" href="/S.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0608;
+      --surface: rgba(180, 30, 50, 0.04);
+      --surface-hover: rgba(180, 30, 50, 0.08);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --text: #ede8ea;
+      --text-muted: #9e9396;
+      --text-dim: #6b5f63;
+      --green: #4a9e6a;
+      --red: #c44040;
+      --agent-color: #c41e3a;
+      --font-display: 'Cinzel', serif;
+      --font-body: 'Sora', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 60px 24px 100px; }
+
+    /* --- HEADER --- */
+    .lab-header { text-align: center; margin-bottom: 56px; }
+    .lab-back {
+      display: inline-block; font-family: var(--font-mono); font-size: 11px;
+      color: var(--text-dim); text-decoration: none; letter-spacing: 0.05em;
+      margin-bottom: 32px; transition: color 0.2s;
+    }
+    .lab-back:hover { color: var(--text-muted); }
+    .lab-title {
+      font-family: var(--font-display); font-size: clamp(28px, 5vw, 42px);
+      font-weight: 700; color: var(--text); letter-spacing: 0.08em; margin-bottom: 8px;
+    }
+    .lab-title .accent { color: var(--blood); }
+    .lab-subtitle {
+      font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+      letter-spacing: 0.15em; text-transform: uppercase;
+    }
+
+    /* --- GRID --- */
+    .lab-grid { display: grid; grid-template-columns: 1fr 380px; gap: 48px; align-items: start; }
+    @media (max-width: 840px) { .lab-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+    /* --- PANEL --- */
+    .panel { border: 1px solid var(--border); background: var(--surface); padding: 28px; margin-bottom: 20px; }
+    .panel:last-child { margin-bottom: 0; }
+    .panel-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--text-dim); margin-bottom: 20px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+
+    /* --- TEXT INPUTS --- */
+    .text-input {
+      width: 100%; background: transparent; border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-mono); font-size: 15px;
+      font-weight: 500; padding: 14px 16px; outline: none; transition: border-color 0.2s;
+    }
+    .text-input::placeholder { color: var(--text-dim); }
+    .text-input:focus { border-color: var(--agent-color); }
+    .text-input.bio {
+      font-size: 12px; font-weight: 300; resize: none; height: 64px;
+      font-family: var(--font-body);
+    }
+
+    .input-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; display: block;
+    }
+    .input-group { margin-bottom: 16px; }
+
+    /* --- AVATAR UPLOAD --- */
+    .avatar-upload-row { display: flex; align-items: center; gap: 12px; }
+    .avatar-upload-btn {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--accent); background: transparent;
+      border: 1px dashed var(--accent); padding: 10px 20px; cursor: pointer; transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .avatar-upload-btn::before { content: '↑'; font-size: 14px; }
+    .avatar-upload-btn:hover { background: rgba(196,30,58,0.1); border-style: solid; }
+    .avatar-upload-preview {
+      width: 40px; height: 40px; border: 1px solid var(--accent); display: none;
+      object-fit: cover;
+    }
+    .avatar-upload-preview.visible { display: block; }
+    .avatar-upload-clear {
+      font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+      background: none; border: none; cursor: pointer; text-decoration: underline;
+      display: none;
+    }
+    .avatar-upload-clear.visible { display: inline; }
+
+
+    /* --- TAGS --- */
+    .tag-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em;
+      padding: 6px 12px; cursor: pointer; transition: all 0.15s; text-transform: uppercase;
+    }
+    .tag-btn:hover { border-color: var(--border-strong); color: var(--text); }
+    .tag-btn.active { border-color: var(--agent-color); color: var(--agent-color); background: rgba(196,30,58,0.06); }
+
+    /* --- PRESETS --- */
+    .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .preset-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+      text-transform: uppercase; padding: 10px 8px; cursor: pointer; transition: all 0.15s;
+    }
+    .preset-btn:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-hover); }
+    .preset-btn.active { border-color: var(--agent-color); color: var(--agent-color); background: rgba(196,30,58,0.06); }
+
+    /* --- SLIDERS --- */
+    .slider-group { margin-bottom: 20px; }
+    .slider-group:last-child { margin-bottom: 0; }
+    .slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .slider-name { font-family: var(--font-mono); font-size: 11px; font-weight: 500; color: var(--text); letter-spacing: 0.04em; }
+    .slider-value { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--agent-color); min-width: 40px; text-align: right; }
+    .slider-desc { font-size: 10px; color: var(--text-dim); margin-bottom: 8px; font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+    input[type="range"] {
+      -webkit-appearance: none; appearance: none; width: 100%; height: 2px;
+      background: var(--border); outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; background: var(--bg);
+      border: 2px solid var(--agent-color); border-radius: 0; cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover { background: var(--agent-color); box-shadow: 0 0 12px rgba(196,30,58,0.4); }
+    input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; background: var(--bg); border: 2px solid var(--agent-color); border-radius: 0; cursor: pointer; }
+    input[type="range"]::-moz-range-track { height: 2px; background: var(--border); border: none; }
+    .slider-track-fill { position: relative; }
+    .slider-track-fill::after {
+      content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      height: 2px; background: var(--agent-color); width: var(--fill, 50%); pointer-events: none; opacity: 0.5;
+    }
+    .slider-track-fill input { position: relative; z-index: 1; }
+
+    .section-divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+    /* --- ADVANCED TOGGLE --- */
+    .advanced-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; padding: 14px 20px; user-select: none; transition: background 0.15s;
+    }
+    .advanced-toggle:hover { background: var(--surface-hover); }
+    .advanced-toggle-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--text-muted);
+    }
+    .advanced-toggle-arrow {
+      font-size: 12px; color: var(--text-dim); transition: transform 0.2s;
+    }
+    .advanced-toggle.open .advanced-toggle-arrow { transform: rotate(180deg); }
+    .advanced-body {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    }
+    .advanced-body.open { max-height: 600px; }
+    .advanced-body-inner { padding: 0 20px 20px; }
+
+    /* --- DEGEN TOGGLE --- */
+    .degen-toggle-row {
+      display: flex; align-items: center; justify-content: space-between; padding: 6px 0;
+    }
+    .degen-toggle-left { display: flex; flex-direction: column; gap: 2px; }
+    .degen-toggle-name { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+    .degen-toggle-desc { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
+    .degen-switch {
+      position: relative; width: 40px; height: 22px; background: var(--surface);
+      border: 1px solid var(--border); cursor: pointer; transition: all 0.2s; flex-shrink: 0;
+    }
+    .degen-switch::after {
+      content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
+      background: var(--text-dim); transition: all 0.2s;
+    }
+    .degen-switch.on { border-color: var(--accent); background: rgba(196,30,58,0.15); }
+    .degen-switch.on::after { left: 21px; background: var(--accent); }
+
+    /* --- SELL STRATEGY --- */
+    .strategy-option {
+      display: flex; align-items: flex-start; gap: 12px; padding: 12px;
+      border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; margin-bottom: 6px;
+    }
+    .strategy-option:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+    .strategy-option.active { border-color: var(--agent-color); background: rgba(196,30,58,0.04); }
+    .strategy-radio {
+      width: 14px; height: 14px; border: 2px solid var(--text-dim); flex-shrink: 0; margin-top: 2px;
+      transition: all 0.15s;
+    }
+    .strategy-option.active .strategy-radio { border-color: var(--agent-color); background: var(--agent-color); }
+    .strategy-label { font-family: var(--font-mono); font-size: 11px; color: var(--text); font-weight: 500; }
+    .strategy-desc { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+    /* --- PREVIEW --- */
+    .preview-card { position: sticky; top: 32px; }
+
+    .preview-avatar {
+      width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;
+      font-size: 32px; border: 2px solid var(--agent-color); margin-bottom: 16px;
+      background: rgba(196,30,58,0.04); transition: all 0.3s; overflow: hidden;
+    }
+    .preview-avatar img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+
+    .preview-agent-name {
+      font-family: var(--font-display); font-size: 20px; font-weight: 600;
+      color: var(--text); letter-spacing: 0.06em; margin-bottom: 4px; min-height: 30px;
+    }
+    .preview-agent-name.empty { color: var(--text-dim); font-style: italic; }
+
+    .preview-bio {
+      font-family: var(--font-body); font-size: 11px; color: var(--text-dim);
+      margin-bottom: 12px; min-height: 16px; font-style: italic;
+    }
+
+    .preview-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; min-height: 24px; }
+    .preview-tag {
+      font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.1em;
+      text-transform: uppercase; padding: 3px 8px; border: 1px solid;
+      color: var(--agent-color); border-color: rgba(196,30,58,0.25);
+    }
+
+    .preview-profile {
+      font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.12em; margin-bottom: 20px; padding: 4px 10px; display: inline-block; border: 1px solid;
+    }
+    .preview-profile.conservative { color: #5a8a6a; border-color: rgba(90,138,106,0.3); }
+    .preview-profile.moderate { color: #8a8a5a; border-color: rgba(138,138,90,0.3); }
+    .preview-profile.aggressive { color: #c47a2e; border-color: rgba(196,122,46,0.3); }
+    .preview-profile.degen { color: var(--blood); border-color: var(--blood-dim); }
+
+    .dna-bars { margin-bottom: 20px; }
+    .dna-bar-row { display: flex; align-items: center; margin-bottom: 5px; }
+    .dna-bar-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); width: 60px; flex-shrink: 0; }
+    .dna-bar-track { flex: 1; height: 3px; background: var(--border); position: relative; overflow: hidden; }
+    .dna-bar-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--agent-color); transition: width 0.3s ease; }
+    .dna-bar-val { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); width: 32px; text-align: right; flex-shrink: 0; }
+
+    .preview-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); margin-bottom: 20px; }
+    .preview-stat { background: var(--bg); padding: 12px 14px; }
+    .preview-stat-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+    .preview-stat-value { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text); }
+
+    .preview-style {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      line-height: 1.7; padding: 14px; border: 1px solid var(--border);
+      background: var(--surface); margin-bottom: 20px;
+    }
+    .preview-style span { color: var(--text-dim); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+
+    /* --- DEPLOY --- */
+    .deploy-status {
+      font-family: var(--font-mono); font-size: 11px; padding: 12px 14px;
+      margin-bottom: 12px; border: 1px solid var(--border); line-height: 1.7; display: none;
+    }
+    .deploy-status.error { color: var(--red); border-color: rgba(196,64,64,0.3); }
+    .deploy-status.success { color: var(--green); border-color: rgba(74,158,106,0.3); }
+    .deploy-status.pending { color: var(--text-muted); border-color: var(--border); }
+
+    /* --- DEPOSIT SLIDER --- */
+    .deposit-row {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 0 4px;
+    }
+    .deposit-label {
+      font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-muted); white-space: nowrap;
+    }
+    .deposit-row input[type="range"] { flex: 1; }
+    .deposit-value {
+      font-family: var(--font-mono); font-size: 14px; color: var(--text);
+      min-width: 52px; text-align: right; font-weight: 600;
+    }
+
+    .deploy-btn {
+      width: 100%; padding: 16px; background: transparent; border: 1px solid var(--agent-color);
+      color: var(--agent-color); font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+      letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: all 0.2s;
+      position: relative; overflow: hidden;
+    }
+    .deploy-btn::before {
+      content: ''; position: absolute; inset: 0; background: var(--agent-color);
+      transform: scaleX(0); transform-origin: left; transition: transform 0.3s ease; z-index: 0;
+    }
+    .deploy-btn:hover::before { transform: scaleX(1); }
+    .deploy-btn:hover { color: var(--text); }
+    .deploy-btn span { position: relative; z-index: 1; }
+    .deploy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .deploy-btn:disabled::before { display: none; }
+
+    .deploy-note {
+      font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+      text-align: center; margin-top: 12px; letter-spacing: 0.04em; line-height: 1.8;
+    }
+
+    .cost-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); margin-top: 16px; }
+    .cost-item { background: var(--bg); padding: 10px 12px; }
+    .cost-item-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); }
+    .cost-item-value { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* --- SPAWN MODAL --- */
+    .spawn-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center;
+    }
+    .spawn-overlay.open { display: flex; }
+    .spawn-modal {
+      background: #0d0a10; border: 1px solid var(--border-strong);
+      padding: 36px; max-width: 440px; width: 90%; position: relative;
+    }
+    .spawn-modal h3 {
+      font-family: var(--font-display); font-size: 22px; font-weight: 600;
+      color: var(--text); letter-spacing: 0.04em; margin-bottom: 6px;
+    }
+    .spawn-modal .spawn-sub {
+      font-size: 12px; color: var(--text-muted); margin-bottom: 24px;
+    }
+    .spawn-option {
+      display: block; width: 100%; padding: 14px; background: rgba(196,30,58,0.1);
+      border: 1px solid var(--accent); color: var(--text); font-family: var(--font-mono);
+      font-size: 13px; font-weight: 500; letter-spacing: 0.06em; cursor: pointer;
+      text-align: center; transition: background 0.2s; margin-bottom: 10px;
+    }
+    .spawn-option:hover { background: rgba(196,30,58,0.25); }
+    .spawn-option:disabled { opacity: 0.4; cursor: not-allowed; }
+    .spawn-or {
+      text-align: center; font-size: 11px; color: var(--text-dim);
+      margin-bottom: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+    }
+    .spawn-option-alt {
+      display: block; width: 100%; padding: 14px; background: none;
+      border: 1px solid var(--border); color: var(--text-muted); font-family: var(--font-mono);
+      font-size: 13px; letter-spacing: 0.06em; cursor: pointer; text-align: center;
+      transition: all 0.2s;
+    }
+    .spawn-option-alt:hover { border-color: var(--border-strong); color: var(--text); }
+    .spawn-cancel {
+      display: block; width: 100%; margin-top: 16px; background: none; border: none;
+      color: var(--text-dim); font-family: var(--font-mono); font-size: 11px;
+      cursor: pointer; text-align: center; letter-spacing: 0.1em; transition: color 0.2s;
+    }
+    .spawn-cancel:hover { color: var(--text-muted); }
+    .spawn-amount {
+      font-family: var(--font-display); font-size: 28px; font-weight: 600;
+      color: var(--text); text-align: center; margin-bottom: 4px;
+    }
+    .spawn-amount-label {
+      font-size: 11px; color: var(--text-dim); text-align: center;
+      margin-bottom: 20px; letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    .spawn-dest {
+      font-size: 10px; color: var(--text-muted); word-break: break-all;
+      background: rgba(255,255,255,0.03); padding: 8px; border: 1px solid var(--border);
+      cursor: pointer; margin-bottom: 20px; transition: border-color 0.2s;
+    }
+    .spawn-dest:hover { border-color: var(--text-muted); }
+    .spawn-dest span {
+      color: var(--text-dim); display: block; font-size: 9px;
+      letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .spawn-verify-btn {
+      display: block; width: 100%; margin-top: 10px; padding: 12px;
+      background: none; border: 1px solid var(--border); color: var(--text-muted);
+      font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .spawn-verify-btn:hover { border-color: var(--text-muted); color: var(--text); }
+    .spawn-verify-btn:disabled { opacity: 0.5; cursor: default; }
+    .spawn-status {
+      text-align: center; font-size: 12px; color: var(--text-muted); margin-top: 12px;
+    }
+    .spawn-status.pending { color: var(--text-dim); }
+    .spawn-status.pending::after {
+      content: ''; display: inline-block; width: 4px; height: 4px;
+      background: var(--accent); border-radius: 50%; margin-left: 6px;
+      animation: spawnPulse 1.5s ease-in-out infinite; vertical-align: middle;
+    }
+    .spawn-status.success { color: #4a9e6a; }
+    .spawn-status.error { color: #e63950; }
+    @keyframes spawnPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeUp 0.5s ease forwards; opacity: 0; }
+    .fade-in:nth-child(1) { animation-delay: 0.05s; }
+    .fade-in:nth-child(2) { animation-delay: 0.12s; }
+    .fade-in:nth-child(3) { animation-delay: 0.19s; }
+
+    @media (max-width: 480px) {
+      .container { padding: 40px 16px 80px; }
+      .presets { grid-template-columns: repeat(2, 1fr); }
+      .preview-card { position: static; }
+      .lab-header { margin-bottom: 40px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <header class="lab-header fade-in">
+    <a href="/" class="lab-back">&larr; back to spawn</a>
+    <h1 class="lab-title">SPAWN <span class="accent">LAB</span></h1>
+    <p class="lab-subtitle">Design your agent</p>
+  </header>
+
+  <div class="lab-grid">
+
+    <!-- LEFT: CONTROLS -->
+    <div class="fade-in">
+
+      <!-- IDENTITY -->
+      <div class="panel">
+        <div class="panel-label">Identity</div>
+
+        <div class="input-group">
+          <label class="input-label">Agent Name</label>
+          <input type="text" class="text-input" id="agentName" placeholder="Name your agent..." maxlength="24" spellcheck="false" autocomplete="off">
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Bio / Motto</label>
+          <textarea class="text-input bio" id="agentBio" placeholder="What drives your agent?" maxlength="100" spellcheck="false"></textarea>
+        </div>
+
+        <div class="input-group" style="margin-bottom:0">
+          <label class="input-label">Avatar</label>
+          <div class="avatar-upload-row">
+            <button class="avatar-upload-btn" id="uploadBtn">Upload image</button>
+            <img class="avatar-upload-preview" id="uploadPreview" alt="">
+            <button class="avatar-upload-clear" id="uploadClear">remove</button>
+            <input type="file" id="avatarFile" accept="image/png,image/jpeg,image/webp" style="display:none">
+          </div>
+        </div>
+      </div>
+
+      <!-- TOKEN FOCUS -->
+      <div class="panel">
+        <div class="panel-label">Token Focus</div>
+        <div class="tag-grid" id="focusGrid"></div>
+      </div>
+
+      <!-- STRATEGY PRESETS -->
+      <div class="panel" style="padding: 16px 20px;">
+        <div class="presets">
+          <button class="preset-btn" data-preset="sniper">Sniper</button>
+          <button class="preset-btn" data-preset="diamond">Diamond Hands</button>
+          <button class="preset-btn" data-preset="degen">Degen</button>
+          <button class="preset-btn" data-preset="conservative">Conservative</button>
+        </div>
+      </div>
+
+      <!-- DNA SLIDERS -->
+      <div class="panel">
+        <div class="panel-label">DNA Configuration</div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Aggression</span>
+            <span class="slider-value" id="val-aggression">0.50</span>
+          </div>
+          <div class="slider-desc">Trade frequency. 0 = patient, 1 = hyperactive</div>
+          <div class="slider-track-fill" style="--fill:50%"><input type="range" id="aggression" min="0" max="100" value="50" data-key="aggression"></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Risk Tolerance</span>
+            <span class="slider-value" id="val-risk">0.50</span>
+          </div>
+          <div class="slider-desc">0 = established tokens, 1 = degen pump.fun plays</div>
+          <div class="slider-track-fill" style="--fill:50%"><input type="range" id="risk" min="0" max="100" value="50" data-key="risk"></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Patience</span>
+            <span class="slider-value" id="val-patience">0.50</span>
+          </div>
+          <div class="slider-desc">0 = quick flips, 1 = diamond hands</div>
+          <div class="slider-track-fill" style="--fill:50%"><input type="range" id="patience" min="0" max="100" value="50" data-key="patience"></div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Take Profit</span>
+            <span class="slider-value" id="val-tp">50%</span>
+          </div>
+          <div class="slider-desc">Sell winners at this gain</div>
+          <div class="slider-track-fill" style="--fill:33%"><input type="range" id="tp" min="0" max="1000" value="50" data-key="tp"></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Stop Loss</span>
+            <span class="slider-value" id="val-sl">20%</span>
+          </div>
+          <div class="slider-desc">Cut losers at this loss</div>
+          <div class="slider-track-fill" style="--fill:19%"><input type="range" id="sl" min="1" max="100" value="20" data-key="sl"></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">Max Position</span>
+            <span class="slider-value" id="val-pos">25%</span>
+          </div>
+          <div class="slider-desc">Max % of balance per trade</div>
+          <div class="slider-track-fill" style="--fill:50%"><input type="range" id="pos" min="10" max="90" value="25" data-key="pos"></div>
+        </div>
+      </div>
+
+      <!-- ADVANCED SETTINGS -->
+      <div class="panel" style="padding:0; overflow:hidden;">
+        <div class="advanced-toggle" id="advancedToggle">
+          <span class="advanced-toggle-label">Advanced Settings</span>
+          <span class="advanced-toggle-arrow">&#9660;</span>
+        </div>
+        <div class="advanced-body" id="advancedBody">
+          <div class="advanced-body-inner">
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Min Holders</span>
+                <span class="slider-value" id="val-holders">100</span>
+              </div>
+              <div class="slider-desc">Minimum holders before buying a token. Low = early entries, high = safer plays</div>
+              <div class="slider-track-fill" style="--fill:5%"><input type="range" id="holders" min="10" max="2000" value="100" data-key="holders"></div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Min Volume (24h)</span>
+                <span class="slider-value" id="val-volume">$10,000</span>
+              </div>
+              <div class="slider-desc">Minimum 24h trading volume in USD. Filters out dead tokens</div>
+              <div class="slider-track-fill" style="--fill:16%"><input type="range" id="volume" min="1000" max="1000000" value="10000" step="1000" data-key="volume"></div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Max Positions</span>
+                <span class="slider-value" id="val-maxpos">3</span>
+              </div>
+              <div class="slider-desc">Max tokens held simultaneously. 1 = focused, 5 = diversified</div>
+              <div class="slider-track-fill" style="--fill:50%"><input type="range" id="maxpos" min="1" max="5" value="3" data-key="maxpos"></div>
+            </div>
+
+            <div class="section-divider"></div>
+
+            <div class="degen-toggle-row">
+              <div class="degen-toggle-left">
+                <span class="degen-toggle-name">Degen Mode</span>
+                <span class="degen-toggle-desc">Unlocks pump.fun tokens, lower safety thresholds, higher risk/reward</span>
+              </div>
+              <div class="degen-switch" id="degenToggle"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- SELL STRATEGY -->
+      <div class="panel">
+        <div class="panel-label">Sell Strategy</div>
+
+        <div class="strategy-option active" data-strategy="phased">
+          <div class="strategy-radio"></div>
+          <div>
+            <div class="strategy-label">Phased Exit</div>
+            <div class="strategy-desc">Sell in phases — recover cost first, then let the rest ride with trailing stop. Safer.</div>
+          </div>
+        </div>
+        <div class="strategy-option" data-strategy="full">
+          <div class="strategy-radio"></div>
+          <div>
+            <div class="strategy-label">Full Exit</div>
+            <div class="strategy-desc">Sell entire position at take profit or stop loss. Simpler, more decisive.</div>
+          </div>
+        </div>
+        <div class="strategy-option" data-strategy="trail">
+          <div class="strategy-radio"></div>
+          <div>
+            <div class="strategy-label">Trail Only</div>
+            <div class="strategy-desc">No fixed TP — only trailing stop from peak. Rides winners as far as they go.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: PREVIEW -->
+    <div class="fade-in">
+      <div class="preview-card panel">
+        <div class="panel-label">Agent Preview</div>
+
+        <div class="preview-avatar" id="previewAvatar">&#9876;</div>
+        <div class="preview-agent-name empty" id="previewName">Unnamed Agent</div>
+        <div class="preview-bio" id="previewBio"></div>
+        <div class="preview-tags" id="previewTags"></div>
+        <div class="preview-profile moderate" id="previewProfile">Moderate</div>
+
+        <div class="dna-bars">
+          <div class="dna-bar-row"><span class="dna-bar-label">AGR</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-agr" style="width:50%"></div></div><span class="dna-bar-val" id="bv-agr">0.50</span></div>
+          <div class="dna-bar-row"><span class="dna-bar-label">RISK</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-risk" style="width:50%"></div></div><span class="dna-bar-val" id="bv-risk">0.50</span></div>
+          <div class="dna-bar-row"><span class="dna-bar-label">PAT</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-pat" style="width:50%"></div></div><span class="dna-bar-val" id="bv-pat">0.50</span></div>
+          <div class="dna-bar-row"><span class="dna-bar-label">TP</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-tp" style="width:33%"></div></div><span class="dna-bar-val" id="bv-tp">40%</span></div>
+          <div class="dna-bar-row"><span class="dna-bar-label">SL</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-sl" style="width:25%"></div></div><span class="dna-bar-val" id="bv-sl">20%</span></div>
+          <div class="dna-bar-row"><span class="dna-bar-label">POS</span><div class="dna-bar-track"><div class="dna-bar-fill" id="bar-pos" style="width:50%"></div></div><span class="dna-bar-val" id="bv-pos">25%</span></div>
+        </div>
+
+        <div class="preview-stats">
+          <div class="preview-stat"><div class="preview-stat-label">Est. Trades/Day</div><div class="preview-stat-value" id="previewTrades">8-14</div></div>
+          <div class="preview-stat"><div class="preview-stat-label">Hold Time</div><div class="preview-stat-value" id="previewHold">30-60m</div></div>
+          <div class="preview-stat"><div class="preview-stat-label">Buy Cooldown</div><div class="preview-stat-value" id="previewCooldown">20m</div></div>
+          <div class="preview-stat"><div class="preview-stat-label">Max Positions</div><div class="preview-stat-value" id="previewPositions">3</div></div>
+          <div class="preview-stat"><div class="preview-stat-label">Min Holders</div><div class="preview-stat-value" id="previewHolders">100</div></div>
+          <div class="preview-stat"><div class="preview-stat-label">Min Volume</div><div class="preview-stat-value" id="previewVolume">$2,000</div></div>
+        </div>
+
+        <div class="preview-style">
+          <span>Behavior</span>
+          <span id="previewStyle">Balanced approach. Trades moderately with standard risk parameters.</span>
+        </div>
+
+        <div class="deploy-status" id="deployStatus"></div>
+
+        <div class="deposit-row">
+          <span class="deposit-label">Deposit</span>
+          <div class="slider-track-fill" style="--fill:0%; flex:1"><input type="range" id="depositSlider" min="0.5" max="25" value="1" step="0.5"></div>
+          <span class="deposit-value" id="depositValue">1 SOL</span>
+        </div>
+
+        <button class="deploy-btn" id="deployBtn"><span id="deployBtnText">Connect Wallet</span></button>
+        <div class="deploy-note">5% protocol fee on deposit. 95% goes directly to your agent's trading wallet.</div>
+
+        <div class="cost-grid">
+          <div class="cost-item"><div class="cost-item-label">Deposit</div><div class="cost-item-value" id="costDeposit">1.00 SOL</div></div>
+          <div class="cost-item"><div class="cost-item-label">Protocol Fee</div><div class="cost-item-value">5% on deposit</div></div>
+          <div class="cost-item"><div class="cost-item-label">Breeding</div><div class="cost-item-value">At +0.4 SOL profit</div></div>
+          <div class="cost-item"><div class="cost-item-label">Withdraw</div><div class="cost-item-value">Anytime</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SPAWN MODAL -->
+<div class="spawn-overlay" id="spawnOverlay" onclick="if(event.target===this)closeSpawnModal()">
+  <div class="spawn-modal">
+    <!-- Step 1: Choose method -->
+    <div id="spawnStep1">
+      <h3>Spawn Agent</h3>
+      <p class="spawn-sub">Choose how to fund your agent</p>
+      <button class="spawn-option" id="spawnPhantomBtn" onclick="spawnWithPhantom()">Pay with Phantom</button>
+      <div class="spawn-or">or</div>
+      <button class="spawn-option-alt" onclick="spawnManualStep()">Verify with Transaction</button>
+      <button class="spawn-cancel" onclick="closeSpawnModal()">cancel</button>
+    </div>
+    <!-- Step 2: Manual payment -->
+    <div id="spawnStep2" style="display:none">
+      <h3>Send SOL</h3>
+      <p class="spawn-sub">Send the exact amount below from your wallet</p>
+      <div class="spawn-amount" id="spawnAmount">—</div>
+      <div class="spawn-amount-label">SOL</div>
+      <div class="spawn-dest" id="spawnDest" onclick="copySpawnAddr(this)"><span>send to</span>—</div>
+      <input type="text" class="text-input" id="spawnTxSig" placeholder="Paste your transaction signature here" style="margin-top:12px;font-size:11px;">
+      <button class="spawn-verify-btn" id="spawnVerifyBtn" onclick="verifySpawnPayment()">Verify payment</button>
+      <div class="spawn-status" id="spawnModalStatus"></div>
+      <button class="spawn-cancel" onclick="spawnBack()">back</button>
+    </div>
+    <!-- Step 3: Confirming (shown for both methods) -->
+    <div id="spawnStep3" style="display:none">
+      <h3>Confirming</h3>
+      <div class="spawn-status pending" id="spawnConfirmStatus">Verifying payment on-chain...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// AVATARS
+// ============================================================
+// ============================================================
+// AVATAR UPLOAD
+// ============================================================
+let customAvatarB64 = null;
+
+$('uploadBtn').addEventListener('click', () => $('avatarFile').click());
+
+$('avatarFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { alert('Max 5MB'); return; }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
+      customAvatarB64 = canvas.toDataURL('image/jpeg', 0.85);
+
+      $('uploadPreview').src = customAvatarB64;
+      $('uploadPreview').classList.add('visible');
+      $('uploadClear').classList.add('visible');
+      $('previewAvatar').innerHTML = '<img src="' + customAvatarB64 + '" alt="" style="width:100%;height:100%;object-fit:cover">';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+$('uploadClear').addEventListener('click', () => {
+  customAvatarB64 = null;
+  $('uploadPreview').classList.remove('visible');
+  $('uploadClear').classList.remove('visible');
+  $('avatarFile').value = '';
+  $('previewAvatar').innerHTML = '\u2694';
+});
+
+// ============================================================
+// TOKEN FOCUS TAGS
+// ============================================================
+const FOCUS_TAGS = [
+  'Memecoins', 'AI Tokens', 'Gaming', 'DeFi', 'NFT-Fi',
+  'New Launches', 'Pump.fun', 'Blue Chips', 'Low Cap Gems', 'Trending',
+];
+const selectedFocus = new Set();
+const focusGrid = $('focusGrid');
+FOCUS_TAGS.forEach(tag => {
+  const btn = document.createElement('button');
+  btn.className = 'tag-btn';
+  btn.textContent = tag;
+  btn.onclick = () => {
+    btn.classList.toggle('active');
+    if (selectedFocus.has(tag)) selectedFocus.delete(tag);
+    else selectedFocus.add(tag);
+    updatePreviewTags();
+  };
+  focusGrid.appendChild(btn);
+});
+
+function updatePreviewTags() {
+  const el = $('previewTags');
+  el.innerHTML = '';
+  for (const tag of selectedFocus) {
+    const span = document.createElement('span');
+    span.className = 'preview-tag';
+    span.textContent = tag;
+    el.appendChild(span);
+  }
+}
+
+// ============================================================
+// SELL STRATEGY
+// ============================================================
+let sellStrategy = 'phased';
+document.querySelectorAll('.strategy-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('.strategy-option').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    sellStrategy = opt.dataset.strategy;
+  });
+});
+
+// ============================================================
+// SLIDER STATE
+// ============================================================
+const state = { aggression: 50, risk: 50, patience: 50, tp: 50, sl: 20, pos: 25, holders: 100, volume: 10000, maxpos: 3, degen: false };
+
+const presets = {
+  sniper:       { aggression: 80, risk: 50, patience: 20, tp: 40, sl: 15, pos: 20, holders: 200, volume: 5000, maxpos: 2, degen: false },
+  diamond:      { aggression: 20, risk: 25, patience: 90, tp: 200, sl: 35, pos: 30, holders: 500, volume: 50000, maxpos: 4, degen: false },
+  degen:        { aggression: 95, risk: 95, patience: 15, tp: 100, sl: 50, pos: 60, holders: 10, volume: 1000, maxpos: 2, degen: true },
+  conservative: { aggression: 15, risk: 15, patience: 70, tp: 30, sl: 15, pos: 15, holders: 1000, volume: 100000, maxpos: 4, degen: false },
+};
+
+document.querySelectorAll('input[type="range"]').forEach(slider => {
+  slider.addEventListener('input', () => {
+    state[slider.dataset.key] = parseInt(slider.value);
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    updateAll();
+  });
+});
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    Object.assign(state, presets[btn.dataset.preset]);
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    syncSliders();
+    updateAll();
+  });
+});
+
+// Advanced panel toggle
+$('advancedToggle').addEventListener('click', () => {
+  $('advancedToggle').classList.toggle('open');
+  $('advancedBody').classList.toggle('open');
+});
+
+// Degen mode toggle
+$('degenToggle').addEventListener('click', () => {
+  state.degen = !state.degen;
+  $('degenToggle').classList.toggle('on', state.degen);
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  updateAll();
+});
+
+$('agentName').addEventListener('input', () => {
+  const name = $('agentName').value.trim();
+  const el = $('previewName');
+  el.textContent = name || 'Unnamed Agent';
+  el.classList.toggle('empty', !name);
+});
+
+$('agentBio').addEventListener('input', () => {
+  $('previewBio').textContent = $('agentBio').value.trim();
+});
+
+function syncSliders() {
+  ['aggression','risk','patience','tp','sl','pos','holders','volume','maxpos'].forEach(k => $(k).value = state[k]);
+  $('degenToggle').classList.toggle('on', state.degen);
+}
+
+function fillTrack(el, val, min, max) {
+  el.parentElement.style.setProperty('--fill', ((val - min) / (max - min) * 100) + '%');
+}
+
+function updateAll() {
+  const a = state.aggression / 100, r = state.risk / 100, p = state.patience / 100;
+
+  $('val-aggression').textContent = a.toFixed(2);
+  $('val-risk').textContent = r.toFixed(2);
+  $('val-patience').textContent = p.toFixed(2);
+  $('val-tp').textContent = state.tp + '%';
+  $('val-sl').textContent = state.sl + '%';
+  $('val-pos').textContent = state.pos + '%';
+  $('val-holders').textContent = state.holders.toLocaleString();
+  $('val-volume').textContent = '$' + state.volume.toLocaleString();
+  $('val-maxpos').textContent = state.maxpos;
+
+  fillTrack($('aggression'), state.aggression, 0, 100);
+  fillTrack($('risk'), state.risk, 0, 100);
+  fillTrack($('patience'), state.patience, 0, 100);
+  fillTrack($('tp'), state.tp, 0, 1000);
+  fillTrack($('sl'), state.sl, 1, 100);
+  fillTrack($('pos'), state.pos, 10, 90);
+  fillTrack($('holders'), state.holders, 10, 2000);
+  fillTrack($('volume'), state.volume, 1000, 1000000);
+  fillTrack($('maxpos'), state.maxpos, 1, 5);
+
+  $('bar-agr').style.width = state.aggression + '%'; $('bv-agr').textContent = a.toFixed(2);
+  $('bar-risk').style.width = state.risk + '%'; $('bv-risk').textContent = r.toFixed(2);
+  $('bar-pat').style.width = state.patience + '%'; $('bv-pat').textContent = p.toFixed(2);
+  $('bar-tp').style.width = (state.tp/1000*100)+'%'; $('bv-tp').textContent = state.tp+'%';
+  $('bar-sl').style.width = ((state.sl-1)/99*100)+'%'; $('bv-sl').textContent = state.sl+'%';
+  $('bar-pos').style.width = ((state.pos-10)/80*100)+'%'; $('bv-pos').textContent = state.pos+'%';
+
+  const riskScore = a*0.4 + r*0.4 + (1-p)*0.2;
+  const pe = $('previewProfile');
+  pe.className = 'preview-profile';
+  if (state.degen) { pe.textContent = 'Degen'; pe.classList.add('degen'); }
+  else if (riskScore > 0.75) { pe.textContent = 'Degen'; pe.classList.add('degen'); }
+  else if (riskScore > 0.5) { pe.textContent = 'Aggressive'; pe.classList.add('aggressive'); }
+  else if (riskScore > 0.25) { pe.textContent = 'Moderate'; pe.classList.add('moderate'); }
+  else { pe.textContent = 'Conservative'; pe.classList.add('conservative'); }
+
+  const cd = 10 + (1-a)*20;
+  const tpd = Math.round(60/cd*16);
+  $('previewTrades').textContent = Math.max(1,tpd-4)+'-'+(tpd+4);
+  const hm = 10+p*30;
+  $('previewHold').textContent = hm<30 ? Math.round(hm)+'-'+Math.round(hm*2)+'m' : hm<60 ? Math.round(hm)+'m-'+Math.round(hm*1.5/60)+'h' : Math.round(hm/60)+'-'+Math.round(hm*1.5/60)+'h';
+  $('previewCooldown').textContent = Math.round(cd)+'m';
+  $('previewPositions').textContent = state.maxpos;
+  $('previewHolders').textContent = state.holders.toLocaleString();
+  $('previewVolume').textContent = '$' + state.volume.toLocaleString();
+
+  $('previewStyle').textContent = genDesc(a, r, p, state.tp, state.sl);
+}
+
+function genDesc(a, r, p, tp, sl) {
+  const parts = [];
+  if (state.degen) parts.push('Degen mode ON — pump.fun unlocked, minimal safety checks.');
+  if (a>0.7) parts.push('Trades aggressively, always hunting entries.');
+  else if (a>0.4) parts.push('Trades at moderate pace, selective entries.');
+  else parts.push('Waits patiently for high-conviction setups.');
+  if (!state.degen) {
+    if (r>0.7) parts.push('Hunts pump.fun degens and low-cap gems.');
+    else if (r>0.4) parts.push('Mixes established tokens with emerging plays.');
+    else parts.push('Sticks to proven tokens with real liquidity.');
+  }
+  if (p>0.7) parts.push('Holds through volatility, rides the full move.');
+  else if (p>0.4) parts.push('Standard hold times, exits when signals fade.');
+  else parts.push('Quick flips, takes profit fast.');
+  if (sellStrategy==='trail') parts.push('No fixed TP — rides winners with trailing stop only.');
+  else if (sellStrategy==='full') parts.push('Full exits at target.');
+  else parts.push('Phased exits — recovers cost, then lets profits ride.');
+  if (tp>=60) parts.push('Lets winners run big.');
+  if (sl>=35) parts.push('Wide stops, tolerates drawdowns.');
+  else if (sl<=15) parts.push('Tight stops, cuts losses fast.');
+  if (state.holders <= 50) parts.push('Enters super early, low holder count.');
+  else if (state.holders >= 500) parts.push('Waits for holder traction before buying.');
+  return parts.join(' ');
+}
+
+// ============================================================
+// WALLET + DEPLOY
+// ============================================================
+let walletPubkey = null;
+let deploying = false;
+let depositAmount = 1;
+
+$('depositSlider').addEventListener('input', () => {
+  depositAmount = parseFloat($('depositSlider').value);
+  $('depositValue').textContent = depositAmount + ' SOL';
+  $('costDeposit').textContent = depositAmount.toFixed(2) + ' SOL';
+  fillTrack($('depositSlider'), depositAmount, 0.5, 25);
+  updateDeployBtn();
+});
+
+function showStatus(msg, type) { $('deployStatus').style.display='block'; $('deployStatus').textContent=msg; $('deployStatus').className='deploy-status '+type; }
+function hideStatus() { $('deployStatus').style.display='none'; }
+function updateDeployBtn() {
+  if (deploying) { $('deployBtnText').textContent='Spawning...'; $('deployBtn').disabled=true; return; }
+  $('deployBtnText').textContent = 'Spawn your agent \u2014 ' + depositAmount + ' SOL';
+  $('deployBtn').disabled = false;
+}
+
+// Spawn modal state
+let pendingSpawnData = null;
+
+function openSpawnModal() { $('spawnOverlay').classList.add('open'); $('spawnStep1').style.display='block'; $('spawnStep2').style.display='none'; $('spawnStep3').style.display='none'; }
+function closeSpawnModal() { $('spawnOverlay').classList.remove('open'); }
+function spawnBack() { $('spawnStep2').style.display='none'; $('spawnStep1').style.display='block'; }
+
+function buildDnaAndMeta() {
+  return {
+    dna: {
+      aggression: state.aggression/100, risk_tolerance: state.risk/100, patience: state.patience/100,
+      sell_profit_pct: state.tp, sell_loss_pct: state.sl, max_position_pct: state.pos,
+      buy_threshold_holders: state.holders, buy_threshold_volume: state.volume,
+      max_positions: state.maxpos, degen: state.degen,
+    },
+    meta: {
+      avatar: customAvatarB64 || null,
+      bio: $('agentBio').value.trim(), focus: [...selectedFocus],
+      sell_strategy: sellStrategy,
+    },
+  };
+}
+
+async function createAgentRequest(ownerWallet) {
+  const name = $('agentName').value.trim();
+  const { dna, meta } = buildDnaAndMeta();
+  const res = await fetch('/api/create-custom', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name, dna, meta, owner_wallet: ownerWallet, sol_amount: depositAmount }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error||'Failed');
+  pendingSpawnData = data;
+  return data;
+}
+
+async function pollConfirmation(agentId) {
+  $('spawnStep1').style.display='none'; $('spawnStep2').style.display='none'; $('spawnStep3').style.display='block';
+  $('spawnConfirmStatus').textContent='Verifying payment on-chain...';
+  $('spawnConfirmStatus').className='spawn-status pending';
+  const name = $('agentName').value.trim();
+  const ref = pendingSpawnData?.reference;
+  for (let i=0; i<40; i++) {
+    await new Promise(r=>setTimeout(r,4000));
+    try {
+      // First try POST to trigger on-chain verification (faster than waiting for cron)
+      if (ref && i < 10) {
+        const p = await fetch('/api/payment-status', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ reference: ref }),
+        });
+        const pd = await p.json();
+        if (pd.status==='confirmed') {
+          $('spawnConfirmStatus').textContent='Agent "'+name+'" is live and trading!';
+          $('spawnConfirmStatus').className='spawn-status success';
+          showStatus('Agent "'+name+'" is live!','success');
+          $('deployBtnText').textContent='Agent Deployed'; $('deployBtn').disabled=true;
+          deploying=false;
+          setTimeout(closeSpawnModal, 2500);
+          return true;
+        }
+      }
+      // Also poll GET in case cron confirmed it
+      const c = await fetch('/api/payment-status?agent_id='+agentId);
+      const s = await c.json();
+      if (s.status==='confirmed'||s.status==='alive') {
+        $('spawnConfirmStatus').textContent='Agent "'+name+'" is live and trading!';
+        $('spawnConfirmStatus').className='spawn-status success';
+        showStatus('Agent "'+name+'" is live!','success');
+        $('deployBtnText').textContent='Agent Deployed'; $('deployBtn').disabled=true;
+        deploying=false;
+        setTimeout(closeSpawnModal, 2500);
+        return true;
+      }
+    } catch{}
+  }
+  $('spawnConfirmStatus').textContent='Payment sent. Agent will appear shortly.';
+  $('spawnConfirmStatus').className='spawn-status pending';
+  deploying=false; updateDeployBtn();
+  return false;
+}
+
+// ---- PHANTOM FLOW ----
+async function spawnWithPhantom() {
+  const p = window.solana || window.phantom?.solana;
+  if (!p) { window.open('https://phantom.app/', '_blank'); return; }
+  const btn = $('spawnPhantomBtn');
+  btn.disabled=true; btn.textContent='Connecting...';
+  try {
+    let wallet = walletPubkey;
+    if (!wallet) {
+      const r = await p.connect();
+      wallet = r.publicKey.toString();
+      walletPubkey = wallet;
+    }
+    btn.textContent='Creating agent...';
+    const data = await createAgentRequest(wallet);
+    btn.textContent='Approve transaction in Phantom...';
+    const tx = await buildTransaction(wallet, data.recipient, data.amount, data.reference);
+    const signed = await p.signAndSendTransaction(tx);
+    btn.textContent='Confirming...'; btn.disabled=true;
+    await pollConfirmation(data.agent_id);
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Pay with Phantom';
+    if (e.message) {
+      $('spawnStep1').style.display='block'; $('spawnStep2').style.display='none'; $('spawnStep3').style.display='none';
+      showStatus(e.message, 'error');
+    }
+  }
+}
+
+// ---- MANUAL TX FLOW ----
+async function spawnManualStep() {
+  $('spawnStep1').style.display='none'; $('spawnStep2').style.display='block';
+  $('spawnModalStatus').textContent='Creating agent...'; $('spawnModalStatus').className='spawn-status pending';
+  $('spawnVerifyBtn').style.display='none';
+  try {
+    // For manual flow, we don't have a wallet yet — use a placeholder, payment-status will detect the actual sender
+    const data = await createAgentRequest('manual');
+    $('spawnAmount').textContent = data.amount;
+    $('spawnDest').innerHTML = '<span>send to (tap to copy)</span>' + data.recipient;
+    $('spawnVerifyBtn').style.display='block';
+    $('spawnModalStatus').textContent='';
+  } catch(e) {
+    $('spawnModalStatus').textContent = e.message || 'Error';
+    $('spawnModalStatus').className='spawn-status error';
+  }
+}
+
+async function verifySpawnPayment() {
+  if (!pendingSpawnData) return;
+  const btn = $('spawnVerifyBtn');
+  const status = $('spawnModalStatus');
+  const txSig = $('spawnTxSig').value.trim();
+  if (!txSig || txSig.length < 30) {
+    status.textContent='Paste your transaction signature above first.';
+    status.className='spawn-status error';
+    return;
+  }
+  btn.disabled=true; btn.textContent='Verifying...';
+  status.textContent='Checking transaction on-chain...';
+  status.className='spawn-status pending';
+  try {
+    const res = await fetch('/api/payment-status', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ reference: pendingSpawnData.reference, tx_signature: txSig }),
+    });
+    const data = await res.json();
+    if (data.status==='confirmed') {
+      await pollConfirmation(pendingSpawnData.agent_id);
+    } else {
+      status.textContent='Transaction not matching. Check the signature and try again.';
+      status.className='spawn-status error'; btn.textContent='Verify payment'; btn.disabled=false;
+    }
+  } catch(e) {
+    status.textContent='Error checking \u2014 try again.';
+    status.className='spawn-status error'; btn.textContent='Verify payment'; btn.disabled=false;
+  }
+}
+
+function copySpawnAddr(el) {
+  const addr = el.textContent.replace(/send to.*?copy\)|copied!/gi, '').trim();
+  navigator.clipboard.writeText(addr).catch(()=>{});
+  el.style.borderColor='#4a9e6a';
+  const span = el.querySelector('span');
+  if (span) span.textContent='copied!';
+  setTimeout(()=>{el.style.borderColor=''; if(span) span.textContent='send to (tap to copy)';}, 1200);
+}
+
+$('deployBtn').addEventListener('click', () => {
+  if (editAgentId) { saveAgentEdits(); return; }
+  if (deploying) return;
+  const name = $('agentName').value.trim();
+  if (!name || name.length<2) { showStatus('Name your agent first (min 2 characters)','error'); $('agentName').focus(); return; }
+  hideStatus();
+  deploying = true; updateDeployBtn();
+  openSpawnModal();
+  deploying = false; updateDeployBtn();
+});
+
+async function buildTransaction(from, to, sol, ref) {
+  const {PublicKey,Transaction,SystemProgram} = window.solanaWeb3;
+  const fromKey=new PublicKey(from), toKey=new PublicKey(to), refKey=new PublicKey(ref);
+  const bh = await fetch('/api/blockhash');
+  const bhData = await bh.json();
+  if (!bhData.blockhash) throw new Error('Failed to get blockhash');
+  const tx = new Transaction({recentBlockhash:bhData.blockhash, feePayer:fromKey});
+  const ix = SystemProgram.transfer({fromPubkey:fromKey, toPubkey:toKey, lamports:Math.round(sol*1e9)});
+  ix.keys.push({pubkey:refKey, isSigner:false, isWritable:false});
+  tx.add(ix);
+  return tx;
+}
+
+// ============================================================
+// EDIT MODE
+// ============================================================
+let editMode = false;
+let editAgentId = null;
+
+async function initEditMode() {
+  const params = new URLSearchParams(window.location.search);
+  const eid = params.get('edit');
+  if (!eid) return;
+
+  editMode = true;
+  editAgentId = eid;
+
+  // Hide deposit row, cost grid, deploy note, spawn overlay
+  document.querySelectorAll('.deposit-row, .cost-grid, .deploy-note').forEach(el => el.style.display = 'none');
+
+  // Update button
+  $('deployBtnText').textContent = 'Save Changes';
+  $('deployBtn').disabled = true;
+
+  // Update title
+  document.querySelector('.lab-title').innerHTML = 'EDIT <span class="accent">AGENT</span>';
+  document.querySelector('.lab-subtitle').textContent = 'modify your agent\'s dna';
+
+  // Load agent data
+  try {
+    const res = await fetch('/api/agents?id=' + eid);
+    const data = await res.json();
+    const agent = data.agent;
+    if (!agent) { showStatus('Agent not found', 'error'); return; }
+
+    const dna = typeof agent.dna === 'string' ? JSON.parse(agent.dna) : agent.dna;
+    const meta = agent.meta ? (typeof agent.meta === 'string' ? JSON.parse(agent.meta) : agent.meta) : {};
+
+    // Fill name + bio
+    $('agentName').value = agent.name || '';
+    $('agentBio').value = meta.bio || '';
+    $('previewName').textContent = agent.name || 'Unnamed';
+    $('previewName').classList.toggle('empty', !agent.name);
+    $('previewBio').textContent = meta.bio || '';
+
+    // Fill sliders from DNA
+    state.aggression = Math.round((dna.aggression || 0.5) * 100);
+    state.risk = Math.round((dna.risk_tolerance || 0.5) * 100);
+    state.patience = Math.round((dna.patience || 0.5) * 100);
+    state.tp = dna.sell_profit_pct || 50;
+    state.sl = dna.sell_loss_pct || 20;
+    state.pos = dna.max_position_pct || 25;
+    state.holders = dna.buy_threshold_holders || 100;
+    state.volume = dna.buy_threshold_volume || 10000;
+    state.maxpos = dna.max_positions || 3;
+    state.degen = dna.degen || false;
+    syncSliders();
+    updateAll();
+
+    // Fill sell strategy
+    if (meta.sell_strategy) {
+      sellStrategy = meta.sell_strategy;
+      document.querySelectorAll('.strategy-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.strategy === sellStrategy);
+      });
+    }
+
+    // Fill focus tags
+    if (meta.focus && meta.focus.length > 0) {
+      selectedFocus = new Set(meta.focus);
+      document.querySelectorAll('.focus-tag').forEach(t => {
+        t.classList.toggle('active', selectedFocus.has(t.dataset.focus));
+      });
+      renderFocusPreview();
+    }
+
+    // Fill avatar
+    if (meta.avatar) {
+      customAvatarB64 = meta.avatar;
+      $('avatarPreview').innerHTML = '<img src="' + meta.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+    }
+
+    // Store owner wallet for verification
+    editMode = agent.owner_wallet;
+    $('deployBtn').disabled = false;
+  } catch (e) {
+    showStatus('Failed to load agent: ' + e.message, 'error');
+  }
+}
+
+async function saveAgentEdits() {
+  const p = window.solana || window.phantom?.solana;
+  if (!p) { window.open('https://phantom.app/', '_blank'); return; }
+
+  $('deployBtn').disabled = true;
+  $('deployBtnText').textContent = 'Connecting wallet...';
+
+  try {
+    const resp = await p.connect();
+    const wallet = resp.publicKey.toString();
+
+    if (wallet !== editMode) {
+      showStatus('Wrong wallet. Connect with the owner wallet.', 'error');
+      $('deployBtn').disabled = false;
+      $('deployBtnText').textContent = 'Save Changes';
+      return;
+    }
+
+    $('deployBtnText').textContent = 'Sign to confirm...';
+    const nonce = Date.now().toString();
+    const message = 'edit:' + editAgentId + ':' + nonce;
+    const encoded = new TextEncoder().encode(message);
+    const sig = await p.signMessage(encoded, 'utf8');
+    const sigB64 = bytesToBase64(sig.signature);
+
+    $('deployBtnText').textContent = 'Saving...';
+    const { dna, meta } = buildDnaAndMeta();
+    const name = $('agentName').value.trim();
+
+    const res = await fetch('/api/update-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: editAgentId, owner_wallet: wallet, signature: sigB64, message, dna, meta, name }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+
+    showStatus('Agent updated! Changes take effect next trade cycle.', 'success');
+    $('deployBtnText').textContent = 'Saved';
+  } catch (e) {
+    if (e.code === 4001 || e.message?.includes('rejected')) {
+      showStatus('Signature cancelled', 'error');
+    } else {
+      showStatus(e.message || 'Failed to save', 'error');
+    }
+    $('deployBtn').disabled = false;
+    $('deployBtnText').textContent = 'Save Changes';
+  }
+}
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// Init
+updateAll();
+const _params = new URLSearchParams(window.location.search);
+if (_params.get('edit')) {
+  initEditMode();
+} else {
+  updateDeployBtn();
+}
+</script>
+</body>
+</html>

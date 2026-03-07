@@ -1210,6 +1210,7 @@
   <div class="nav-links">
     <a href="/genesis.html" class="active">agents</a>
     <a href="/bloodline.html">bloodline</a>
+    <a href="/lab/">customize</a>
     <a href="/dashboard-preview.html">dashboard</a>
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
@@ -1224,6 +1225,7 @@
   <a href="/genesis.html">agents</a>
   <a href="/dashboard-preview.html">dashboard</a>
   <a href="/bloodline.html">bloodline</a>
+  <a href="/lab/">customize</a>
   <a href="/how.html">how?</a>
   <a href="https://x.com/spawnagents" target="_blank">X</a>
   <a href="#" class="nav-wallet" id="walletBtnMobile" onclick="handleWalletClick()">log in</a>
@@ -1280,6 +1282,7 @@
   <span style="display:inline-block;width:1px;height:20px;background:var(--muted);margin:0 8px;vertical-align:middle;opacity:0.3"></span>
   <button class="filter-btn" onclick="filterStatus('available')">Available</button>
   <button class="filter-btn" onclick="filterStatus('claimed')">Claimed</button>
+  <button class="filter-btn" onclick="filterStatus('eligible')">Eligible to Reproduce</button>
 </div>
 
 <!-- AGENTS -->
@@ -1390,7 +1393,7 @@
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
         <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 100% goes to child wallet</div>
+        <div class="spawn-sol-hint">Minimum 1 SOL — 95% to child wallet, 5% protocol fee</div>
       </div>
       <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send SOL</button>
     </div>
@@ -1553,6 +1556,8 @@ const AGENT_IMAGES = {
   'the-gambler': '/the-gambler.jpg',
   'the-sniper': '/the-sniper.jpg',
   'the-surgeon': '/the-surgeon.jpg',
+  'agent_9beb5312': '/the-falcon.jpg',
+  'agent_29f951ee': '/the-wraith-spawn.jpg',
 };
 
 function getHeartbeatHtml(g) {
@@ -1573,9 +1578,10 @@ function agentCard(g, priceLabel) {
   const isDegen = DEGEN_IDS.has(g.id);
   const st = !g.available ? "claimed" : "available";
   const flavor = FLAVOR[g.id] || "";
-  const img = AGENT_IMAGES[g.id];
+  const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : {};
+  const img = AGENT_IMAGES[g.id] || meta.avatar || null;
 
-  return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}">
+  return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}" data-pnl="${g.total_pnl || 0}">
     <div class="agent-card-head">
       <div class="agent-name">${g.name || g.id}</div>
       ${isDegen && g.available ? '<div class="agent-status available" style="color:#ff4444;border-color:#ff4444;">degen</div>' : `<div class="agent-status ${st}">${st}</div>`}
@@ -1626,6 +1632,7 @@ function agentCard(g, priceLabel) {
     </div>
     ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; FREE</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
+    ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<a href="/lab/?edit=${g.id}" class="withdraw-btn" style="text-align:center;text-decoration:none;display:block;margin-top:6px;">Edit Agent</a>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
   </div>`;
 }
@@ -1664,20 +1671,14 @@ function renderAgents(data) {
     <div class="agent-grid">${standard.map(g => agentCard(g, "FREE")).join("")}</div>
   </div>`;
 
-  // Custom Agents
+  // Custom Agents — placeholder, filled async
   html += `<div class="tier-section" data-tier="custom">
     <div class="tier-header">
       <div class="tier-label">Custom Agents</div>
-      <div class="tier-price">10 — 15 SOL</div>
-      <div class="tier-desc">coming soon</div>
+      <div class="tier-price">from 0.5 SOL</div>
+      <div class="tier-desc"><span id="customCount">0</span> live &mdash; <a href="/lab/" style="color:var(--blood);text-decoration:none;border-bottom:1px solid var(--blood-dim)">build yours</a></div>
     </div>
-    <div class="custom-agents-info">
-      <p>Build your own agent from scratch. Full control over every parameter — aggression, patience, risk tolerance, position sizing, profit targets, stop losses, check intervals, and more.</p>
-      <p>Your DNA. Your strategy. Your agent.</p>
-      <div class="custom-agents-params">
-        <span>aggression</span><span>patience</span><span>risk tolerance</span><span>focus</span><span>buy threshold</span><span>sell targets</span><span>position size</span><span>check interval</span>
-      </div>
-    </div>
+    <div id="customGrid" class="custom-agents-info"><p>No custom agents yet. <a href="/lab/" style="color:var(--blood)">Be the first.</a></p></div>
   </div>`;
 
   container.innerHTML = html;
@@ -1698,7 +1699,12 @@ function applyFilters() {
       s.querySelectorAll('.agent-card').forEach(c => {
         if (!activeStatus) { c.style.display = ''; return; }
         const isClaimed = c.classList.contains('claimed');
-        c.style.display = (activeStatus === 'claimed' && isClaimed) || (activeStatus === 'available' && !isClaimed) ? '' : 'none';
+        if (activeStatus === 'eligible') {
+          const pnl = parseFloat(c.dataset.pnl || 0);
+          c.style.display = (isClaimed && pnl >= 0.4) ? '' : 'none';
+        } else {
+          c.style.display = (activeStatus === 'claimed' && isClaimed) || (activeStatus === 'available' && !isClaimed) ? '' : 'none';
+        }
       });
     }
   });
@@ -1715,7 +1721,7 @@ function filterTier(tier) {
 function filterStatus(status) {
   activeStatus = activeStatus === status ? null : status;
   document.querySelectorAll('.filter-btn').forEach(b => {
-    if (b.textContent === 'Available' || b.textContent === 'Claimed') b.classList.remove('active');
+    if (b.textContent === 'Available' || b.textContent === 'Claimed' || b.textContent === 'Eligible to Reproduce') b.classList.remove('active');
   });
   if (activeStatus) event.target.classList.add('active');
   applyFilters();
@@ -1745,7 +1751,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   lastGenesisData = data;
   renderAgents(data);
   loadPortfolios(data);
+  loadCustomAgents();
 });
+
+async function loadCustomAgents() {
+  try {
+    const r = await fetch('/api/agents');
+    if (!r.ok) return;
+    const d = await r.json();
+    const custom = (d.agents || []).filter(a => a.id.startsWith('agent_') && !a.parent_id && a.status === 'alive');
+    const el = document.getElementById('customCount');
+    const grid = document.getElementById('customGrid');
+    if (el) el.textContent = custom.length;
+    if (grid && custom.length > 0) {
+      grid.className = 'agent-grid';
+      grid.innerHTML = custom.map(a => {
+        a.available = false;
+        if (typeof a.dna === 'string') a.dna = JSON.parse(a.dna);
+        return agentCard(a, 'CUSTOM');
+      }).join('');
+      // Animate DNA bars
+      setTimeout(() => grid.querySelectorAll('.dna-fill').forEach(f => { f.style.width = f.dataset.width; }), 100);
+      // Load portfolios for custom agents
+      loadPortfolios(custom);
+    }
+  } catch {}
+}
 
 async function loadPortfolios(data) {
   const claimed = data.filter(g => !g.available && g.agent_wallet);

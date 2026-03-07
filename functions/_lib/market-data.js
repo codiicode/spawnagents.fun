@@ -7,7 +7,7 @@ export function setMoralisKey(key) { _moralisKey = key; }
 export function setDiscoveryKV(kv) { _kv = kv; }
 
 const MORALIS_CACHE_KEY = 'cache:moralis:graduated';
-const MORALIS_CACHE_TTL = 300; // 5 minutes
+const MORALIS_CACHE_TTL = 120; // 2 minutes
 
 // ============================================================
 // TOKEN DISCOVERY — fetches candidates from multiple sources
@@ -18,7 +18,7 @@ const MORALIS_CACHE_TTL = 300; // 5 minutes
 export async function discoverTokens() {
   const seen = new Set();
   const tokens = [];
-  const sourceStats = { moralis: 0, gecko: 0, dex_new: 0, dex_search: 0, dex_profiles: 0, pump: 0 };
+  const sourceStats = { moralis: 0, moralis_bonding: 0, gecko: 0, gecko_trending: 0, pumpswap: 0, dex_new: 0, dex_search: 0, dex_profiles: 0, pump: 0, pump_koth: 0, pump_graduated: 0 };
 
   // Source 1: Moralis — recently graduated pump.fun tokens (BEST for early entry)
   // Cached in KV for 5 min to stay within free tier (40k CU/day)
@@ -131,21 +131,118 @@ export async function discoverTokens() {
     } catch {}
   }
 
-  // Source 7: pump.fun currently live
+  // Source 7: pump.fun currently live — add directly, skip DexScreener lookup
   try {
     const res = await fetch('https://frontend-api-v3.pump.fun/coins/currently-live?limit=20&offset=0&includeNsfw=false');
     if (res.ok) {
       const coins = await res.json();
-      const pumpAddrs = coins
-        .filter(c => (c.usd_market_cap || 0) >= 1000)
-        .map(c => c.mint)
-        .filter(a => !seen.has(a));
-      await lookupAndAdd(pumpAddrs, tokens, seen);
-      sourceStats.pump = pumpAddrs.length;
+      for (const c of coins) {
+        if (seen.has(c.mint)) continue;
+        const parsed = parsePumpCoin(c);
+        if (parsed) { seen.add(c.mint); tokens.push(parsed); sourceStats.pump++; }
+      }
     }
   } catch {}
 
-  console.log(`Discovery: ${tokens.length} tokens — moralis:${sourceStats.moralis} gecko:${sourceStats.gecko} dex_new:${sourceStats.dex_new} dex_search:${sourceStats.dex_search} pump:${sourceStats.pump}`);
+  // Source 8: GeckoTerminal — trending pools on Solana (what people are actually watching)
+  try {
+    const res = await fetch('https://api.geckoterminal.com/api/v2/networks/solana/trending_pools?page=1', {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const addrs = (data.data || [])
+        .map(p => {
+          const base = p.relationships?.base_token?.data?.id;
+          return base ? base.replace('solana_', '') : null;
+        })
+        .filter(a => a && !seen.has(a));
+      await lookupAndAdd(addrs, tokens, seen);
+      sourceStats.gecko_trending = addrs.length;
+    }
+  } catch {}
+
+  // Source 9: GeckoTerminal — new pools on PumpSwap specifically
+  try {
+    const res = await fetch('https://api.geckoterminal.com/api/v2/networks/solana/dexes/pumpswap/pools?sort=h24_tx_count_desc&page=1', {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const addrs = (data.data || [])
+        .map(p => {
+          const base = p.relationships?.base_token?.data?.id;
+          return base ? base.replace('solana_', '') : null;
+        })
+        .filter(a => a && !seen.has(a));
+      await lookupAndAdd(addrs, tokens, seen);
+      sourceStats.pumpswap = addrs.length;
+    }
+  } catch {}
+
+  // Source 10: pump.fun — king of the hill (tokens about to graduate = earliest signal)
+  try {
+    const res = await fetch('https://frontend-api-v3.pump.fun/coins/king-of-the-hill?limit=20&offset=0&includeNsfw=false');
+    if (res.ok) {
+      const coins = await res.json();
+      for (const c of coins) {
+        if (seen.has(c.mint) || (c.usd_market_cap || 0) < 5000) continue;
+        const parsed = parsePumpCoin(c);
+        if (parsed) { seen.add(c.mint); tokens.push(parsed); sourceStats.pump_koth++; }
+      }
+    }
+  } catch {}
+
+  // Source 11: Moralis — tokens currently bonding (about to graduate)
+  if (_moralisKey) {
+    try {
+      let bondingAddrs = null;
+      if (_kv) {
+        const cached = await _kv.get('cache:moralis:bonding');
+        if (cached) bondingAddrs = JSON.parse(cached);
+      }
+      if (!bondingAddrs) {
+        const res = await fetch('https://solana-gateway.moralis.io/token/mainnet/exchange/pumpfun/bonding?limit=15', {
+          headers: { 'X-API-Key': _moralisKey, 'Accept': 'application/json' },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Filter: only tokens close to graduating (high progress)
+          const bonding = (data.result || data || []).filter(t => t.tokenAddress && (t.progress || 0) >= 80);
+          bondingAddrs = bonding.map(t => t.tokenAddress);
+          if (_kv) await _kv.put('cache:moralis:bonding', JSON.stringify(bondingAddrs), { expirationTtl: 120 });
+        }
+      }
+      if (bondingAddrs) {
+        const addrs = bondingAddrs.filter(a => !seen.has(a));
+        await lookupAndAdd(addrs, tokens, seen);
+        sourceStats.moralis_bonding = addrs.length;
+      }
+    } catch {}
+  }
+
+  
+  // Source 12: pump.fun — latest graduated tokens (just migrated = freshest DEX entries)
+  try {
+    const res = await fetch('https://frontend-api-v3.pump.fun/coins/latest-graduated?limit=20&offset=0&includeNsfw=false');
+    if (res.ok) {
+      const coins = await res.json();
+      const gradAddrs = coins
+        .filter(c => c.mint && !seen.has(c.mint))
+        .map(c => c.mint);
+      // These HAVE migrated, so DexScreener should have data — use lookupAndAdd
+      await lookupAndAdd(gradAddrs, tokens, seen);
+      sourceStats.pump_graduated = gradAddrs.length;
+      // Fallback: if DexScreener doesn't have them yet, add from pump data
+      for (const c of coins) {
+        if (seen.has(c.mint)) continue;
+        const parsed = parsePumpCoin(c);
+        if (parsed) { seen.add(c.mint); tokens.push(parsed); sourceStats.pump_graduated++; }
+      }
+    }
+  } catch {}
+
+  console.log(`Discovery: ${tokens.length} tokens — moralis:${sourceStats.moralis} bonding:${sourceStats.moralis_bonding} gecko:${sourceStats.gecko} trending:${sourceStats.gecko_trending} pumpswap:${sourceStats.pumpswap} dex:${sourceStats.dex_new} pump:${sourceStats.pump} koth:${sourceStats.pump_koth} grad:${sourceStats.pump_graduated}`);
   return tokens;
 }
 
@@ -183,7 +280,9 @@ async function lookupAndAdd(addresses, tokens, seen) {
     try {
       const res = await fetch(`${DEXSCREENER}/latest/dex/tokens/${batch.join(',')}`);
       if (!res.ok) continue;
-      const data = await res.json();
+      const text = await res.text();
+      if (!text) continue;
+      const data = JSON.parse(text);
 
       // Group pairs by token, pick highest liquidity per token
       const bestPairs = {};
@@ -204,6 +303,46 @@ async function lookupAndAdd(addresses, tokens, seen) {
       }
     } catch {}
   }
+}
+
+
+// Parse a pump.fun coin directly (no DexScreener lookup needed)
+function parsePumpCoin(coin) {
+  const mcap = coin.usd_market_cap || 0;
+  if (mcap < 1000) return null;
+  // Estimate liquidity from virtual reserves
+  const liq = coin.virtual_sol_reserves ? (coin.virtual_sol_reserves / 1e9) * 2 : mcap * 0.1;
+  const liqUsd = liq * (mcap > 0 && coin.market_cap_sol > 0 ? mcap / coin.market_cap_sol : 130);
+  const ageMs = coin.created_timestamp ? Date.now() - coin.created_timestamp : 0;
+  const ageHours = ageMs > 0 ? ageMs / 3600000 : 0.1;
+
+  // Estimate volume from mcap — active pump.fun tokens have high turnover
+  const estVol24h = coin.volume_24h || mcap * 0.5;
+  const estVol1h = estVol24h * 0.15; // pump.fun tokens are front-loaded in volume
+
+  return {
+    address: coin.mint,
+    symbol: coin.symbol || 'PUMP',
+    name: coin.name || coin.symbol || 'Unknown',
+    price_usd: mcap > 0 && coin.total_supply > 0 ? mcap / (coin.total_supply / 1e6) : 0,
+    price_native: 0,
+    volume_24h: estVol24h,
+    volume_6h: estVol24h * 0.4,
+    volume_1h: estVol1h,
+    liquidity_usd: liqUsd || mcap * 0.1,
+    market_cap: mcap,
+    txns_24h: coin.reply_count || 50,
+    txns_1h: 10,
+    txns_5m: 2,
+    price_change_5m: 0,
+    price_change_1h: 5, // assume positive momentum for KotH/trending/graduated
+    price_change_6h: 0,
+    price_change_24h: 0,
+    pair_age_hours: ageHours,
+    buy_sell_ratio_1h: 1.2,
+    dex: 'pumpfun',
+    isPumpNative: true,
+  };
 }
 
 // Parse a DexScreener pair into our token format
@@ -251,7 +390,9 @@ export async function getTokenData(tokenMint) {
   try {
     const res = await fetch(`${DEXSCREENER}/latest/dex/tokens/${tokenMint}`);
     if (!res.ok) return null;
-    const data = await res.json();
+    const text = await res.text();
+    if (!text) return null;
+    const data = JSON.parse(text);
     // Pick highest-liquidity Solana pair for this token
     const solPairs = (data.pairs || []).filter(p => p.chainId === 'solana');
     if (solPairs.length === 0) return null;
@@ -288,11 +429,10 @@ export async function checkTokenSafety(tokenAddress, dexData) {
     if (r1h > 10) reasons.push('suspicious buy/sell ratio');
 
     if (dexData.volume_1h > 0 && dexData.volume_24h > 0) {
-      if (dexData.volume_1h / dexData.volume_24h > 0.5) reasons.push('volume spike (1h > 50% of 24h)');
     }
 
-    if (dexData.pair_age_hours < 1 && dexData.volume_24h > 200000) reasons.push('brand new with suspicious volume');
-    if (dexData.liquidity_usd !== undefined && dexData.liquidity_usd < 5000) reasons.push(`low liquidity ($${Math.round(dexData.liquidity_usd)})`);
+    if (dexData.pair_age_hours < 0.5 && dexData.volume_24h > 2000000) reasons.push('brand new with suspicious volume');
+    if (dexData.liquidity_usd !== undefined && dexData.liquidity_usd < 2000) reasons.push(`low liquidity ($${Math.round(dexData.liquidity_usd)})`);
 
     if (dexData.market_cap > 0 && dexData.liquidity_usd > 0) {
       const mcLiqRatio = dexData.market_cap / dexData.liquidity_usd;
@@ -300,32 +440,26 @@ export async function checkTokenSafety(tokenAddress, dexData) {
     }
 
     // === WASH TRADING DETECTION ===
-    // Fake volume tokens have high $ volume but very few actual transactions
-    // Real tokens: avg $50-500/txn. Wash traded: avg $2000+/txn
+    // Only flag extreme cases — memecoins naturally have high vol/liq ratios
     if (dexData.txns_24h > 0 && dexData.volume_24h > 0) {
       const avgTxnSize = dexData.volume_24h / dexData.txns_24h;
-      if (avgTxnSize > 2000) reasons.push(`wash trading: avg txn $${Math.round(avgTxnSize)} (fake volume)`);
+      if (avgTxnSize > 3000) reasons.push(`wash trading: avg txn $${Math.round(avgTxnSize)} (fake volume)`);
     }
 
     // High volume but almost no transactions = clearly fake
     if (dexData.volume_24h > 50000 && dexData.txns_24h < 50) {
-      reasons.push('wash trading: high volume with <50 txns');
+      reasons.push('wash trading: high volume with few txns');
     }
 
     // 1h check: high volume but very few txns in last hour
-    if (dexData.volume_1h > 5000 && dexData.txns_1h < 10) {
-      reasons.push('wash trading: 1h volume with <10 txns');
+    if (dexData.volume_1h > 5000 && dexData.txns_1h < 5) {
+      reasons.push('wash trading: 1h volume with <5 txns');
     }
 
-    // Volume way too high relative to liquidity (>15x = almost certainly fake)
+    // Volume way too high relative to liquidity (>50x = likely fake)
     if (dexData.liquidity_usd > 0 && dexData.volume_24h > 0) {
       const volLiqRatio = dexData.volume_24h / dexData.liquidity_usd;
-      if (volLiqRatio > 15) reasons.push(`wash trading: vol/liq ${volLiqRatio.toFixed(0)}x`);
-    }
-
-    // Buy/sell ratio suspiciously close to 1.0 with high volume = bot wash
-    if (dexData.txns_1h >= 20 && r1h >= 0.85 && r1h <= 1.15 && dexData.volume_1h > 10000) {
-      reasons.push('wash trading: perfect buy/sell balance');
+      if (volLiqRatio > 50) reasons.push(`wash trading: vol/liq ${volLiqRatio.toFixed(0)}x`);
     }
   }
 
@@ -352,7 +486,8 @@ export async function checkTokenSafety(tokenAddress, dexData) {
         }
       }
 
-      if (report.totalHolders !== undefined && report.totalHolders < 30) reasons.push(`only ${report.totalHolders} holders`);
+      const minHolders = (dexData && dexData.pair_age_hours < 1) ? 10 : 30;
+      if (report.totalHolders !== undefined && report.totalHolders < minHolders) reasons.push(`only ${report.totalHolders} holders`);
 
       if (report.topHolders && Array.isArray(report.topHolders)) {
         const top10Pct = report.topHolders.slice(0, 10).reduce((sum, h) => sum + (h.pct || 0), 0);

@@ -134,20 +134,35 @@ export async function onRequest(context) {
       // If agent was dead/unclaimed, we'll UPDATE instead of INSERT below
       const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
 
-      // Claim agent
-      const dna = GENESIS_DNA[pr.agent_id];
+      // Claim agent — genesis DNA or custom DNA from KV
+      const kv = context.env.AGENT_KEYS;
+      let dna = GENESIS_DNA[pr.agent_id];
+      let agentName = null;
+      let customOwner = null;
+      const isCustom = !dna && kv;
+
+      let agentMeta = null;
+      if (isCustom) {
+        // Custom agent — DNA stored in KV by create-custom endpoint
+        const customDnaStr = await kv.get(`custom:${pr.agent_id}:dna`);
+        if (!customDnaStr) continue; // no custom DNA found, skip
+        dna = JSON.parse(customDnaStr);
+        agentName = await kv.get(`custom:${pr.agent_id}:name`);
+        customOwner = await kv.get(`custom:${pr.agent_id}:owner`);
+        agentMeta = await kv.get(`custom:${pr.agent_id}:meta`);
+      }
+
       if (!dna) continue;
 
       // Generate dedicated trading wallet for the agent
       const keypair = await generateKeypair();
 
       // Save secret key in KV
-      const kv = context.env.AGENT_KEYS;
       if (kv) {
         await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
       }
 
-      // Send 90% of purchase price to agent wallet as trading capital
+      // Send 95% of purchase price to agent wallet as trading capital
       const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
       const tradingCapital = pr.amount * (1 - feePct);
 
@@ -168,31 +183,44 @@ export async function onRequest(context) {
           "UPDATE payment_requests SET status = 'funding_failed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
         ).bind(buyer, sig.signature, pr.id).run();
         // Save wallet info so retry can use same keypair
-        await kv.put(`funding:${pr.id}:pubkey`, keypair.publicKey);
+        if (kv) await kv.put(`funding:${pr.id}:pubkey`, keypair.publicKey);
         console.error(`Failed to fund ${pr.agent_id}, will retry:`, e.message);
         errors++;
         continue;
       }
 
+      // Use custom owner if it's a real wallet, otherwise fall back to on-chain sender
+      const ownerWallet = (customOwner && customOwner !== 'manual') ? customOwner : buyer;
+
       // Funding succeeded — create or reclaim agent
       if (reclaimExisting) {
         await db.prepare(
-          "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0 WHERE id = ?"
-        ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+          "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, name = COALESCE(?, name), meta = ? WHERE id = ?"
+        ).bind(ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta, pr.agent_id).run();
       } else {
         await db.prepare(
-          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-        ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?)"
+        ).bind(pr.agent_id, ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta).run();
+      }
+
+      // Clean up custom KV keys
+      if (isCustom && kv) {
+        await kv.delete(`custom:${pr.agent_id}:dna`);
+        await kv.delete(`custom:${pr.agent_id}:name`);
+        await kv.delete(`custom:${pr.agent_id}:owner`);
+        await kv.delete(`custom:${pr.agent_id}:meta`);
       }
 
       // Log event
+      const eventType = isCustom ? 'custom_agent_created' : 'genesis_claimed';
       await db.prepare(
-        "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
-      ).bind(pr.agent_id, JSON.stringify({
-        buyer, amount: pr.amount, tx: sig.signature,
+        "INSERT INTO events (agent_id, type, data) VALUES (?, ?, ?)"
+      ).bind(pr.agent_id, eventType, JSON.stringify({
+        buyer: ownerWallet, amount: pr.amount, tx: sig.signature,
         agent_wallet: keypair.publicKey,
         trading_capital: tradingCapital,
         funding_tx: fundingTx,
+        ...(agentName ? { name: agentName } : {}),
       })).run();
 
       confirmed++;
@@ -268,11 +296,26 @@ export async function onRequest(context) {
               }
               const reclaimExisting2 = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
 
-              const dna = GENESIS_DNA[pr.agent_id];
+              const kv = context.env.AGENT_KEYS;
+              let dna = GENESIS_DNA[pr.agent_id];
+              let agentName = null;
+              let agentMeta = null;
+              let customOwner = null;
+              const isCustom = !dna && kv;
+
+              if (isCustom) {
+                const customDnaStr = await kv.get(`custom:${pr.agent_id}:dna`);
+                if (!customDnaStr) { amountMatched.add(pr.id); continue; }
+                dna = JSON.parse(customDnaStr);
+                agentName = await kv.get(`custom:${pr.agent_id}:name`);
+                agentMeta = await kv.get(`custom:${pr.agent_id}:meta`);
+                customOwner = await kv.get(`custom:${pr.agent_id}:owner`);
+              }
               if (!dna) { amountMatched.add(pr.id); continue; }
 
+              const ownerWallet = (customOwner && customOwner !== 'manual') ? customOwner : buyer;
+
               const keypair = await generateKeypair();
-              const kv = context.env.AGENT_KEYS;
               if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
               const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
@@ -284,22 +327,30 @@ export async function onRequest(context) {
                   const fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
                   if (reclaimExisting2) {
                     await db.prepare(
-                      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0 WHERE id = ?"
-                    ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+                      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, name = COALESCE(?, name), meta = ? WHERE id = ?"
+                    ).bind(ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta, pr.agent_id).run();
                   } else {
                     await db.prepare(
-                      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-                    ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+                      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?)"
+                    ).bind(pr.agent_id, ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta).run();
                   }
+                  if (isCustom && kv) {
+                    await kv.delete(`custom:${pr.agent_id}:dna`);
+                    await kv.delete(`custom:${pr.agent_id}:name`);
+                    await kv.delete(`custom:${pr.agent_id}:owner`);
+                    await kv.delete(`custom:${pr.agent_id}:meta`);
+                  }
+                  const eventType = isCustom ? 'custom_agent_created' : 'genesis_claimed';
                   await db.prepare(
-                    "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
-                  ).bind(pr.agent_id, JSON.stringify({
-                    buyer, amount: pr.amount, tx: sig.signature,
+                    "INSERT INTO events (agent_id, type, data) VALUES (?, ?, ?)"
+                  ).bind(pr.agent_id, eventType, JSON.stringify({
+                    buyer: ownerWallet, amount: pr.amount, tx: sig.signature,
                     agent_wallet: keypair.publicKey, trading_capital: tradingCapital,
                     funding_tx: fundingTx, matched_by: 'amount',
+                    ...(agentName ? { name: agentName } : {}),
                   })).run();
                   confirmed++;
-                  console.log(`Amount-matched ${pr.agent_id} from ${buyer}, funded ${tradingCapital} SOL`);
+                  console.log(`Amount-matched ${pr.agent_id} from ${ownerWallet}, funded ${tradingCapital} SOL`);
                 } catch (e) {
                   await db.prepare(
                     "UPDATE payment_requests SET status = 'funding_failed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
@@ -448,19 +499,16 @@ export async function onRequest(context) {
 
       const withdrawTx = await sendSol(agentSecret, wr.owner_wallet, wr.amount_sol, rpcUrl);
 
-      await db.prepare(
-        "UPDATE withdrawal_requests SET status = 'completed', tx_signature = ? WHERE id = ?"
-      ).bind(withdrawTx, wr.id).run();
-
-      // Log event
-      await db.prepare(
-        "INSERT INTO events (agent_id, type, data) VALUES (?, 'withdrawal', ?)"
-      ).bind(wr.agent_id, JSON.stringify({
-        amount: wr.amount_sol,
-        method: 'micro_tx',
-        owner: wr.owner_wallet,
-        tx: withdrawTx,
-      })).run();
+      await db.batch([
+        db.prepare("UPDATE withdrawal_requests SET status = 'completed', tx_signature = ? WHERE id = ?").bind(withdrawTx, wr.id),
+        db.prepare("UPDATE agents SET total_withdrawn = total_withdrawn + ? WHERE id = ?").bind(wr.amount_sol, wr.agent_id),
+        db.prepare("INSERT INTO events (agent_id, type, data) VALUES (?, 'withdrawal', ?)").bind(wr.agent_id, JSON.stringify({
+          amount: wr.amount_sol,
+          method: 'micro_tx',
+          owner: wr.owner_wallet,
+          tx: withdrawTx,
+        })),
+      ]);
 
       console.log(`Withdrawal ${wr.id}: sent ${wr.amount_sol} SOL to ${wr.owner_wallet}, tx: ${withdrawTx}`);
       wConfirmed++;

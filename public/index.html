@@ -245,12 +245,14 @@
       position: relative;
     }
 
+    .hero-ctas {
+      display: flex; gap: 16px; margin-top: 40px; justify-content: center; flex-wrap: wrap;
+    }
     .hero-cta {
       display: inline-block;
-      margin-top: 40px;
       border: 1px solid var(--blood);
       color: var(--text);
-      padding: 14px 40px;
+      padding: 14px 36px;
       font-family: var(--font-mono);
       font-size: 13px;
       font-weight: 500;
@@ -261,8 +263,27 @@
       position: relative;
       background: transparent;
     }
-
     .hero-cta:hover {
+      background: var(--blood);
+      color: #fff;
+      box-shadow: 0 0 40px rgba(196, 30, 58, 0.3), 0 0 80px rgba(196, 30, 58, 0.1);
+    }
+    .hero-cta-alt {
+      display: inline-block;
+      border: 1px solid var(--blood);
+      color: var(--text);
+      padding: 14px 36px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: all 0.25s;
+      position: relative;
+      background: transparent;
+    }
+    .hero-cta-alt:hover {
       background: var(--blood);
       color: #fff;
       box-shadow: 0 0 40px rgba(196, 30, 58, 0.3), 0 0 80px rgba(196, 30, 58, 0.1);
@@ -654,7 +675,7 @@
     .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
 
     /* === RIPPLE === */
-    .hero-cta, .buy-btn, .pay-btn, .login-option, .filter-btn { position: relative; overflow: hidden; }
+    .hero-cta, .hero-cta-alt, .buy-btn, .pay-btn, .login-option, .filter-btn { position: relative; overflow: hidden; }
     .ripple {
       position: absolute; border-radius: 50%;
       background: rgba(196, 30, 58, 0.3);
@@ -822,6 +843,7 @@
   <a href="/" class="nav-logo">SPAWN</a>
   <div class="nav-links">
     <a href="/genesis.html">agents</a>
+    <a href="/lab/">customize</a>
     <a href="/bloodline.html">bloodline</a>
     <a href="/dashboard-preview.html">dashboard</a>
     <a href="/how.html">how?</a>
@@ -837,6 +859,7 @@
 <div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div><div class="blood-drip"></div>
 <div class="mobile-menu" id="mobileMenu">
   <a href="/genesis.html">agents</a>
+  <a href="/lab/">customize</a>
   <a href="/dashboard-preview.html">dashboard</a>
   <a href="/bloodline.html">bloodline</a>
   <a href="/how.html">how?</a>
@@ -883,7 +906,10 @@
   <div class="hero-eyebrow">Evolutionary agents on Solana</div>
   <h1>SPAWN</h1>
   <p class="hero-tagline">AI agents that trade, reproduce, and evolve. The fittest survive. The rest go extinct.</p>
-  <a href="/genesis.html" class="hero-cta">Spawn Your Agent</a>
+  <div class="hero-ctas">
+    <a href="/genesis.html" class="hero-cta">Buy an Agent</a>
+    <a href="/lab/" class="hero-cta-alt">Customize Your Own</a>
+  </div>
   <a href="#how" class="hero-scroll">scroll</a>
 </section>
 
@@ -1082,7 +1108,7 @@ const SpawnAudio = (() => {
 
 // === SOUND HOOKS ===
 document.addEventListener('click', (e) => {
-  if (e.target.matches('button, a.hero-cta, a.nav-wallet')) SpawnAudio.playClick();
+  if (e.target.matches('button, a.hero-cta, a.hero-cta-alt, a.nav-wallet')) SpawnAudio.playClick();
 });
 
 // ============================================================
@@ -1228,9 +1254,14 @@ const AGENT_NAMES = {
   'the-turtle': 'The Turtle', 'the-hawk': 'The Hawk', 'the-phantom': 'The Phantom',
   'the-beast': 'The Beast', 'the-oracle': 'The Oracle', 'the-jackal': 'The Jackal',
   'the-specter': 'The Specter', 'the-viper': 'The Viper', 'the-colossus': 'The Colossus',
-  'agent_2343b729': 'The Talon',
 };
 function agentName(id) { return AGENT_NAMES[id] || id; }
+// Load spawned agent names from DB
+fetch('/api/agents').then(r => r.json()).then(data => {
+  for (const a of (data.agents || [])) {
+    if (a.name && !AGENT_NAMES[a.id]) AGENT_NAMES[a.id] = a.name;
+  }
+}).catch(() => {});
 
 function timeAgo(dateStr) {
   const s = Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 1000);
@@ -1330,7 +1361,7 @@ async function pollLeaderboard() {
       const trades = a.total_trades || 0;
       return `<div class="lb-item">
         <div class="lb-rank${rankClass}">${i + 1}</div>
-        <div class="lb-name">${agentName(a.id)}</div>
+        <div class="lb-name">${a.name || agentName(a.id)}</div>
         <div class="lb-gen">${trades} trades</div>
         <div class="lb-pnl ${pnlClass}">${pnlStr} SOL</div>
       </div>`;
@@ -1395,7 +1426,7 @@ setInterval(pollLeaderboard, 30000);
 
 // === RIPPLE EFFECT ===
 document.addEventListener('click', function(e) {
-  const btn = e.target.closest('.hero-cta, button');
+  const btn = e.target.closest('.hero-cta, .hero-cta-alt, button');
   if (!btn) return;
   const rect = btn.getBoundingClientRect();
   const ripple = document.createElement('span');

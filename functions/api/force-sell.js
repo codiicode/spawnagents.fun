@@ -25,7 +25,8 @@ export async function onRequest(context) {
     if (!agentSecret) return Response.json({ error: "No secret key" }, { status: 404 });
 
     const balance = await getBalance(agent.agent_wallet, rpcUrl);
-    const sendAmount = balance - 0.001; // keep 0.001 for tx fee
+    const requestedAmount = parseFloat(url.searchParams.get("amount") || "0");
+    const sendAmount = requestedAmount > 0 ? Math.min(requestedAmount, balance - 0.001) : balance - 0.001;
     if (sendAmount <= 0) return Response.json({ error: "Insufficient balance", balance });
 
     try {

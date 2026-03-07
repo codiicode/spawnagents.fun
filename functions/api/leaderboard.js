@@ -8,7 +8,7 @@ export async function onRequest(context) {
       return Response.json({ type: "families", leaderboard: r.results });
     }
     const r = await db.prepare(
-      "SELECT id, parent_id, generation, total_pnl, total_trades, status FROM agents WHERE status = 'alive' AND id NOT LIKE 'test-%' ORDER BY total_pnl DESC LIMIT 20"
+      "SELECT id, name, parent_id, generation, total_pnl, total_trades, status FROM agents WHERE status = 'alive' AND id NOT LIKE 'test-%' ORDER BY total_pnl DESC LIMIT 20"
     ).all();
     return Response.json({ type: "agents", leaderboard: r.results });
   } catch (e) { return Response.json({ error: e.message }, { status: 500 }); }

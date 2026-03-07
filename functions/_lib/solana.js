@@ -256,16 +256,65 @@ async function importEd25519Seed(seed) {
   return crypto.subtle.importKey('pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']);
 }
 
-async function rpcCall(url, method, params) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(`RPC ${method}: ${data.error.message}`);
-  return data.result;
+
+// Count unique wallets that traded a token recently (rug detection)
+export async function getUniqueTraders(tokenMint, rpcUrl, limit = 20) {
+  try {
+    const sigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [tokenMint, { limit }]);
+    if (!sigs || sigs.length === 0) return { unique: 0, total: 0 };
+
+    const signers = new Set();
+    // Check first 10 txs for unique signers (rate limit friendly)
+    const toCheck = sigs.filter(s => !s.err).slice(0, 10);
+    for (const sig of toCheck) {
+      try {
+        const tx = await rpcCall(rpcUrl, 'getTransaction', [
+          sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }
+        ]);
+        if (tx?.transaction?.message?.accountKeys) {
+          // First account key is the fee payer (= the trader)
+          const keys = tx.transaction.message.accountKeys;
+          const signer = typeof keys[0] === 'string' ? keys[0] : keys[0].pubkey;
+          signers.add(signer);
+        }
+      } catch {}
+    }
+    return { unique: signers.size, total: toCheck.length };
+  } catch {
+    return { unique: 0, total: 0 };
+  }
 }
+
+async function rpcCall(url, method, params, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      });
+      const text = await res.text();
+      if (!text) {
+        if (attempt < retries - 1) { await sleep(300 * (attempt + 1)); continue; }
+        throw new Error(`RPC ${method}: empty response`);
+      }
+      const data = JSON.parse(text);
+      if (data.error) {
+        if (data.error.code === 429 && attempt < retries - 1) { await sleep(500 * (attempt + 1)); continue; }
+        throw new Error(`RPC ${method}: ${data.error.message}`);
+      }
+      return data.result;
+    } catch (e) {
+      if (attempt < retries - 1 && (e.message.includes('empty response') || e.message.includes('fetch failed'))) {
+        await sleep(300 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function readCompactU16(bytes, offset) {
   let value = bytes[offset];

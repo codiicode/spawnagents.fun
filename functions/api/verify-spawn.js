@@ -103,15 +103,16 @@ export async function onRequest(context) {
   }
   const childGen = parent.generation + 1;
   const childId = `agent_${crypto.randomUUID().slice(0, 8)}`;
-  const childName = generateChildName(childDna);
+  const childName = await generateChildName(childDna, parent, db);
 
   // Generate child wallet
   const keypair = await generateKeypair();
   const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${childId}:secret`, keypair.secretKey);
 
-  // Fund child wallet — free spawn, 100% goes to child
-  const tradingCapital = parseFloat(pending.sol_amount.toFixed(6));
+  // Fund child wallet — 5% protocol fee, 95% goes to child
+  const protocolFee = parseFloat((pending.sol_amount * 0.05).toFixed(6));
+  const tradingCapital = parseFloat((pending.sol_amount - protocolFee).toFixed(6));
 
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
   if (!protocolSecret) {
@@ -160,36 +161,46 @@ export async function onRequest(context) {
   });
 }
 
-function generateChildName(dna) {
-  // Name based on dominant DNA traits
-  const aggressive = [
-    'The Fang', 'The Claw', 'The Blade', 'The Fury', 'The Ravager',
-    'The Mauler', 'The Striker', 'The Ripper', 'The Savage', 'The Wrath',
-    'The Hellion', 'The Brute', 'The Reaver', 'The Storm', 'The Inferno',
-  ];
-  const patient = [
-    'The Sage', 'The Warden', 'The Anchor', 'The Sentinel', 'The Arbiter',
-    'The Vigil', 'The Bastion', 'The Obelisk', 'The Monolith', 'The Shade',
-    'The Whisper', 'The Pilgrim', 'The Aegis', 'The Shroud', 'The Ember',
-  ];
-  const risky = [
-    'The Rogue', 'The Drifter', 'The Outlaw', 'The Wraith', 'The Jinx',
-    'The Maverick', 'The Chaos', 'The Hazard', 'The Tempest', 'The Vandal',
-    'The Scourge', 'The Menace', 'The Reckoning', 'The Blight', 'The Havoc',
-  ];
-  const balanced = [
-    'The Scout', 'The Prowler', 'The Stalker', 'The Seeker', 'The Hunter',
-    'The Watcher', 'The Shadow', 'The Ghost', 'The Nomad', 'The Ranger',
-    'The Cipher', 'The Vector', 'The Nexus', 'The Flux', 'The Pulse',
-  ];
+async function generateChildName(dna, parent, db) {
+  // Walk up to genesis ancestor
+  const rootId = await getGenesisId(parent, db);
 
-  let pool;
-  if (dna.aggression > 0.7) pool = aggressive;
-  else if (dna.patience > 0.6) pool = patient;
-  else if (dna.risk_tolerance > 0.65) pool = risky;
-  else pool = balanced;
+  // Family-themed name pools — children inherit their lineage's theme
+  const FAMILY_NAMES = {
+    'the-hawk':      ['The Falcon', 'The Kite', 'The Osprey', 'The Harrier', 'The Merlin', 'The Goshawk', 'The Peregrine', 'The Sparrowhawk', 'The Kestrel', 'The Raptor'],
+    'the-specter':   ['The Wraith', 'The Shade', 'The Phantom', 'The Revenant', 'The Apparition', 'The Banshee', 'The Poltergeist', 'The Haunt', 'The Mirage', 'The Echo'],
+    'the-sniper':    ['The Marksman', 'The Sharpshooter', 'The Deadeye', 'The Longshot', 'The Crosshair', 'The Scope', 'The Silencer', 'The Caliber', 'The Bullet', 'The Rifleman'],
+    'the-surgeon':   ['The Scalpel', 'The Stitcher', 'The Medic', 'The Anatomist', 'The Bonesaw', 'The Remedy', 'The Tourniquet', 'The Lancet', 'The Suture', 'The Physician'],
+    'the-colossus':  ['The Titan', 'The Goliath', 'The Behemoth', 'The Leviathan', 'The Monolith', 'The Juggernaut', 'The Atlas', 'The Mammoth', 'The Colosseum', 'The Fortress'],
+    'the-wolf':      ['The Alpha', 'The Howler', 'The Fenrir', 'The Lycan', 'The Dire', 'The Fang', 'The Packrunner', 'The Bloodhound', 'The Coyote', 'The Warg'],
+    'the-jackal':    ['The Hyena', 'The Scavenger', 'The Prowler', 'The Vulture', 'The Carcass', 'The Gnasher', 'The Stalker', 'The Carrion', 'The Marauder', 'The Rogue'],
+    'the-oracle':    ['The Prophet', 'The Seer', 'The Diviner', 'The Augur', 'The Mystic', 'The Sage', 'The Visionary', 'The Omen', 'The Sibyl', 'The Harbinger'],
+    'the-viper':     ['The Cobra', 'The Mamba', 'The Asp', 'The Rattler', 'The Serpent', 'The Adder', 'The Taipan', 'The Basilisk', 'The Hydra', 'The Fangstrike'],
+    'the-phantom':   ['The Ghost', 'The Shadow', 'The Vanish', 'The Void', 'The Hollow', 'The Wisp', 'The Specter', 'The Gloom', 'The Umbra', 'The Dusk'],
+    'the-beast':     ['The Brute', 'The Mauler', 'The Ravager', 'The Savage', 'The Predator', 'The Rampage', 'The Crusher', 'The Berserker', 'The Fury', 'The Havoc'],
+    'the-berserker': ['The Rage', 'The Wrath', 'The Fury', 'The Bloodlust', 'The Warmonger', 'The Hellion', 'The Destroyer', 'The Inferno', 'The Madness', 'The Carnage'],
+    'the-turtle':    ['The Shell', 'The Bastion', 'The Bulwark', 'The Rampart', 'The Ironclad', 'The Aegis', 'The Garrison', 'The Bunker', 'The Citadel', 'The Tortoise'],
+    'the-monk':      ['The Pilgrim', 'The Ascetic', 'The Hermit', 'The Disciple', 'The Zen', 'The Abbot', 'The Templar', 'The Acolyte', 'The Devotee', 'The Friar'],
+    'the-gambler':   ['The Bluffer', 'The Ace', 'The Wildcard', 'The Hustler', 'The Jackpot', 'The Diceroll', 'The High Roller', 'The Joker', 'The Ante', 'The Flush'],
+  };
 
-  return pool[Math.floor(Math.random() * pool.length)];
+  const pool = FAMILY_NAMES[rootId];
+  if (pool) return pool[Math.floor(Math.random() * pool.length)];
+
+  // Fallback for unknown lineages
+  const fallback = ['The Offspring', 'The Heir', 'The Scion', 'The Progeny', 'The Descendant'];
+  return fallback[Math.floor(Math.random() * fallback.length)];
+}
+
+async function getGenesisId(agent, db) {
+  let current = agent;
+  for (let i = 0; i < 10; i++) {
+    if (current.generation === 0) return current.id;
+    if (!current.parent_id) return current.id;
+    current = await db.prepare('SELECT id, parent_id, generation FROM agents WHERE id = ?').bind(current.parent_id).first();
+    if (!current) break;
+  }
+  return agent.parent_id || agent.id;
 }
 
 async function rpcCall(url, method, params) {

@@ -7,6 +7,7 @@ import {
   getJupiterSwapTx,
   signAndSendSwapTx,
   getPumpPortalTx,
+  getUniqueTraders,
 } from './solana.js';
 
 // Sell slippage: starts at 2%, increases by 2% per failed attempt (max 12%)
@@ -31,6 +32,8 @@ async function clearSellFails(kv, agentId, mint) {
 // kv = AGENT_KEYS KV namespace (used for trailing stop peak tracking)
 export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, candidates, kv, marketRegime = null) {
   const dna = JSON.parse(agent.dna);
+  const meta = agent.meta ? JSON.parse(agent.meta) : {};
+  const sellStrategy = meta.sell_strategy || 'phased'; // phased | full | trail
 
   const solBalance = await getBalance(agentPubkey, rpcUrl);
   const tokenBalances = await getTokenBalances(agentPubkey, rpcUrl);
@@ -43,6 +46,36 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   for (const token of tokenBalances) {
     const tokenData = await getTokenData(token.mint);
     if (!tokenData) continue;
+
+    // === EMERGENCY RUG SELL — bypasses hold time ===
+    const isRug = (
+      (tokenData.liquidity_usd > 0 && tokenData.liquidity_usd < 1000) ||
+      (tokenData.price_change_1h < -60) ||
+      (tokenData.volume_1h > 0 && tokenData.liquidity_usd > 0 && tokenData.volume_1h / tokenData.liquidity_usd > 15) ||
+      (tokenData.market_cap > 0 && tokenData.liquidity_usd > 0 && tokenData.market_cap / tokenData.liquidity_usd > 50)
+    );
+    if (isRug) {
+      const rugReason = `EMERGENCY RUG SELL (liq ${Math.round(tokenData.liquidity_usd)}, 1h ${(tokenData.price_change_1h || 0).toFixed(0)}%, mc/liq ${tokenData.liquidity_usd > 0 ? (tokenData.market_cap / tokenData.liquidity_usd).toFixed(0) : '?'}x)`;
+      let result;
+      if (isDegen) {
+        result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+          symbol: tokenData.symbol, reason: rugReason,
+          pnlPct: 0, tokenAmount: token.amount,
+          estimatedSol: (tokenData.price_native || 0) * token.amount,
+        }, kv, agent.id);
+      } else {
+        const rugQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount);
+        if (rugQuote) {
+          const rugOutSol = parseInt(rugQuote.outAmount) / 1e9;
+          result = await executeSell(rugQuote, agentPubkey, agentSecret, rpcUrl, {
+            token: token.mint, symbol: tokenData.symbol, reason: rugReason,
+            pnlPct: 0, outSol: rugOutSol, tokenAmount: token.amount,
+          });
+        }
+      }
+      if (result && result.action === 'sell') sellResults.push(result);
+      continue;
+    }
 
     // === MINIMUM HOLD TIME ===
     const minHoldMinutes = dna.check_interval_min || 10;
@@ -148,8 +181,31 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
     const trailPct = Math.min(20 + dna.patience * 30, 35);
 
-    // Phase 1: Take profit — recover cost basis
-    if (!costRecovered && pnlPct >= tpThreshold) {
+    // Phase 1: Take profit
+    // trail strategy: skip fixed TP, only trailing stop
+    if (sellStrategy !== 'trail' && !costRecovered && pnlPct >= tpThreshold) {
+      if (sellStrategy === 'full') {
+        // Full exit: sell 100% at TP
+        let result;
+        if (isDegen) {
+          result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+            symbol: tokenData.symbol, reason: `take profit FULL (${pnlPct.toFixed(1)}% >= ${tpThreshold.toFixed(0)}%)`,
+            pnlPct, tokenAmount: token.amount,
+            estimatedSol: fullOutSol,
+          }, kv, agent.id);
+        } else {
+          result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
+            token: token.mint, symbol: tokenData.symbol,
+            reason: `take profit FULL (${pnlPct.toFixed(1)}% >= ${tpThreshold.toFixed(0)}%)`,
+            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+          });
+        }
+        if (result && result.action === 'sell') sellResults.push(result);
+        if (kv) { await kv.delete(peakKey); }
+        continue;
+      }
+
+      // Phased exit: recover cost basis first, then let rest ride
       const currentValue = fullOutSol;
       const costRemaining = totalBought - totalSold;
       const sellPct = Math.min(0.9, Math.max(0.2, costRemaining / currentValue));
@@ -181,8 +237,6 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
       if (result && result.action === 'sell') {
         sellResults.push(result);
-        // Store breakeven SL: entry value of remaining tokens
-        // If token drops back to this value → sell (never go negative after TP1)
         if (kv) {
           const breakevenVal = totalBought * (1 - sellPct);
           await kv.put(`breakeven:${agent.id}:${token.mint}`, breakevenVal.toString(), { expirationTtl: 86400 * 7 });
@@ -314,8 +368,8 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   // --- BUY SIGNALS ---
 
-  // FIX: Scale buy cooldown with aggression (aggressive: 20min, conservative: 60min)
-  let buyCooldown = Math.round(20 + (1 - dna.aggression) * 40);
+  // Scale buy cooldown with aggression (aggressive: 10min, conservative: 30min)
+  let buyCooldown = Math.round(10 + (1 - dna.aggression) * 20);
   if (marketRegime?.regime === 'trending_down') buyCooldown = Math.round(buyCooldown * 1.5);
   else if (marketRegime?.regime === 'choppy') buyCooldown = Math.round(buyCooldown * 1.2);
   const lastBuy = await db.prepare(
@@ -335,7 +389,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   // Don't trade if balance is too low
   if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
 
-  const maxPositions = Math.round(2 + (1 - dna.aggression) * 2);
+  const maxPositions = dna.max_positions || Math.round(2 + (1 - dna.aggression) * 2);
   const openPositions = tokenBalances.length;
 
   if (openPositions >= maxPositions) return { sells: sellResults, action: 'hold', reason: `max positions reached (${openPositions}/${maxPositions})` };
@@ -344,7 +398,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   // Distribute capital: go all-in on one position if balance is low
   const remainingSlots = maxPositions - openPositions;
-  const maxPct = Math.min(dna.max_position_pct, 40) / 100;
+  const maxPct = Math.min(dna.max_position_pct, 90) / 100;
   const perSlotAmount = availableSol / remainingSlots;
   let tradeAmountSol = Math.max(MIN_TRADE_SOL, Math.min(perSlotAmount, availableSol * maxPct));
 
@@ -386,6 +440,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   // Global blacklist: known rugs/scams — no agent can buy these
   const GLOBAL_BLACKLIST = new Set([
     'BityzGkSmcU9SzFH26rzWQ5UX1cRBVywVcXEBxcQpump', // winston (rug)
+    'Zscx6qngJieCj2mcuhUaYQ2F66EJ8vL7t6jVZh9pump',  // nakama (rug/wash)
+    'EqLgaVKGPctfgi9kqTYgZJggewouDZoCC6tgSxUypump',  // OIL (rug/wash)
+    '8zbUbQSt1QvGAPr7r2SQ2mH3SzYDkbGddQrKPiDbpump',  // Nodie (rug)
+    '12qKJmoJj9hKs12S8kPhRMrWhsyfqaiEsDh9Z38xpump',  // MESSI (rug/wash)
+    'BCjURyv9Zp2oNQfLxWe3q1PeWrFLQQ9C6vLQD7JFpump',  // SOYJAK (wash)
+    '6RxB1KdzVMXrrYn7nQWvaGgh5e2EpbA1FcEFtq74pump',  // DELULU (wash)
   ]);
 
   // Cross-agent limit: max 2 agents can hold the same token
@@ -421,16 +481,17 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (crowdedTokens.has(t.address)) { filterStats.crowded++; return false; }
       if (t.address === SOL_MINT) { filterStats.sol++; return false; }
 
-      const volFloor = isDegen ? 15000 : 50000;
-      const vol1hFloor = isDegen ? 3000 : 2000;
-      const liqBase = isDegen ? 1000 : 3000;
-      const liqScale = isDegen ? 4000 : 22000;
-      const minAgeBase = isDegen ? 0.25 : 0.5;
-      const minAgeScale = isDegen ? 0.5 : 1.5;
-      const maxAge = isDegen ? 12 : 168;
+      const isFresh = (t.pair_age_hours || 0) < 1; // just migrated / still on pump
+      const volFloor = isDegen ? 2000 : (isFresh ? 3000 : 10000);
+      const vol1hFloor = isDegen ? 500 : (isFresh ? 500 : 1000);
+      const liqBase = isDegen ? 500 : (isFresh ? 1000 : 2000);
+      const liqScale = isDegen ? 2000 : (isFresh ? 5000 : 15000);
+      const minAgeBase = isDegen ? 0.03 : 0.08; // ~2 min degen, ~5 min standard
+      const minAgeScale = isDegen ? 0.1 : 0.4;
+      const maxAge = isDegen ? 24 : 168;
 
-      const minMcap = isDegen ? 10000 : 50000;
-      const maxMcap = isDegen ? 150000 : Infinity;
+      const minMcap = isDegen ? 5000 : 20000;
+      const maxMcap = isDegen ? 500000 : Infinity;
       if ((t.market_cap || 0) < minMcap) { filterStats.mcap++; return false; }
       if ((t.market_cap || 0) > maxMcap) { filterStats.mcap++; return false; }
 
@@ -438,12 +499,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if ((t.volume_1h || 0) < vol1hFloor) { filterStats.volume1h++; return false; }
 
       // Require positive momentum
-      const minMomentum = isDegen ? -5 : 0;
+      const minMomentum = isDegen ? -10 : -3;
       if ((t.price_change_1h || 0) < minMomentum) { filterStats.momentum++; return false; }
 
       const minTxns = isDegen
         ? Math.max(5, Math.round((dna.buy_threshold_holders || 50) * 0.1))
-        : Math.max(30, Math.round((dna.buy_threshold_holders || 100) * 0.3));
+        : Math.max(15, Math.round((dna.buy_threshold_holders || 100) * 0.15));
       if (t.txns_24h < minTxns) { filterStats.txns++; return false; }
 
       const minLiq = liqBase + (1 - dna.risk_tolerance) * liqScale;
@@ -453,6 +514,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (t.pair_age_hours < minAge) { filterStats.tooNew++; return false; }
       if (t.pair_age_hours > maxAge) { filterStats.tooOld++; return false; }
 
+      // Pre-filter obvious wash trading (vol/liq > 40x for non-degen, 60x for degen)
+      if (t.liquidity_usd > 0 && t.volume_24h > 0) {
+        const vlr = t.volume_24h / t.liquidity_usd;
+        const vlrMax = isDegen ? 60 : 40;
+        if (vlr > vlrMax) { filterStats.blacklisted++; return false; }
+      }
+
       filterStats.passed++;
       return true;
     })
@@ -461,14 +529,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   console.log(`Agent ${agent.id} filter: ${JSON.stringify(filterStats)}`);
 
-  const minScore = isDegen ? 4 : 5;
+  const minScore = isDegen ? 2 : 3;
   const strongCandidates = scored.filter(t => t.score >= minScore);
   const skipped = [];
   if (strongCandidates.length === 0 && scored.length > 0) {
-    return { sells: sellResults, action: 'hold', reason: `no strong signals (best score ${scored[0]?.score.toFixed(1)}, need ${minScore})` };
+    return { sells: sellResults, action: 'hold', reason: `no strong signals (best score ${scored[0]?.score.toFixed(1)}, need ${minScore})`, filterStats };
   }
 
-  for (const t of strongCandidates.slice(0, 3)) {
+  for (const t of strongCandidates.slice(0, 5)) {
     const safety = await checkTokenSafety(t.address, t);
     if (!isDegen && !safety.safe) {
       skipped.push({ token: t.symbol, reason: safety.reasons.join(', ') });
@@ -480,7 +548,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         r.includes('mint authority') ||
         r.includes('freeze authority') ||
         r.includes('top 10 holders') ||
-        r.includes('transfer fee')
+        r.includes('single wallet holds') ||
+        r.includes('transfer fee') ||
+        r.includes('only') // "only N holders"
       );
       if (criticalReasons.length > 0) {
         skipped.push({ token: t.symbol, reason: criticalReasons.join(', ') });
@@ -495,6 +565,20 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         continue;
       }
     }
+
+    // === UNIQUE TRADERS CHECK — final rug filter before buying ===
+    try {
+      const traders = await getUniqueTraders(t.address, rpcUrl);
+      if (traders.total >= 5 && traders.unique <= 2) {
+        skipped.push({ token: t.symbol, reason: `rug: only ${traders.unique} unique wallets in ${traders.total} txns` });
+        continue;
+      }
+      // Low unique ratio = wash trading (e.g. 2 wallets out of 10 txns)
+      if (traders.total >= 8 && traders.unique / traders.total < 0.3) {
+        skipped.push({ token: t.symbol, reason: `wash: ${traders.unique}/${traders.total} unique wallets (${Math.round(traders.unique/traders.total*100)}%)` });
+        continue;
+      }
+    } catch {}
 
     // === DEGEN: buy via PumpPortal ===
     if (isDegen) {
@@ -534,9 +618,37 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
     }
 
-    // === NORMAL: buy via Jupiter ===
+    // === NORMAL: buy via Jupiter (fallback to PumpPortal if no quote) ===
     const buyQuote = await getJupiterQuote(SOL_MINT, t.address, tradeAmountLamports);
-    if (!buyQuote) { skipped.push({ token: t.symbol, reason: 'quote failed' }); continue; }
+    if (!buyQuote) {
+      // Fallback: try PumpPortal for pump.fun native tokens
+      if (t.isPumpNative || t.dex === 'pumpfun') {
+        try {
+          const ppTx = await getPumpPortalTx(agentPubkey, 'buy', t.address, tradeAmountSol, {
+            denominatedInSol: true, slippage: 2, pool: 'auto',
+          });
+          if (ppTx) {
+            const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
+            let tokenAmount = 0;
+            try {
+              await new Promise(r => setTimeout(r, 2000));
+              const postBuyBalances = await getTokenBalances(agentPubkey, rpcUrl);
+              const bought = postBuyBalances.find(b => b.mint === t.address);
+              if (bought) tokenAmount = bought.amount;
+            } catch {}
+            return {
+              sells: sellResults, action: 'buy', token: t.address, symbol: t.symbol,
+              reason: `PumpPortal fallback | score ${t.score.toFixed(1)}`,
+              amount_sol: tradeAmountSol, token_amount: tokenAmount, tx_signature: txSig,
+            };
+          }
+        } catch (e) {
+          skipped.push({ token: t.symbol, reason: `pumpportal fallback: ${e.message}` });
+          continue;
+        }
+      }
+      skipped.push({ token: t.symbol, reason: 'quote failed' }); continue;
+    }
 
     const swapTx = await getJupiterSwapTx(buyQuote, agentPubkey);
     if (!swapTx) { skipped.push({ token: t.symbol, reason: 'swap tx failed' }); continue; }
@@ -576,7 +688,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     }
   }
 
-  return { sells: sellResults, action: 'hold', reason: `no signals (${scored.length} candidates filtered)`, skipped };
+  return { sells: sellResults, action: 'hold', reason: `no signals (${scored.length} candidates filtered)`, skipped, filterStats, topScored: scored.slice(0, 5).map(t => ({ s: t.symbol, score: +t.score.toFixed(1), vol_liq: t.liquidity_usd > 0 ? +(t.volume_24h/t.liquidity_usd).toFixed(1) : 0 })) };
 }
 
 // ============================================================
@@ -629,16 +741,23 @@ function scoreToken(token, dna, marketRegime = null) {
   // Liquidity bonus (max 2 pts)
   score += Math.min(token.liquidity_usd / 50000, 2);
 
+  // Fresh launch bonus — tokens < 1h old with momentum are prime entries
+  if (token.pair_age_hours < 1) score += 3;
+  else if (token.pair_age_hours < 3) score += 1.5;
+
   // Risk-tolerant agents get bonus for newer tokens
   if (dna.risk_tolerance > 0.7 && token.pair_age_hours < 12) score += 2;
 
   // Patient agents prefer tokens that survived the first few hours
   if (dna.patience > 0.7 && token.pair_age_hours > 6) score += 1;
 
+  // pump.fun native bonus — early entry opportunity
+  if (token.isPumpNative) score += 1;
+
   // Market regime adjustment
   if (marketRegime) {
-    if (marketRegime.regime === 'trending_down') score *= 0.6;
-    else if (marketRegime.regime === 'choppy') score *= 0.8;
+    if (marketRegime.regime === 'trending_down') score *= 0.85;
+    else if (marketRegime.regime === 'choppy') score *= 0.9;
     else if (marketRegime.regime === 'trending_up') score *= 1 + marketRegime.confidence * 0.15;
   }
 

@@ -79,10 +79,11 @@ export async function onRequest(context) {
     try {
       const txSig = await sendSol(agentSecret, agent.owner_wallet, amount_sol, rpcUrl);
 
-      // Log withdrawal
-      await db.prepare(
-        "INSERT INTO withdrawal_requests (id, agent_id, owner_wallet, amount_sol, method, status, tx_signature) VALUES (?, ?, ?, ?, 'phantom', 'completed', ?)"
-      ).bind(crypto.randomUUID(), agent_id, agent.owner_wallet, amount_sol, txSig).run();
+      // Log withdrawal + track total withdrawn
+      await db.batch([
+        db.prepare("INSERT INTO withdrawal_requests (id, agent_id, owner_wallet, amount_sol, method, status, tx_signature) VALUES (?, ?, ?, ?, 'phantom', 'completed', ?)").bind(crypto.randomUUID(), agent_id, agent.owner_wallet, amount_sol, txSig),
+        db.prepare("UPDATE agents SET total_withdrawn = total_withdrawn + ? WHERE id = ?").bind(amount_sol, agent_id),
+      ]);
 
       return Response.json({ status: 'completed', tx_signature: txSig });
     } catch (e) {

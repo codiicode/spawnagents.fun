@@ -1,15 +1,23 @@
 export async function onRequest(context) {
   const db = context.env.DB;
 
-  // GET — poll DB status (called every 3s by frontend)
+  // GET — poll DB status (called every 3-5s by frontend)
   if (context.request.method === 'GET') {
     const url = new URL(context.request.url);
     const ref = url.searchParams.get('ref');
-    if (!ref) return Response.json({ error: 'Missing ref parameter' }, { status: 400 });
+    const agentId = url.searchParams.get('agent_id');
+    if (!ref && !agentId) return Response.json({ error: 'Missing ref or agent_id parameter' }, { status: 400 });
 
-    const pr = await db.prepare(
-      'SELECT status, tx_signature, buyer_wallet, agent_id, amount FROM payment_requests WHERE reference = ?'
-    ).bind(ref).first();
+    let pr;
+    if (ref) {
+      pr = await db.prepare(
+        'SELECT status, tx_signature, buyer_wallet, agent_id, amount FROM payment_requests WHERE reference = ?'
+      ).bind(ref).first();
+    } else {
+      pr = await db.prepare(
+        'SELECT status, tx_signature, buyer_wallet, agent_id, amount FROM payment_requests WHERE agent_id = ? ORDER BY created_at DESC LIMIT 1'
+      ).bind(agentId).first();
+    }
 
     if (!pr) return Response.json({ error: 'Payment not found' }, { status: 404 });
 
@@ -29,14 +37,14 @@ export async function onRequest(context) {
     });
   }
 
-  // POST — trigger immediate on-chain verification for a specific payment
+  // POST — trigger immediate on-chain verification
   if (context.request.method === 'POST') {
     let body;
     try { body = await context.request.json(); } catch {
       return Response.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { reference } = body;
+    const { reference, tx_signature } = body;
     if (!reference) return Response.json({ error: 'Missing reference' }, { status: 400 });
 
     const pr = await db.prepare(
@@ -48,8 +56,9 @@ export async function onRequest(context) {
     const rpcUrl = context.env.RPC_URL;
     if (!rpcUrl) return Response.json({ error: 'RPC not configured' }, { status: 500 });
 
-    // --- Try 1: Reference-based lookup ---
     let found = false;
+
+    // --- Method 1: Reference-based lookup (Phantom flow — reference key is in the tx) ---
     try {
       const sigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [pr.reference, { limit: 1 }]);
       if (sigs?.length > 0 && !sigs[0].err) {
@@ -59,11 +68,16 @@ export async function onRequest(context) {
       console.error('Reference lookup error:', e.message);
     }
 
-    // Amount-matching fallback REMOVED — caused duplicate confirmations.
-    // Only reference-based lookup is used now.
+    // --- Method 2: User provided tx signature (manual flow) ---
+    if (!found && tx_signature && tx_signature.length > 30) {
+      try {
+        found = await verifyAndConfirm(context, db, rpcUrl, pr, tx_signature);
+      } catch (e) {
+        console.error('TX signature verification error:', e.message);
+      }
+    }
 
     if (found) {
-      // Return confirmed status with agent wallet
       const agent = await db.prepare('SELECT agent_wallet FROM agents WHERE id = ?').bind(pr.agent_id).first();
       const updated = await db.prepare('SELECT status, amount, buyer_wallet, tx_signature FROM payment_requests WHERE id = ?').bind(pr.id).first();
       return Response.json({
@@ -82,7 +96,7 @@ export async function onRequest(context) {
   return Response.json({ error: 'Method not allowed' }, { status: 405 });
 }
 
-// Verify a transaction and confirm the payment + claim agent
+// Verify a single transaction and confirm the payment + create agent
 async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   const tx = await rpcCall(rpcUrl, 'getTransaction', [txSignature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
   if (!tx?.meta) return false;
@@ -98,20 +112,19 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   if (recipientIdx < 0) return false;
 
   const solReceived = (tx.meta.postBalances[recipientIdx] - tx.meta.preBalances[recipientIdx]) / 1e9;
-  if (solReceived < pr.amount * 0.95) return false;
+  if (solReceived < pr.amount * 0.90) return false; // 10% tolerance
 
   const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
-  // Check tx signature not already used by another payment
+  // Check tx signature not already used
   const existingTx = await db.prepare(
     "SELECT id FROM payment_requests WHERE tx_signature = ? AND id != ?"
   ).bind(txSignature, pr.id).first();
-  if (existingTx) return false; // tx already used
+  if (existingTx) return false;
 
-  // Check agent is still claimable BEFORE marking payment confirmed
+  // Check agent is still claimable
   const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
   if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') {
-    // Agent already claimed — mark payment as failed, don't take the money
     await db.prepare(
       "UPDATE payment_requests SET status = 'already_claimed', buyer_wallet = ?, tx_signature = ? WHERE id = ?"
     ).bind(buyer, txSignature, pr.id).run();
@@ -145,15 +158,29 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
     "the-colossus": { aggression: 0.5, patience: 0.6, risk_tolerance: 0.5, buy_threshold_holders: 800, buy_threshold_volume: 2500, sell_profit_pct: 40, sell_loss_pct: 10, max_position_pct: 40, check_interval_min: 6 },
   };
 
-  const dna = GENESIS_DNA[pr.agent_id];
+  const kv = context.env.AGENT_KEYS;
+  let dna = GENESIS_DNA[pr.agent_id];
+  let agentName = null;
+  const isCustom = !dna && kv;
+
+  let agentMeta = null;
+  let customOwner = null;
+  if (isCustom) {
+    const customDnaStr = await kv.get(`custom:${pr.agent_id}:dna`);
+    if (!customDnaStr) return true; // payment confirmed but no DNA — skip creation
+    dna = JSON.parse(customDnaStr);
+    agentName = await kv.get(`custom:${pr.agent_id}:name`);
+    agentMeta = await kv.get(`custom:${pr.agent_id}:meta`);
+    customOwner = await kv.get(`custom:${pr.agent_id}:owner`);
+  }
+
   if (!dna) return true;
 
   const keypair = await generateKeypair();
-  const kv = context.env.AGENT_KEYS;
   if (kv) await kv.put(`agent:${pr.agent_id}:secret`, keypair.secretKey);
 
-  // Free claim — 100% goes to agent wallet
-  const tradingCapital = pr.amount;
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
+  const tradingCapital = pr.amount * (1 - feePct);
   const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
 
   if (!protocolSecret) {
@@ -163,21 +190,30 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
 
   try {
     const fundingTx = await sendSol(protocolSecret, keypair.publicKey, tradingCapital, rpcUrl);
+    const ownerWallet = (customOwner && customOwner !== 'manual') ? customOwner : buyer;
     if (reclaimExisting) {
       await db.prepare(
-        "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0 WHERE id = ?"
-      ).bind(buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital, pr.agent_id).run();
+        "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0, name = COALESCE(?, name), meta = ? WHERE id = ?"
+      ).bind(ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta, pr.agent_id).run();
     } else {
       await db.prepare(
-        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-      ).bind(pr.agent_id, buyer, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+        "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?)"
+      ).bind(pr.agent_id, ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta).run();
     }
+    if (isCustom && kv) {
+      await kv.delete(`custom:${pr.agent_id}:dna`);
+      await kv.delete(`custom:${pr.agent_id}:name`);
+      await kv.delete(`custom:${pr.agent_id}:owner`);
+      await kv.delete(`custom:${pr.agent_id}:meta`);
+    }
+    const eventType = isCustom ? 'custom_agent_created' : 'genesis_claimed';
     await db.prepare(
-      "INSERT INTO events (agent_id, type, data) VALUES (?, 'genesis_claimed', ?)"
-    ).bind(pr.agent_id, JSON.stringify({
+      "INSERT INTO events (agent_id, type, data) VALUES (?, ?, ?)"
+    ).bind(pr.agent_id, eventType, JSON.stringify({
       buyer, amount: pr.amount, tx: txSignature,
       agent_wallet: keypair.publicKey, trading_capital: tradingCapital,
       funding_tx: fundingTx,
+      ...(agentName ? { name: agentName } : {}),
     })).run();
     return true;
   } catch (e) {

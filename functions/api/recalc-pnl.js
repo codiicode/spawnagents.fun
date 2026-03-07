@@ -24,7 +24,7 @@ export async function onRequest(context) {
     return Response.json({ skipped: true, reason: "Could not fetch SOL price" });
   }
 
-  const agents = await db.prepare("SELECT id, agent_wallet, initial_capital FROM agents WHERE status = 'alive'").all();
+  const agents = await db.prepare("SELECT id, agent_wallet, initial_capital, total_withdrawn FROM agents WHERE status = 'alive'").all();
   const results = [];
 
   for (const agent of agents.results) {
@@ -39,7 +39,8 @@ export async function onRequest(context) {
         }
       }
       const totalValue = solBal + tokenValueSol;
-      const realPnl = totalValue - (agent.initial_capital || 0);
+      const withdrawn = agent.total_withdrawn || 0;
+      const realPnl = (totalValue + withdrawn) - (agent.initial_capital || 0);
 
       // Fitness: Sharpe ratio + win rate + drawdown
       const agentTrades = await db.prepare(
