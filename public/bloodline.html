@@ -1134,6 +1134,7 @@ const AGENT_IMAGES = {
   'the-surgeon': '/the-surgeon.jpg',
   'agent_9beb5312': '/the-falcon.jpg',
   'agent_29f951ee': '/the-wraith-spawn.jpg',
+  'agent_42f44230': '/the-packrunner.jpg',
 };
 
 let allAgents = [];
@@ -1149,7 +1150,9 @@ let currentFilter = 'all';
 function buildForest(agents) {
   const map = {};
   agents.forEach(a => {
-    map[a.id] = { ...a, dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : (a.dna || {}), children: [] };
+    const node = { ...a, dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : (a.dna || {}), children: [] };
+    try { const m = typeof a.meta === 'string' ? JSON.parse(a.meta) : a.meta; if (m && m.avatar) node._metaAvatar = m.avatar; } catch {}
+    map[a.id] = node;
   });
   const roots = [];
   agents.forEach(a => {
@@ -1339,8 +1342,9 @@ function renderTree(nodes, edges) {
 
     // Avatar image or initial
     const imgPath = AGENT_IMAGES[node.id];
-    if (imgPath) {
-      html += `<image href="${imgPath}" x="${-AV_R}" y="${AV_CY - AV_R}" width="${AV_R * 2}" height="${AV_R * 2}"
+    const metaAvatar = node._metaAvatar;
+    if (imgPath || metaAvatar) {
+      html += `<image href="${imgPath || metaAvatar}" x="${-AV_R}" y="${AV_CY - AV_R}" width="${AV_R * 2}" height="${AV_R * 2}"
         clip-path="url(#clip-${node.id})" preserveAspectRatio="xMidYMid slice"/>`;
     } else {
       const initial = formatName(node.id, node.name).charAt(0).toUpperCase();
@@ -1711,7 +1715,7 @@ function openShareCard(agentId) {
   const W = 600, H = 340;
   canvas.width = W; canvas.height = H;
 
-  const imgPath = AGENT_IMAGES[agentId];
+  const imgPath = AGENT_IMAGES[agentId] || node._metaAvatar;
   const pnlVal = node.total_pnl || 0;
   const isProfit = pnlVal >= 0;
   const accentColor = isProfit ? '#22ff66' : '#ff3344';

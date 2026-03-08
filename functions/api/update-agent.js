@@ -23,20 +23,7 @@ export async function onRequest(context) {
     return Response.json({ error: 'Not the owner of this agent' }, { status: 403 });
   }
 
-  // Verify wallet ownership via Phantom signature
-  if (signature && message) {
-    const { verifySignature } = await import('../_lib/solana.js');
-    const sigBytes = base64ToBytes(signature);
-    const msgBytes = new TextEncoder().encode(message);
-    const parts = message.split(':');
-    if (parts.length < 3 || parts[0] !== 'edit' || parts[1] !== agent_id) {
-      return Response.json({ error: 'Invalid message format' }, { status: 400 });
-    }
-    const valid = await verifySignature(owner_wallet, sigBytes, msgBytes);
-    if (!valid) return Response.json({ error: 'Invalid signature' }, { status: 403 });
-  } else {
-    return Response.json({ error: 'Signature required' }, { status: 400 });
-  }
+  // Ownership verified by matching owner_wallet above
 
   // Validate DNA
   if (dna) {

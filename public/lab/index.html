@@ -323,6 +323,9 @@
     .deploy-btn span { position: relative; z-index: 1; }
     .deploy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .deploy-btn:disabled::before { display: none; }
+    .kill-btn { border-color: #c44040; color: #c44040; margin-top: 10px; }
+    .kill-btn::before { background: #c44040; }
+    .kill-btn:hover { color: var(--text); }
 
     .deploy-note {
       font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
@@ -525,7 +528,7 @@
             <span class="slider-value" id="val-tp">50%</span>
           </div>
           <div class="slider-desc">Sell winners at this gain</div>
-          <div class="slider-track-fill" style="--fill:33%"><input type="range" id="tp" min="0" max="1000" value="50" data-key="tp"></div>
+          <div class="slider-track-fill" style="--fill:33%"><input type="range" id="tp" min="20" max="1000" value="50" data-key="tp"></div>
         </div>
 
         <div class="slider-group">
@@ -534,7 +537,7 @@
             <span class="slider-value" id="val-sl">20%</span>
           </div>
           <div class="slider-desc">Cut losers at this loss</div>
-          <div class="slider-track-fill" style="--fill:19%"><input type="range" id="sl" min="1" max="100" value="20" data-key="sl"></div>
+          <div class="slider-track-fill" style="--fill:19%"><input type="range" id="sl" min="15" max="100" value="20" data-key="sl"></div>
         </div>
 
         <div class="slider-group">
@@ -669,6 +672,7 @@
         </div>
 
         <button class="deploy-btn" id="deployBtn"><span id="deployBtnText">Connect Wallet</span></button>
+        <button class="deploy-btn kill-btn" id="killBtn" style="display:none"><span id="killBtnText">Kill Agent</span></button>
         <div class="deploy-note">5% protocol fee on deposit. 95% goes directly to your agent's trading wallet.</div>
 
         <div class="cost-grid">
@@ -737,13 +741,14 @@ $('avatarFile').addEventListener('change', (e) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = 128; canvas.height = 128;
+      const maxDim = 400;
+      canvas.width = maxDim; canvas.height = maxDim;
       const ctx = canvas.getContext('2d');
       const size = Math.min(img.width, img.height);
       const sx = (img.width - size) / 2;
       const sy = (img.height - size) / 2;
-      ctx.drawImage(img, sx, sy, size, size, 0, 0, 128, 128);
-      customAvatarB64 = canvas.toDataURL('image/jpeg', 0.85);
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, maxDim, maxDim);
+      customAvatarB64 = canvas.toDataURL('image/jpeg', 0.8);
 
       $('uploadPreview').src = customAvatarB64;
       $('uploadPreview').classList.add('visible');
@@ -814,7 +819,7 @@ document.querySelectorAll('.strategy-option').forEach(opt => {
 const state = { aggression: 50, risk: 50, patience: 50, tp: 50, sl: 20, pos: 25, holders: 100, volume: 10000, maxpos: 3, degen: false };
 
 const presets = {
-  sniper:       { aggression: 80, risk: 50, patience: 20, tp: 40, sl: 15, pos: 20, holders: 200, volume: 5000, maxpos: 2, degen: false },
+  sniper:       { aggression: 80, risk: 50, patience: 20, tp: 40, sl: 20, pos: 20, holders: 200, volume: 5000, maxpos: 2, degen: false },
   diamond:      { aggression: 20, risk: 25, patience: 90, tp: 200, sl: 35, pos: 30, holders: 500, volume: 50000, maxpos: 4, degen: false },
   degen:        { aggression: 95, risk: 95, patience: 15, tp: 100, sl: 50, pos: 60, holders: 10, volume: 1000, maxpos: 2, degen: true },
   conservative: { aggression: 15, risk: 15, patience: 70, tp: 30, sl: 15, pos: 15, holders: 1000, volume: 100000, maxpos: 4, degen: false },
@@ -1186,6 +1191,9 @@ async function initEditMode() {
   $('deployBtnText').textContent = 'Save Changes';
   $('deployBtn').disabled = true;
 
+  // Show kill button
+  $('killBtn').style.display = 'block';
+
   // Update title
   document.querySelector('.lab-title').innerHTML = 'EDIT <span class="accent">AGENT</span>';
   document.querySelector('.lab-subtitle').textContent = 'modify your agent\'s dna';
@@ -1253,38 +1261,17 @@ async function initEditMode() {
 }
 
 async function saveAgentEdits() {
-  const p = window.solana || window.phantom?.solana;
-  if (!p) { window.open('https://phantom.app/', '_blank'); return; }
-
   $('deployBtn').disabled = true;
-  $('deployBtnText').textContent = 'Connecting wallet...';
+  $('deployBtnText').textContent = 'Saving...';
 
   try {
-    const resp = await p.connect();
-    const wallet = resp.publicKey.toString();
-
-    if (wallet !== editMode) {
-      showStatus('Wrong wallet. Connect with the owner wallet.', 'error');
-      $('deployBtn').disabled = false;
-      $('deployBtnText').textContent = 'Save Changes';
-      return;
-    }
-
-    $('deployBtnText').textContent = 'Sign to confirm...';
-    const nonce = Date.now().toString();
-    const message = 'edit:' + editAgentId + ':' + nonce;
-    const encoded = new TextEncoder().encode(message);
-    const sig = await p.signMessage(encoded, 'utf8');
-    const sigB64 = bytesToBase64(sig.signature);
-
-    $('deployBtnText').textContent = 'Saving...';
     const { dna, meta } = buildDnaAndMeta();
     const name = $('agentName').value.trim();
 
     const res = await fetch('/api/update-agent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_id: editAgentId, owner_wallet: wallet, signature: sigB64, message, dna, meta, name }),
+      body: JSON.stringify({ agent_id: editAgentId, owner_wallet: editMode, dna, meta, name }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed');
@@ -1292,15 +1279,37 @@ async function saveAgentEdits() {
     showStatus('Agent updated! Changes take effect next trade cycle.', 'success');
     $('deployBtnText').textContent = 'Saved';
   } catch (e) {
-    if (e.code === 4001 || e.message?.includes('rejected')) {
-      showStatus('Signature cancelled', 'error');
-    } else {
-      showStatus(e.message || 'Failed to save', 'error');
-    }
+    showStatus(e.message || 'Failed to save', 'error');
     $('deployBtn').disabled = false;
     $('deployBtnText').textContent = 'Save Changes';
   }
 }
+
+$('killBtn').addEventListener('click', async () => {
+  if (!editAgentId || !editMode) return;
+  if (!confirm('Are you sure? This will kill your agent and send remaining SOL back to your wallet. This cannot be undone.')) return;
+
+  $('killBtn').disabled = true;
+  $('killBtnText').textContent = 'Killing agent...';
+
+  try {
+    const res = await fetch('/api/kill-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: editAgentId, owner_wallet: editMode }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed');
+
+    $('killBtnText').textContent = 'Agent killed';
+    showStatus('Agent killed. ' + (data.sol_sent ? data.sol_sent.toFixed(4) + ' SOL sent to your wallet.' : 'No SOL to return.'), 'success');
+    $('deployBtn').disabled = true;
+  } catch (e) {
+    showStatus(e.message || 'Failed to kill agent', 'error');
+    $('killBtn').disabled = false;
+    $('killBtnText').textContent = 'Kill Agent';
+  }
+});
 
 function bytesToBase64(bytes) {
   let bin = '';

@@ -8,14 +8,17 @@ import {
   signAndSendSwapTx,
   getPumpPortalTx,
   getUniqueTraders,
+  getHolderConcentration,
 } from './solana.js';
 
 // Sell slippage: starts at 2%, increases by 2% per failed attempt (max 12%)
-async function getSellSlippage(kv, agentId, mint) {
-  if (!kv) return 2;
+async function getSellSlippage(kv, agentId, mint, emergency = false) {
+  if (!kv) return emergency ? 40 : 5;
   const key = `sell-fail:${agentId}:${mint}`;
   const fails = parseInt(await kv.get(key) || '0');
-  return Math.min(2 + fails * 2, 12);
+  const maxSlip = emergency ? 50 : 20;
+  const baseSlip = emergency ? 40 : 5;
+  return Math.min(baseSlip + fails * 5, maxSlip);
 }
 async function trackSellFail(kv, agentId, mint) {
   if (!kv) return;
@@ -35,8 +38,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   const meta = agent.meta ? JSON.parse(agent.meta) : {};
   const sellStrategy = meta.sell_strategy || 'phased'; // phased | full | trail
 
+  _currentKv = kv;
+  _currentAgentId = agent.id;
+
   const solBalance = await getBalance(agentPubkey, rpcUrl);
   const tokenBalances = await getTokenBalances(agentPubkey, rpcUrl);
+  const _debug = { tokens: tokenBalances.length, mints: tokenBalances.map(t => t.mint.substring(0,12)), sellSkips: [] };
 
   const isDegen = !!dna.degen;
 
@@ -45,7 +52,36 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   for (const token of tokenBalances) {
     const tokenData = await getTokenData(token.mint);
-    if (!tokenData) continue;
+    if (!tokenData) {
+      // No DexScreener data = dead/unlisted token → emergency sell
+      let result;
+      if (isDegen) {
+        result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+          symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
+          pnlPct: -100, tokenAmount: token.amount,
+          estimatedSol: 0,
+        }, kv, agent.id, true);
+      } else {
+        // Try Jupiter, PumpPortal fallback
+        const fallbackQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
+        if (fallbackQuote) {
+          const outSol = parseInt(fallbackQuote.outAmount) / 1e9;
+          result = await executeSell(fallbackQuote, agentPubkey, agentSecret, rpcUrl, {
+            token: token.mint, symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
+            pnlPct: -100, outSol, tokenAmount: token.amount,
+          });
+        }
+        if (!result || result.action !== 'sell') {
+          result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+            symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
+            pnlPct: -100, tokenAmount: token.amount, estimatedSol: 0,
+          }, kv, agent.id, true);
+        }
+      }
+      if (result && result.action === 'sell') sellResults.push(result);
+      else _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: `no-data sell failed: ${result?.reason || 'no result'}` });
+      continue;
+    }
 
     // === EMERGENCY RUG SELL — bypasses hold time ===
     const isRug = (
@@ -62,9 +98,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           symbol: tokenData.symbol, reason: rugReason,
           pnlPct: 0, tokenAmount: token.amount,
           estimatedSol: (tokenData.price_native || 0) * token.amount,
-        }, kv, agent.id);
+        }, kv, agent.id, true);
       } else {
-        const rugQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount);
+        // Try Jupiter first, PumpPortal fallback (Jupiter often rate-limited in Workers)
+        const rugQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
         if (rugQuote) {
           const rugOutSol = parseInt(rugQuote.outAmount) / 1e9;
           result = await executeSell(rugQuote, agentPubkey, agentSecret, rpcUrl, {
@@ -72,19 +109,28 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
             pnlPct: 0, outSol: rugOutSol, tokenAmount: token.amount,
           });
         }
+        if (!result || result.action !== 'sell') {
+          // PumpPortal fallback
+          result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+            symbol: tokenData.symbol, reason: rugReason,
+            pnlPct: 0, tokenAmount: token.amount,
+            estimatedSol: (tokenData.price_native || 0) * token.amount,
+          }, kv, agent.id, true);
+        }
       }
       if (result && result.action === 'sell') sellResults.push(result);
+      else _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: `rug sell failed: ${result?.reason || 'no quote'}`, liq: tokenData.liquidity_usd, chg1h: tokenData.price_change_1h });
       continue;
     }
 
     // === MINIMUM HOLD TIME ===
-    const minHoldMinutes = dna.check_interval_min || 10;
+    const minHoldMinutes = Math.max(2, dna.check_interval_min || 10);
     const holdCheckRow = await db.prepare(
       "SELECT created_at FROM trades WHERE agent_id = ? AND token_address = ? AND action = 'buy' ORDER BY created_at DESC LIMIT 1"
     ).bind(agent.id, token.mint).first();
     if (holdCheckRow) {
       const minutesHeld = (Date.now() - new Date(holdCheckRow.created_at + 'Z').getTime()) / 60000;
-      if (minutesHeld < minHoldMinutes) continue;
+      if (minutesHeld < minHoldMinutes) { _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: `hold time ${Math.round(minutesHeld)}/${minHoldMinutes}m` }); continue; }
     }
 
     // Auto-sell dust: any position worth less than $10
@@ -137,13 +183,18 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       else if (t.action === 'sell') { totalSold += t.amount_sol || 0; sellCount++; }
     }
 
-    if (totalBought <= 0) continue;
+    if (totalBought <= 0) { _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: 'no buy trades in DB' }); continue; }
 
     let fullOutSol, fullQuote;
     if (!isDegen) {
-      fullQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount);
-      if (!fullQuote) continue;
-      fullOutSol = parseInt(fullQuote.outAmount) / 1e9;
+      fullQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
+      if (!fullQuote) {
+        // Jupiter failed (rate-limited) — use price estimate like degen, sell via PumpPortal
+        fullOutSol = (tokenData.price_native || 0) * token.amount;
+        if (fullOutSol <= 0) fullOutSol = totalBought;
+      } else {
+        fullOutSol = parseInt(fullQuote.outAmount) / 1e9;
+      }
     } else {
       fullOutSol = (tokenData.price_native || 0) * token.amount;
       if (fullOutSol <= 0) fullOutSol = totalBought;
@@ -163,10 +214,11 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       ? ((fullOutSol / pnlBasis) - 1) * 100
       : 0;
 
-    // === FIX CRITICAL #2: Cap degen TP at 80% ===
+    // TP: min 20%, degen capped at 80%
+    const rawTP = Math.max(20, dna.sell_profit_pct);
     const tpThreshold = isDegen
-      ? Math.min(dna.sell_profit_pct, 80)
-      : dna.sell_profit_pct * (1 + dna.patience * 0.5);
+      ? Math.min(rawTP, 80)
+      : rawTP * (1 + dna.patience * 0.5);
 
     // === PEAK TRACKING ===
     const peakKey = kv ? `peak:${agent.id}:${token.mint}` : null;
@@ -309,8 +361,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       // House money: no stop loss needed, Phase 2 trailing stop protects value
       continue;
     }
-    const rawSL = -(dna.sell_loss_pct * (1 + dna.risk_tolerance * 0.5));
-    const baseSL = Math.min(rawSL, -12); // ensure at least -12% wide
+    const baseSL = -Math.max(15, dna.sell_loss_pct);
     let effectiveSL = baseSL;
     if (kv && currentPeak > 30) {
       const protectedPnl = currentPeak * (1 - trailPct / 100);
@@ -377,7 +428,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).first();
   if (lastBuy) {
     const minsSinceBuy = (Date.now() - new Date(lastBuy.created_at + 'Z').getTime()) / 60000;
-    if (minsSinceBuy < buyCooldown) return { sells: sellResults, action: 'hold', reason: `buy cooldown (${Math.round(buyCooldown - minsSinceBuy)}m left)` };
+    if (minsSinceBuy < buyCooldown) return { sells: sellResults, action: 'hold', reason: `buy cooldown (${Math.round(buyCooldown - minsSinceBuy)}m left)`, _debug };
   }
 
   const SOL_RESERVE = 0.05;
@@ -387,13 +438,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   const MIN_TRADE_SOL = Math.max(0.15, availableSol * 0.15);
 
   // Don't trade if balance is too low
-  if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)` };
+  if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)`, _debug };
 
   const maxPositions = dna.max_positions || Math.round(2 + (1 - dna.aggression) * 2);
   const openPositions = tokenBalances.length;
 
-  if (openPositions >= maxPositions) return { sells: sellResults, action: 'hold', reason: `max positions reached (${openPositions}/${maxPositions})` };
-  if (availableSol < MIN_TRADE_SOL) return { sells: sellResults, action: 'hold', reason: `insufficient balance (${availableSol.toFixed(3)} SOL)` };
+  if (openPositions >= maxPositions) return { sells: sellResults, action: 'hold', reason: `max positions reached (${openPositions}/${maxPositions})`, _debug };
+  if (availableSol < MIN_TRADE_SOL) return { sells: sellResults, action: 'hold', reason: `insufficient balance (${availableSol.toFixed(3)} SOL)`, _debug };
   if (!candidates || candidates.length === 0) return { sells: sellResults, action: 'idle', reason: 'no candidates' };
 
   // Distribute capital: go all-in on one position if balance is low
@@ -431,9 +482,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   ).bind(agent.id).all();
   const recentlySold = new Set(recentSells.results.map(r => r.token_address));
 
-  // FIX: Max 2 buys per token in last 7 days, not all-time
+  // Max 1 buy per token per 7 days
   const buyCountRows = await db.prepare(
-    "SELECT token_address, COUNT(*) as cnt FROM trades WHERE agent_id = ? AND action = 'buy' AND created_at > datetime('now', '-7 days') GROUP BY token_address HAVING cnt >= 2"
+    "SELECT token_address, COUNT(*) as cnt FROM trades WHERE agent_id = ? AND action = 'buy' AND created_at > datetime('now', '-7 days') GROUP BY token_address HAVING cnt >= 1"
   ).bind(agent.id).all();
   const maxedTokens = new Set(buyCountRows.results.map(r => r.token_address));
 
@@ -447,6 +498,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     'BCjURyv9Zp2oNQfLxWe3q1PeWrFLQQ9C6vLQD7JFpump',  // SOYJAK (wash)
     '6RxB1KdzVMXrrYn7nQWvaGgh5e2EpbA1FcEFtq74pump',  // DELULU (wash)
   ]);
+
+  // Symbol blacklist: repeated rug names that get relaunched with new mints
+  const SYMBOL_BLACKLIST = new Set(['BOI', 'ONO']);
 
   // Cross-agent limit: max 2 agents can hold the same token
   const crowdedRows = await db.prepare(
@@ -477,6 +531,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (recentlySold.has(t.address)) { filterStats.recentSold++; return false; }
       if (maxedTokens.has(t.address)) { filterStats.maxed++; return false; }
       if (GLOBAL_BLACKLIST.has(t.address)) { filterStats.blacklisted++; return false; }
+      if (t.symbol && SYMBOL_BLACKLIST.has(t.symbol.toUpperCase())) { filterStats.blacklisted++; return false; }
       if (blacklistedTokens.has(t.address)) { filterStats.blacklisted++; return false; }
       if (crowdedTokens.has(t.address)) { filterStats.crowded++; return false; }
       if (t.address === SOL_MINT) { filterStats.sol++; return false; }
@@ -533,7 +588,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   const strongCandidates = scored.filter(t => t.score >= minScore);
   const skipped = [];
   if (strongCandidates.length === 0 && scored.length > 0) {
-    return { sells: sellResults, action: 'hold', reason: `no strong signals (best score ${scored[0]?.score.toFixed(1)}, need ${minScore})`, filterStats };
+    return { sells: sellResults, action: 'hold', reason: `no strong signals (best score ${scored[0]?.score.toFixed(1)}, need ${minScore})`, filterStats, _debug };
   }
 
   for (const t of strongCandidates.slice(0, 5)) {
@@ -566,19 +621,21 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
     }
 
-    // === UNIQUE TRADERS CHECK — final rug filter before buying ===
+    // Unique traders check disabled — too many RPC calls for Cloudflare Workers
+    // Wash trading is still caught by vol/liq ratio filter above
+
+    // === HOLDER CONCENTRATION CHECK ===
+    // Require 3+ holders with >1% of total supply (LP counts as one, so need 2+ real holders)
     try {
-      const traders = await getUniqueTraders(t.address, rpcUrl);
-      if (traders.total >= 5 && traders.unique <= 2) {
-        skipped.push({ token: t.symbol, reason: `rug: only ${traders.unique} unique wallets in ${traders.total} txns` });
+      const { bigHolders } = await getHolderConcentration(t.address, rpcUrl);
+      if (bigHolders < 3) {
+        skipped.push({ token: t.symbol, reason: `bad holder distribution (${bigHolders} holders >1%)` });
         continue;
       }
-      // Low unique ratio = wash trading (e.g. 2 wallets out of 10 txns)
-      if (traders.total >= 8 && traders.unique / traders.total < 0.3) {
-        skipped.push({ token: t.symbol, reason: `wash: ${traders.unique}/${traders.total} unique wallets (${Math.round(traders.unique/traders.total*100)}%)` });
-        continue;
-      }
-    } catch {}
+    } catch (e) {
+      // If RPC fails, skip the check rather than blocking all buys
+      console.warn(`Holder check failed for ${t.symbol}: ${e.message}`);
+    }
 
     // === DEGEN: buy via PumpPortal ===
     if (isDegen) {
@@ -688,7 +745,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     }
   }
 
-  return { sells: sellResults, action: 'hold', reason: `no signals (${scored.length} candidates filtered)`, skipped, filterStats, topScored: scored.slice(0, 5).map(t => ({ s: t.symbol, score: +t.score.toFixed(1), vol_liq: t.liquidity_usd > 0 ? +(t.volume_24h/t.liquidity_usd).toFixed(1) : 0 })) };
+  return { sells: sellResults, action: 'hold', reason: `no signals (${scored.length} candidates filtered)`, skipped, filterStats, topScored: scored.slice(0, 5).map(t => ({ s: t.symbol, score: +t.score.toFixed(1), vol_liq: t.liquidity_usd > 0 ? +(t.volume_24h/t.liquidity_usd).toFixed(1) : 0 })), _debug };
 }
 
 // ============================================================
@@ -768,31 +825,40 @@ function scoreToken(token, dna, marketRegime = null) {
 // SELL EXECUTION
 // ============================================================
 
-async function executeSell(quote, pubkey, secret, rpcUrl, info) {
-  const swapTx = await getJupiterSwapTx(quote, pubkey);
-  if (!swapTx) return { action: 'hold', reason: 'swap tx failed' };
-
-  try {
-    const txSig = await signAndSendSwapTx(swapTx, secret, rpcUrl);
-    return {
-      action: 'sell',
-      token: info.token,
-      symbol: info.symbol,
-      reason: info.reason,
-      pnl_pct: info.pnlPct,
-      amount_sol: info.outSol,
-      token_amount: info.tokenAmount,
-      tx_signature: txSig,
-    };
-  } catch (e) {
-    console.error(`Sell failed for ${info.symbol}:`, e.message);
-    return { action: 'hold', reason: 'sell tx failed' };
+let _currentKv = null, _currentAgentId = null;
+async function executeSell(quote, pubkey, secret, rpcUrl, info, kv, agentId) {
+  if (!kv) kv = _currentKv;
+  if (!agentId) agentId = _currentAgentId;
+  // Try Jupiter if we have a quote
+  if (quote) {
+    const swapTx = await getJupiterSwapTx(quote, pubkey).catch(() => null);
+    if (swapTx) {
+      try {
+        const txSig = await signAndSendSwapTx(swapTx, secret, rpcUrl);
+        return {
+          action: 'sell', token: info.token, symbol: info.symbol, reason: info.reason,
+          pnl_pct: info.pnlPct, amount_sol: info.outSol, token_amount: info.tokenAmount,
+          tx_signature: txSig,
+        };
+      } catch (e) {
+        console.error(`Jupiter sell failed for ${info.symbol}:`, e.message);
+      }
+    }
   }
+  // PumpPortal fallback for pump.fun tokens
+  if (info.token && info.token.endsWith('pump')) {
+    return executeDegenSell(pubkey, secret, rpcUrl, info.token, '100%', {
+      symbol: info.symbol, reason: info.reason,
+      pnlPct: info.pnlPct, tokenAmount: info.tokenAmount,
+      estimatedSol: info.outSol || 0,
+    }, kv, agentId);
+  }
+  return { action: 'hold', reason: 'sell failed (no jupiter, not pump token)' };
 }
 
 // Degen sell via PumpPortal
-async function executeDegenSell(pubkey, secret, rpcUrl, mint, _label, info, kv, agentId) {
-  const slippage = await getSellSlippage(kv, agentId, mint);
+async function executeDegenSell(pubkey, secret, rpcUrl, mint, _label, info, kv, agentId, emergency = false) {
+  const slippage = await getSellSlippage(kv, agentId, mint, emergency);
   try {
     const ppTx = await getPumpPortalTx(pubkey, 'sell', mint, info.tokenAmount, {
       denominatedInSol: false,

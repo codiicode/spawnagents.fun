@@ -19,10 +19,20 @@ export async function onRequest(context) {
   if (!wallet) return Response.json({ error: "wallet or agent_id required" }, { status: 400 });
 
   try {
-    const [solBalance, tokenBalances] = await Promise.all([
-      getBalance(wallet, rpcUrl),
-      getTokenBalances(wallet, rpcUrl).catch(() => []),
-    ]);
+    // Try KV cache first (populated by trade-runner every 3 min)
+    let solBalance, tokenBalances;
+    const kv = context.env.AGENT_KEYS;
+    const cached = agentId && kv ? await kv.get(`balance:${agentId}`) : null;
+    if (cached) {
+      const c = JSON.parse(cached);
+      solBalance = c.sol;
+      tokenBalances = c.tokens || [];
+    } else {
+      [solBalance, tokenBalances] = await Promise.all([
+        getBalance(wallet, rpcUrl),
+        getTokenBalances(wallet, rpcUrl).catch(() => []),
+      ]);
+    }
 
     // Get cost basis per token from trades table
     const tokenTradeInfo = {};

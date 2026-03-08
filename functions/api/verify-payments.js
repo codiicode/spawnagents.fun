@@ -38,13 +38,19 @@ export async function onRequest(context) {
   }
 
   // Re-activate expired payment requests for any unclaimed/dead agents (can still be purchased)
+  // Only re-activate the LATEST expired request per agent (not all of them)
   const allGenesis = Object.keys(GENESIS_DNA);
   for (const agentId of allGenesis) {
     const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agentId).first();
     if (!existing || existing.status === 'dead' || existing.status === 'unclaimed') {
-      await db.prepare(
-        "UPDATE payment_requests SET status = 'pending' WHERE agent_id = ? AND status = 'expired'"
-      ).bind(agentId).run();
+      const latestExpired = await db.prepare(
+        "SELECT id FROM payment_requests WHERE agent_id = ? AND status = 'expired' ORDER BY created_at DESC LIMIT 1"
+      ).bind(agentId).first();
+      if (latestExpired) {
+        await db.prepare(
+          "UPDATE payment_requests SET status = 'pending' WHERE id = ?"
+        ).bind(latestExpired.id).run();
+      }
     }
   }
 
@@ -248,6 +254,17 @@ export async function onRequest(context) {
       ).all();
       const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
 
+      // Also exclude tx signatures used by spawn events (prevent spawn payments matching genesis claims)
+      const spawnEvents = await db.prepare(
+        "SELECT data FROM events WHERE type = 'spawn' AND created_at > datetime('now', '-24 hours')"
+      ).all();
+      for (const se of spawnEvents.results) {
+        try {
+          const d = JSON.parse(se.data);
+          if (d.sol_tx) usedSigs.add(d.sol_tx);
+        } catch {}
+      }
+
       if (recentSigs?.length > 0) {
         for (const sig of recentSigs) {
           if (sig.err || amountMatched.size >= stillPending.results.length) break;
@@ -271,6 +288,16 @@ export async function onRequest(context) {
 
           for (const pr of stillPending.results) {
             if (amountMatched.has(pr.id)) continue;
+
+            // Skip payment requests for agents that are already alive with a confirmed payment
+            const agentCheck = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
+            if (agentCheck && agentCheck.status === 'alive') {
+              const hasConfirmed = await db.prepare(
+                "SELECT id FROM payment_requests WHERE agent_id = ? AND status = 'confirmed' LIMIT 1"
+              ).bind(pr.agent_id).first();
+              if (hasConfirmed) { amountMatched.add(pr.id); continue; }
+            }
+
             // Match within 5% tolerance (users may round amounts)
             if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
               // Check $SPAWN token balance if required

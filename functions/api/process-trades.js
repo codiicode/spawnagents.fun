@@ -1,6 +1,6 @@
 import { processAgent } from "../_lib/engine.js";
-import { discoverTokens, setMoralisKey, setDiscoveryKV } from "../_lib/market-data.js";
-import { setJupiterApiKey } from "../_lib/solana.js";
+import { discoverTokens, setMoralisKey, setDiscoveryKV, loadTokenDataCache } from "../_lib/market-data.js";
+import { setJupiterApiKey, loadBalanceCache } from "../_lib/solana.js";
 
 export async function onRequest(context) {
   if (context.env.JUPITER_API_KEY) setJupiterApiKey(context.env.JUPITER_API_KEY);
@@ -26,18 +26,34 @@ export async function onRequest(context) {
   const batchIdx = url.searchParams.get("batch");
   const totalBatches = url.searchParams.get("batches");
 
-  return await runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches);
+  // Accept pre-fetched data from Hetzner runner
+  let balances = null;
+  let tokenData = null;
+  let preFetchedCandidates = null;
+  try {
+    const body = await context.request.json();
+    if (body && body.balances) balances = body.balances;
+    if (body && body.tokenData) tokenData = body.tokenData;
+    if (body && body.candidates) preFetchedCandidates = body.candidates;
+  } catch {}
+
+  return await runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, preFetchedCandidates);
 }
 
-async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches) {
-  // Discover candidate tokens ONCE, share across all agents
+async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, preFetchedCandidates) {
+  // Use pre-fetched candidates from Hetzner, fallback to Worker-side discovery
   let candidates = [];
-  try {
-    candidates = await discoverTokens();
-  } catch (e) {
-    console.error("Discovery failed:", e.message);
+  if (preFetchedCandidates && preFetchedCandidates.length > 0) {
+    candidates = preFetchedCandidates;
+    console.log(`Using ${candidates.length} pre-fetched candidates from Hetzner`);
+  } else {
+    try {
+      candidates = await discoverTokens();
+    } catch (e) {
+      console.error("Discovery failed:", e.message);
+    }
+    console.log(`Worker-side discovery: ${candidates.length} candidate tokens`);
   }
-  console.log(`Discovered ${candidates.length} candidate tokens`);
 
   // Market regime detection — shared across all agents
   function detectMarketRegime(candidates) {
@@ -59,22 +75,38 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches) {
   console.log(`Market regime: ${JSON.stringify(marketRegime)}`);
 
   const agentsRaw = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
-  let allAgents = agentsRaw.results.slice().sort(() => Math.random() - 0.5).slice(0, 15);
+  let agentsList = agentsRaw.results.slice().sort(() => Math.random() - 0.5).slice(0, 15);
   if (batchIdx !== null && batchIdx !== undefined) {
     const bi = parseInt(batchIdx);
     const tb = parseInt(totalBatches || "3");
-    const perBatch = Math.ceil(allAgents.length / tb);
-    allAgents = allAgents.slice(bi * perBatch, (bi + 1) * perBatch);
+    const perBatch = Math.ceil(agentsList.length / tb);
+    agentsList = agentsList.slice(bi * perBatch, (bi + 1) * perBatch);
   }
-  const agentsList = allAgents;
+
+  // Load pre-fetched data from Hetzner runner
+  if (balances && Object.keys(balances).length > 0) {
+    loadBalanceCache(balances);
+    console.log(`Loaded ${Object.keys(balances).length} pre-fetched balances`);
+    // Store balances in KV for portfolio endpoint
+    if (kv) {
+      for (const agent of agentsList) {
+        const b = balances[agent.agent_wallet];
+        if (b) {
+          await kv.put(`balance:${agent.id}`, JSON.stringify({ sol: b.sol, tokens: b.tokens || [], updated: Date.now() }), { expirationTtl: 600 });
+        }
+      }
+    }
+  }
+  if (tokenData && Object.keys(tokenData).length > 0) {
+    loadTokenDataCache(tokenData);
+  }
   const results = [];
   const buyCount = {};
   const MAX_BUYERS_PER_TOKEN = 3;
 
-  // Process agents in parallel batches of 2 to avoid RPC rate limits
-  const BATCH_SIZE = 2;
-  for (let b = 0; b < agentsList.length; b += BATCH_SIZE) {
-    const batch = agentsList.slice(b, b + BATCH_SIZE);
+  // Process agents sequentially to avoid RPC rate limits
+  for (let b = 0; b < agentsList.length; b++) {
+    const batch = [agentsList[b]];
     const batchResults = await Promise.allSettled(batch.map(async (agent) => {
       const agentSecret = await kv.get(`agent:${agent.id}:secret`);
       if (!agentSecret) return { agent: agent.id, error: "no keypair" };
@@ -104,7 +136,7 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches) {
       }
 
       const sellCount = (decision.sells || []).filter(s => s.action === 'sell' && s.tx_signature).length;
-      return { agent: agent.id, action: decision.action, sells: sellCount, reason: decision.reason, tx: decision.tx_signature || null, filterStats: decision.filterStats, topScored: decision.topScored, skipped: decision.skipped };
+      return { agent: agent.id, action: decision.action, sells: sellCount, reason: decision.reason, tx: decision.tx_signature || null, filterStats: decision.filterStats, topScored: decision.topScored, skipped: decision.skipped, _debug: decision._debug };
     }));
 
     for (const r of batchResults) {

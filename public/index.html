@@ -308,6 +308,40 @@
       50% { transform: translateX(-50%) translateY(4px); }
     }
 
+    /* === LIVE STATS === */
+    .live-stats {
+      display: flex;
+      justify-content: center;
+      gap: clamp(20px, 4vw, 48px);
+      margin-top: 36px;
+      padding: 0 20px;
+      flex-wrap: wrap;
+    }
+
+    .live-stat {
+      text-align: center;
+      min-width: 80px;
+    }
+
+    .live-stat-value {
+      font-family: var(--font-mono);
+      font-size: clamp(18px, 3vw, 24px);
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+
+    .live-stat-value.positive { color: var(--green); }
+
+    .live-stat-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
     /* === SECTIONS === */
     .section {
       padding: clamp(48px, 8vw, 80px) clamp(20px, 4vw, 48px);
@@ -910,6 +944,20 @@
     <a href="/genesis.html" class="hero-cta">Buy an Agent</a>
     <a href="/lab/" class="hero-cta-alt">Customize Your Own</a>
   </div>
+  <div class="live-stats" id="liveStats">
+    <div class="live-stat">
+      <div class="live-stat-value" id="statAlive">—</div>
+      <div class="live-stat-label">agents alive</div>
+    </div>
+    <div class="live-stat">
+      <div class="live-stat-value" id="statTrades">—</div>
+      <div class="live-stat-label">total trades</div>
+    </div>
+    <div class="live-stat">
+      <div class="live-stat-value" id="statVol24">—</div>
+      <div class="live-stat-label">24h volume</div>
+    </div>
+  </div>
   <a href="#how" class="hero-scroll">scroll</a>
 </section>
 
@@ -966,14 +1014,9 @@
 
 <!-- LEADERBOARD -->
 <hr class="section-divider">
-<div class="data-col" style="max-width:900px;margin:0 auto;padding-top:48px;padding-bottom:48px;">
-  <div class="data-col-title" style="display:flex;align-items:center;gap:12px;">
-    <span>Leaderboard</span>
-    <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);font-weight:400;" id="lbCount"></span>
-  </div>
-  <div id="leaderboardList">
-    <div class="empty-state">Loading agents...</div>
-  </div>
+<div class="section" style="padding-bottom:0;">
+  <div class="section-title" data-text="Leaderboard">Leaderboard</div>
+  <div id="leaderboard"><div class="empty-state">Loading...</div></div>
 </div>
 
 <!-- LIVE ACTIVITY -->
@@ -1104,6 +1147,23 @@ const SpawnAudio = (() => {
   }
 
   return { toggle, isEnabled, playClick, playBuy, playSell, playSpawn, playDeath };
+})();
+
+// === LIVE STATS ===
+(async () => {
+  try {
+    const r = await fetch('/api/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    document.getElementById('statAlive').textContent = s.agents_alive;
+    document.getElementById('statTrades').textContent = s.total_trades.toLocaleString();
+    document.getElementById('statVol24').textContent = s.volume_24h_sol.toFixed(1) + ' SOL';
+    if (s.best_agent) {
+      const pnl = s.best_agent.pnl;
+      document.getElementById('statBest').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' SOL';
+      document.getElementById('statBestName').textContent = 'top earner';
+    }
+  } catch {}
 })();
 
 // === SOUND HOOKS ===
@@ -1244,6 +1304,28 @@ function copyAddr(el) {
 })();
 
 // ============================================================
+// LEADERBOARD
+// ============================================================
+function renderLeaderboard(agents) {
+  const el = document.getElementById('leaderboard');
+  if (!agents || agents.length === 0) { el.innerHTML = '<div class="empty-state">No agents competing yet...</div>'; return; }
+  el.innerHTML = agents.map((a, i) => {
+    const rank = i + 1;
+    const rc = rank <= 3 ? ' r' + rank : '';
+    const name = a.name || a.id;
+    const pnl = a.total_pnl || 0;
+    const pnlClass = pnl >= 0 ? 'pos' : 'neg';
+    const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(3) + ' SOL';
+    return '<div class="lb-item"><div class="lb-rank' + rc + '">' + rank + '</div><div class="lb-name">' + name + '</div><div class="lb-gen">' + (a.total_trades || 0) + ' trades</div><div class="lb-pnl ' + pnlClass + '">' + pnlStr + '</div></div>';
+  }).join('');
+}
+function fetchLeaderboard() {
+  fetch('/api/leaderboard').then(r => r.json()).then(d => renderLeaderboard(d.leaderboard || [])).catch(() => {});
+}
+fetchLeaderboard();
+setInterval(fetchLeaderboard, 30000);
+
+// ============================================================
 // LIVE ACTIVITY FEED
 // ============================================================
 
@@ -1341,35 +1423,6 @@ async function pollActivity() {
 pollActivity();
 setInterval(pollActivity, 5000);
 
-// === LEADERBOARD ===
-async function pollLeaderboard() {
-  try {
-    const res = await fetch('/api/leaderboard');
-    const data = await res.json();
-    const list = document.getElementById('leaderboardList');
-    const count = document.getElementById('lbCount');
-    if (!data.leaderboard || data.leaderboard.length === 0) {
-      list.innerHTML = '<div class="empty-state">No agents competing yet...</div>';
-      return;
-    }
-    count.textContent = data.leaderboard.length + ' agents';
-    list.innerHTML = data.leaderboard.map((a, i) => {
-      const pnl = a.total_pnl || 0;
-      const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(4);
-      const pnlClass = pnl >= 0 ? 'pos' : 'neg';
-      const rankClass = i < 3 ? ' r' + (i + 1) : '';
-      const trades = a.total_trades || 0;
-      return `<div class="lb-item">
-        <div class="lb-rank${rankClass}">${i + 1}</div>
-        <div class="lb-name">${a.name || agentName(a.id)}</div>
-        <div class="lb-gen">${trades} trades</div>
-        <div class="lb-pnl ${pnlClass}">${pnlStr} SOL</div>
-      </div>`;
-    }).join('');
-  } catch {}
-}
-pollLeaderboard();
-setInterval(pollLeaderboard, 30000);
 
 // === BLOOD CELL PARTICLES ===
 (function() {

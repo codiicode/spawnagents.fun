@@ -453,9 +453,9 @@
   <!-- 01 OVERVIEW -->
   <div class="block">
     <div class="block-title">Overview</div>
-    <p>SPAWN is an autonomous agent ecosystem on Solana. You buy an AI trading agent. That agent gets its own wallet, its own DNA, and starts trading memecoins on its own. If it makes enough profit, it can reproduce — creating a mutated child agent. If it loses too much, it dies. Natural selection with real money.</p>
-    <p>There is no human intervention in trading decisions. Each agent's behavior is entirely determined by its DNA — a set of 10 parameters that control how aggressively it trades, how long it holds, how much risk it takes, and what tokens it looks for. No two agents trade the same way.</p>
-    <p>The ecosystem starts with <strong>15 genesis agents</strong> (generation 0). From there, the bloodline grows through reproduction. Children inherit mutated DNA from their parents. The maximum depth is <strong>5 generations</strong>.</p>
+    <p>SPAWN is an autonomous agent ecosystem on Solana. You claim a genesis agent or create a custom one. That agent gets its own wallet, its own DNA, and starts trading memecoins on its own. If it makes enough profit, it can reproduce — creating a mutated child agent. If it loses too much, it dies. Natural selection with real money.</p>
+    <p>There is no human intervention in trading decisions. Each agent's behavior is entirely determined by its DNA — a set of parameters that control how aggressively it trades, how long it holds, how much risk it takes, and what tokens it looks for. No two agents trade the same way.</p>
+    <p>The ecosystem starts with <strong>15 genesis agents</strong> (generation 0). Anyone can also <strong>create a custom agent</strong> with their own DNA, name, and avatar. From there, the bloodline grows through reproduction. Children inherit mutated DNA from their parents. The maximum depth is <strong>5 generations</strong>.</p>
   </div>
 
   <!-- 02 GENESIS -->
@@ -486,11 +486,11 @@
       </tbody>
     </table>
 
-    <p>When you purchase a genesis agent, <strong>85%</strong> of the purchase price becomes the agent's trading capital. The remaining <strong>15%</strong> is a protocol fee.</p>
+    <p>When you claim a genesis agent, <strong>95%</strong> of the purchase price becomes the agent's trading capital. The remaining <strong>5%</strong> is a protocol fee.</p>
 
     <div class="info-box">
       <span class="label">Example</span>
-      You buy The Wolf for <code>4 SOL</code>. The protocol keeps <code>0.6 SOL</code> (15%). Your agent receives <code>3.4 SOL</code> as trading capital and begins trading immediately.
+      You claim The Wolf for <code>4 SOL</code>. The protocol keeps <code>0.2 SOL</code> (5%). Your agent receives <code>3.8 SOL</code> as trading capital and begins trading immediately.
     </div>
 
     <p>Each agent gets a <strong>dedicated Solana wallet</strong>. The private key is stored securely in encrypted key-value storage. The agent uses this wallet exclusively for trading — no other agent or user can access it.</p>
@@ -509,9 +509,9 @@
         <tr><td>aggression</td><td>How eagerly the agent enters trades. Higher = buys more often, chases pumps.</td><td>0.05 – 0.95</td></tr>
         <tr><td>patience</td><td>How long the agent holds winning positions. Higher = waits for bigger profits before selling.</td><td>0.05 – 0.95</td></tr>
         <tr><td>risk_tolerance</td><td>How much risk the agent accepts. Higher = trades newer, sketchier tokens with lower safety scores.</td><td>0.05 – 0.95</td></tr>
-        <tr><td>sell_profit_pct</td><td>Target profit percentage to take profit. Adjusted by patience.</td><td>5% – 200%</td></tr>
-        <tr><td>sell_loss_pct</td><td>Maximum loss percentage before stop-loss triggers.</td><td>3% – 50%</td></tr>
-        <tr><td>max_position_pct</td><td>Maximum % of available SOL the agent can spend on a single trade.</td><td>5% – 80%</td></tr>
+        <tr><td>sell_profit_pct</td><td>Target profit percentage to take profit. Adjusted by patience.</td><td>20% – 200%</td></tr>
+        <tr><td>sell_loss_pct</td><td>Maximum loss percentage before stop-loss triggers.</td><td>15% – 50%</td></tr>
+        <tr><td>max_position_pct</td><td>Maximum % of available SOL the agent can spend on a single trade.</td><td>10% – 90%</td></tr>
         <tr><td>buy_threshold_volume</td><td>Minimum 24h trading volume (USD) a token must have before the agent considers buying.</td><td>$100 – $50,000</td></tr>
         <tr><td>buy_threshold_holders</td><td>Minimum 24h transaction count a token must have.</td><td>50 – 5,000</td></tr>
         <tr><td>check_interval_min</td><td>Minutes between each trading cycle. Lower = more active agent.</td><td>2 – 20 min</td></tr>
@@ -526,7 +526,7 @@
 
     <div class="info-box">
       <span class="label">How stop-loss actually works</span>
-      Similarly: <code>stop = sell_loss_pct × (1 + risk_tolerance × 0.5)</code>. Higher risk tolerance means the agent tolerates deeper drawdowns before cutting losses.
+      Stop loss triggers at exactly <code>-sell_loss_pct</code>. If an agent has <code>sell_loss_pct: 15</code>, it sells when down 15%. No multipliers — the value is used as-is. Minimum enforced: 15%.
     </div>
   </div>
 
@@ -537,11 +537,11 @@
 
     <p><strong>Selling.</strong> For each token the agent currently holds, it checks the current price against its cost basis. If the profit exceeds the take-profit target, it sells. If the loss exceeds the stop-loss threshold, it sells. Otherwise, it holds.</p>
 
-    <p><strong>Token discovery.</strong> Agents don't pick tokens randomly. The system fetches potential candidates from three DexScreener sources:</p>
+    <p><strong>Token discovery.</strong> Agents don't pick tokens randomly. Every cycle, the system scans <strong>10 sources</strong> for potential candidates:</p>
     <ul>
-      <li>Top boosted tokens on Solana</li>
-      <li>Latest boosted tokens</li>
-      <li>Trending search results for Solana memecoins</li>
+      <li>DexScreener — new pairs, boosted tokens, token profiles, search results</li>
+      <li>pump.fun — currently live, king of the hill, recently graduated</li>
+      <li>GeckoTerminal — trending pools, new pools, PumpSwap pools</li>
     </ul>
     <p>This candidate list is fetched once per cycle and shared across all agents. Each agent then filters the list based on its own DNA thresholds.</p>
 
@@ -562,9 +562,9 @@
 
     <p><strong>Buy decision.</strong> Even after all checks pass, the buy isn't guaranteed. There's a probability gate: <code>buy_chance = 0.3 + aggression × 0.5</code>. An agent with 0.75 aggression has a 68% chance to buy on each signal. This prevents even aggressive agents from buying everything.</p>
 
-    <p><strong>Execution.</strong> All trades are executed via <strong>Jupiter aggregator</strong> on Solana for best-price routing. Slippage tolerance is 3% (300 bps). The agent uses only its own wallet — no shared funds.</p>
+    <p><strong>Execution.</strong> Trades are executed via <strong>Jupiter aggregator</strong> for standard tokens and <strong>PumpPortal</strong> for pump.fun tokens. Buy slippage is 1.5%. Sell slippage starts at 5% and increases automatically on failed attempts (up to 20%, or 50% in emergency sells). Each agent uses only its own wallet — no shared funds.</p>
 
-    <p>Agents also have a <strong>2-hour cooldown</strong> on tokens they've recently sold, preventing buy-sell loops on the same token.</p>
+    <p>Agents have a <strong>buy cooldown</strong> that scales with aggression (aggressive agents: ~10 min, conservative agents: ~30 min). They also won't rebuy a token they sold within the last <strong>2 hours</strong>, and will permanently avoid tokens they previously lost money on.</p>
   </div>
 
   <!-- 05 REPRODUCTION -->
@@ -582,20 +582,7 @@
 
     <p><strong>Anyone can trigger a spawn.</strong> You don't need to own the parent agent to buy its child. When a parent qualifies, anyone can pay to spawn a new child from it. The child gets its own wallet, its own mutated DNA, and starts trading independently.</p>
 
-    <p><strong>Spawn cost.</strong> Spawning requires burning <strong>$SPAWN tokens</strong>. Earlier generations cost more — closer to genesis = stronger DNA:</p>
-
-    <table class="data-table">
-      <thead>
-        <tr><th>Child Generation</th><th>$SPAWN Burn Cost</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Gen 1 (child of genesis)</td><td class="val">1,000,000 $SPAWN</td></tr>
-        <tr><td>Gen 2</td><td class="val">750,000 $SPAWN</td></tr>
-        <tr><td>Gen 3</td><td class="val">500,000 $SPAWN</td></tr>
-        <tr><td>Gen 4</td><td class="val">250,000 $SPAWN</td></tr>
-        <tr><td>Gen 5 (maximum)</td><td class="val">100,000 $SPAWN</td></tr>
-      </tbody>
-    </table>
+    <p><strong>Spawn cost.</strong> Spawning is free — no $SPAWN token burn required. The spawner deposits a minimum of <strong>1 SOL</strong> as trading capital for the child. A <strong>5% protocol fee</strong> is deducted, and the remaining 95% becomes the child's trading capital.</p>
 
     <p><strong>DNA mutation.</strong> When a child is created, 1–2 of the parent's DNA parameters are randomly selected and mutated by ±20%. Each gene has a 50% chance of being picked for mutation. Mutations are clamped to valid ranges so no parameter goes out of bounds. This means children are similar to their parents but never identical — evolution in action.</p>
 
@@ -664,13 +651,12 @@
         <tr><th>Fee</th><th>Amount</th><th>When</th></tr>
       </thead>
       <tbody>
-        <tr><td>Genesis fee</td><td class="val">15%</td><td>Deducted from purchase price. Rest becomes trading capital.</td></tr>
+        <tr><td>Protocol fee</td><td class="val">5%</td><td>Deducted from genesis purchase and spawn deposits. Rest becomes trading capital.</td></tr>
         <tr><td>Royalty</td><td class="val">10%</td><td>Deducted from child's trading profits. Sent to parent agent.</td></tr>
-        <tr><td>Protocol fee</td><td class="val">2%</td><td>Protocol operational overhead.</td></tr>
       </tbody>
     </table>
 
-    <p>There are no hidden fees. No subscription. No recurring charges. The only costs are the initial purchase and the token burn for spawning children.</p>
+    <p>There are no hidden fees. No subscription. No recurring charges. The only cost is the initial deposit (genesis or custom agent).</p>
   </div>
 
   <!-- 10 OWNERSHIP -->
@@ -695,12 +681,28 @@
     </ul>
   </div>
 
-  <!-- 11 BLOOD TOKEN -->
+  <!-- 11 CUSTOM AGENTS -->
+  <div class="block">
+    <div class="block-title">Custom Agents</div>
+    <p>Anyone can create a <strong>custom agent</strong> through the Customize page. You choose your own name, avatar, and DNA parameters. The minimum deposit is <strong>1 SOL</strong> (5% protocol fee, 95% becomes trading capital).</p>
+
+    <p><strong>What you control:</strong></p>
+    <ul>
+      <li>Agent name (up to 24 characters)</li>
+      <li>Avatar image</li>
+      <li>All DNA parameters — aggression, risk, patience, take-profit, stop-loss, position size</li>
+      <li>Degen mode toggle (trades pump.fun tokens via PumpPortal)</li>
+      <li>Sell strategy — full exit, partial (recover cost + let rest ride), or trailing stop</li>
+      <li>Deposit amount (min 1 SOL)</li>
+    </ul>
+
+    <p>Custom agents appear on the bloodline tree and trade alongside genesis agents. They use the same engine, same discovery, same execution — just with your DNA.</p>
+  </div>
+
+  <!-- 12 SPAWN TOKEN -->
   <div class="block">
     <div class="block-title">$SPAWN Token</div>
-    <p><strong>$SPAWN</strong> is the utility token of the SPAWN ecosystem, launched on pump.fun. Its primary use is as the cost to spawn child agents — you must burn $SPAWN tokens to reproduce.</p>
-    <p>Earlier generations cost more to spawn, creating deflationary pressure as the ecosystem grows. More reproduction = more $SPAWN burned = less supply.</p>
-    <p>$SPAWN is not used for trading, governance, or staking. Its only purpose is spawning.</p>
+    <p><strong>$SPAWN</strong> is the ecosystem token, launched on pump.fun. It represents the SPAWN protocol.</p>
   </div>
 
   <!-- 12 SUMMARY -->
@@ -714,17 +716,22 @@
       <tbody>
         <tr><td>Genesis agents</td><td class="val">15</td></tr>
         <tr><td>Max generations</td><td class="val">5</td></tr>
-        <tr><td>Genesis fee</td><td class="val">15%</td></tr>
-        <tr><td>Trading capital</td><td class="val">85% of purchase</td></tr>
+        <tr><td>Protocol fee</td><td class="val">5%</td></tr>
+        <tr><td>Trading capital</td><td class="val">95% of deposit</td></tr>
         <tr><td>Royalty to parent</td><td class="val">10% of profit</td></tr>
         <tr><td>Min PnL to spawn</td><td class="val">+0.5 SOL</td></tr>
         <tr><td>Spawn cooldown</td><td class="val">6 hours</td></tr>
-        <tr><td>Spawn cost</td><td class="val">1M–100K $SPAWN (decreasing)</td></tr>
+        <tr><td>Spawn cost</td><td class="val">Free (min 1 SOL deposit)</td></tr>
+        <tr><td>Custom agent min deposit</td><td class="val">1 SOL</td></tr>
+        <tr><td>Min take-profit</td><td class="val">20%</td></tr>
+        <tr><td>Min stop-loss</td><td class="val">15%</td></tr>
         <tr><td>Death threshold</td><td class="val">80% capital loss</td></tr>
-        <tr><td>Slippage</td><td class="val">3% (300 bps)</td></tr>
+        <tr><td>Buy slippage</td><td class="val">1.5%</td></tr>
+        <tr><td>Sell slippage</td><td class="val">5% base, up to 20%</td></tr>
+        <tr><td>Discovery sources</td><td class="val">10</td></tr>
+        <tr><td>Trade cycle</td><td class="val">Every 3 minutes</td></tr>
         <tr><td>Payment expiry</td><td class="val">30 minutes</td></tr>
         <tr><td>Withdrawal reserve</td><td class="val">0.003 SOL min</td></tr>
-        <tr><td>Protocol wallet</td><td class="val" style="font-size:10px;word-break:break-all;">4EtGKS...gmAc</td></tr>
       </tbody>
     </table>
   </div>

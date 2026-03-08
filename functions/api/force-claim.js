@@ -49,7 +49,9 @@ export async function onRequest(context) {
     return Response.json({ error: 'Agent already claimed' }, { status: 409 });
   }
 
-  const dna = GENESIS_DNA[agent_id];
+  let dna = GENESIS_DNA[agent_id];
+  // Support custom DNA for spawned agents
+  if (!dna && body.dna) dna = body.dna;
   if (!dna) return Response.json({ error: 'Unknown agent' }, { status: 404 });
 
   // Generate keypair
@@ -68,14 +70,18 @@ export async function onRequest(context) {
   }
 
   // Create or update agent
+  const parentId = body.parent_id || null;
+  const generation = body.generation || 0;
+  const agentName = body.name || null;
+
   if (existing) {
     await db.prepare(
-      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0 WHERE id = ?"
-    ).bind(buyer_wallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agent_id).run();
+      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0, parent_id = COALESCE(?, parent_id), generation = ?, name = COALESCE(?, name) WHERE id = ?"
+    ).bind(buyer_wallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, parentId, generation, agentName, agent_id).run();
   } else {
     await db.prepare(
-      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
-    ).bind(agent_id, buyer_wallet, keypair.publicKey, JSON.stringify(dna), tradingCapital).run();
+      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name) VALUES (?, ?, ?, ?, ?, ?, 'alive', ?, ?)"
+    ).bind(agent_id, parentId, generation, buyer_wallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName).run();
   }
 
   // Mark any matching payment requests as confirmed

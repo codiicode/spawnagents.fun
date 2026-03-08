@@ -6,6 +6,16 @@ let _kv = null;
 export function setMoralisKey(key) { _moralisKey = key; }
 export function setDiscoveryKV(kv) { _kv = kv; }
 
+// --- Token data cache (pre-fetched from Hetzner) ---
+const _tokenDataCache = new Map();
+export function loadTokenDataCache(data) {
+  _tokenDataCache.clear();
+  for (const [mint, tokenData] of Object.entries(data)) {
+    _tokenDataCache.set(mint, tokenData);
+  }
+  console.log(`[tokenDataCache] Loaded ${_tokenDataCache.size} token data entries`);
+}
+
 const MORALIS_CACHE_KEY = 'cache:moralis:graduated';
 const MORALIS_CACHE_TTL = 120; // 2 minutes
 
@@ -387,6 +397,7 @@ function parsePair(pair) {
 // ============================================================
 
 export async function getTokenData(tokenMint) {
+  if (_tokenDataCache.has(tokenMint)) return _tokenDataCache.get(tokenMint);
   try {
     const res = await fetch(`${DEXSCREENER}/latest/dex/tokens/${tokenMint}`);
     if (!res.ok) return null;

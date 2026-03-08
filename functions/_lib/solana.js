@@ -26,14 +26,55 @@ export async function generateKeypair() {
   };
 }
 
-// Get SOL balance in SOL (not lamports)
+// --- Balance cache (populated by prefetchAllBalances, used by getBalance/getTokenBalances) ---
+const _balanceCache = new Map();
+const _tokenBalanceCache = new Map();
+
+// Load pre-fetched balance data into cache (called from process-trades with data from Hetzner)
+export function loadBalanceCache(data) {
+  _balanceCache.clear();
+  _tokenBalanceCache.clear();
+  for (const [pubkey, info] of Object.entries(data)) {
+    _balanceCache.set(pubkey, info.sol);
+    const tokens = info.tokens || [];
+    _tokenBalanceCache.set(pubkey, tokens);
+    if (tokens.length > 0) {
+      console.log(`[cache] ${pubkey.substring(0,8)}: ${tokens.length} token(s) - ${tokens.map(t=>t.mint.substring(0,12)+'='+t.amount).join(', ')}`);
+    }
+  }
+}
+
+// Get SOL balance in SOL (not lamports) — uses cache if available
 export async function getBalance(pubkeyB58, rpcUrl) {
+  if (_balanceCache.has(pubkeyB58)) return _balanceCache.get(pubkeyB58);
   const data = await rpcCall(rpcUrl, 'getBalance', [pubkeyB58, { commitment: 'confirmed' }]);
   return (data?.value || 0) / 1e9;
 }
 
-// Get SPL token balances for a wallet (checks both Token and Token-2022 programs)
+// Check holder distribution — returns number of holders with >1% of TOTAL supply
+export async function getHolderConcentration(mintAddress, rpcUrl) {
+  const [data, supplyData] = await Promise.all([
+    rpcCall(rpcUrl, 'getTokenLargestAccounts', [mintAddress, { commitment: 'confirmed' }]),
+    rpcCall(rpcUrl, 'getTokenSupply', [mintAddress, { commitment: 'confirmed' }]),
+  ]);
+  const accounts = data?.value || [];
+  if (accounts.length === 0) return { bigHolders: 0, topHolders: [] };
+
+  // Use actual total supply, not sum of top 20
+  const totalSupply = parseFloat(supplyData?.value?.uiAmountString || '0');
+  if (totalSupply <= 0) return { bigHolders: 0, topHolders: [] };
+
+  const topHolders = accounts
+    .map(a => ({ amount: parseFloat(a.uiAmountString || '0'), pct: (parseFloat(a.uiAmountString || '0') / totalSupply) * 100 }))
+    .filter(h => h.pct > 1)
+    .sort((a, b) => b.pct - a.pct);
+
+  return { bigHolders: topHolders.length, topHolders };
+}
+
+// Get SPL token balances for a wallet — uses cache if available
 export async function getTokenBalances(pubkeyB58, rpcUrl) {
+  if (_tokenBalanceCache.has(pubkeyB58)) return _tokenBalanceCache.get(pubkeyB58);
   const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
   const TOKEN_2022 = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
@@ -151,26 +192,8 @@ export async function signAndSendSwapTx(swapTxBase64, secretKeyB58, rpcUrl) {
     { encoding: 'base64', skipPreflight: true, preflightCommitment: 'confirmed' },
   ]);
 
-  // Confirm tx actually landed — poll up to 30s
-  const maxAttempts = 10;
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    try {
-      const statusRes = await rpcCall(rpcUrl, 'getSignatureStatuses', [[txSig], { searchTransactionHistory: false }]);
-      const status = statusRes?.value?.[0];
-      if (!status) continue; // not yet processed
-      if (status.err) {
-        throw new Error(`Transaction failed on-chain: ${JSON.stringify(status.err)}`);
-      }
-      if (status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized') {
-        return txSig;
-      }
-    } catch (e) {
-      if (e.message.startsWith('Transaction failed')) throw e;
-      // RPC error, retry
-    }
-  }
-  throw new Error(`Transaction not confirmed after ${maxAttempts * 3}s: ${txSig}`);
+  // Fire and forget — confirmation checked in next cycle by recalc-pnl
+  return txSig;
 }
 
 // Send SOL from one wallet to another (raw transfer, no Jupiter)
@@ -285,33 +308,80 @@ export async function getUniqueTraders(tokenMint, rpcUrl, limit = 20) {
   }
 }
 
-async function rpcCall(url, method, params, retries = 3) {
-  for (let attempt = 0; attempt < retries; attempt++) {
+// Batch JSON-RPC: send multiple calls in ONE HTTP request
+async function batchRpcCall(url, calls) {
+  const body = calls.map((c, i) => ({
+    jsonrpc: '2.0', id: i, method: c.method, params: c.params,
+  }));
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const controller = new AbortController();
+      const tid = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      clearTimeout(tid);
       const text = await res.text();
-      if (!text) {
-        if (attempt < retries - 1) { await sleep(300 * (attempt + 1)); continue; }
-        throw new Error(`RPC ${method}: empty response`);
-      }
+      if (!text) { await sleep(500 * (attempt + 1)); continue; }
       const data = JSON.parse(text);
-      if (data.error) {
-        if (data.error.code === 429 && attempt < retries - 1) { await sleep(500 * (attempt + 1)); continue; }
-        throw new Error(`RPC ${method}: ${data.error.message}`);
-      }
-      return data.result;
+      if (!Array.isArray(data)) throw new Error('batch RPC: expected array response');
+      data.sort((a, b) => a.id - b.id);
+      return data.map(r => r.result);
     } catch (e) {
-      if (attempt < retries - 1 && (e.message.includes('empty response') || e.message.includes('fetch failed'))) {
-        await sleep(300 * (attempt + 1));
-        continue;
-      }
+      if (attempt < 2) { await sleep(500 * (attempt + 1)); continue; }
       throw e;
     }
   }
+  throw new Error('batch RPC failed after 3 attempts');
+}
+
+const RPC_FALLBACKS = ['https://solana-rpc.publicnode.com', 'https://api.mainnet-beta.solana.com'];
+
+async function rpcCall(url, method, params) {
+  const endpoints = [url, ...RPC_FALLBACKS];
+  let lastErr;
+  for (const endpoint of endpoints) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const tid = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+          signal: controller.signal,
+        });
+        clearTimeout(tid);
+        if (res.status === 429) {
+          lastErr = new Error(`RPC ${method}: rate limited`);
+          break;
+        }
+        const text = await res.text();
+        if (!text) {
+          if (attempt < 1) { await sleep(300); continue; }
+          lastErr = new Error(`RPC ${method}: empty response`);
+          break;
+        }
+        const data = JSON.parse(text);
+        if (data.error) {
+          if (data.error.code === -32429 || data.error.code === 429 || (data.error.message && data.error.message.includes('blocked'))) {
+            lastErr = new Error(`RPC ${method}: ${data.error.message}`);
+            break;
+          }
+          throw new Error(`RPC ${method}: ${data.error.message}`);
+        }
+        return data.result;
+      } catch (e) {
+        lastErr = e;
+        if (e.name === 'AbortError' && attempt < 1) { continue; }
+        break;
+      }
+    }
+  }
+  throw lastErr || new Error(`RPC ${method}: all endpoints failed`);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
