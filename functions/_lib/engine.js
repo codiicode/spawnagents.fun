@@ -123,15 +123,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       continue;
     }
 
-    // === MINIMUM HOLD TIME ===
+    // === MINIMUM HOLD TIME (checked later — SL bypasses this) ===
     const minHoldMinutes = Math.max(2, dna.check_interval_min || 10);
     const holdCheckRow = await db.prepare(
       "SELECT created_at FROM trades WHERE agent_id = ? AND token_address = ? AND action = 'buy' ORDER BY created_at DESC LIMIT 1"
     ).bind(agent.id, token.mint).first();
-    if (holdCheckRow) {
-      const minutesHeld = (Date.now() - new Date(holdCheckRow.created_at + 'Z').getTime()) / 60000;
-      if (minutesHeld < minHoldMinutes) { _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: `hold time ${Math.round(minutesHeld)}/${minHoldMinutes}m` }); continue; }
-    }
+    const minutesHeld = holdCheckRow ? (Date.now() - new Date(holdCheckRow.created_at + 'Z').getTime()) / 60000 : 999;
+    const holdTimeMet = minutesHeld >= minHoldMinutes;
 
     // Auto-sell dust: any position worth less than $10
     const posValueUsd = (tokenData.price_usd || 0) * token.amount;
@@ -233,9 +231,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
     const trailPct = Math.min(20 + dna.patience * 30, 35);
 
-    // Phase 1: Take profit
+    // Phase 1: Take profit (requires hold time to be met — SL still triggers below)
     // trail strategy: skip fixed TP, only trailing stop
-    if (sellStrategy !== 'trail' && !costRecovered && pnlPct >= tpThreshold) {
+    if (sellStrategy !== 'trail' && !costRecovered && pnlPct >= tpThreshold && holdTimeMet) {
       if (sellStrategy === 'full') {
         // Full exit: sell 100% at TP
         let result;
@@ -419,8 +417,17 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   // --- BUY SIGNALS ---
 
-  // Scale buy cooldown with aggression (aggressive: 10min, conservative: 30min)
-  let buyCooldown = Math.round(10 + (1 - dna.aggression) * 20);
+  // Prevent duplicate buys from retry/race conditions (KV lock for 60s)
+  if (kv) {
+    const buyLockKey = `buylock:${agent.id}`;
+    const existingLock = await kv.get(buyLockKey);
+    if (existingLock) {
+      return { sells: sellResults, action: 'hold', reason: `buy lock active (retry protection)`, _debug };
+    }
+  }
+
+  // Scale buy cooldown with aggression (aggressive: 30min, conservative: 45min)
+  let buyCooldown = Math.round(30 + (1 - dna.aggression) * 15);
   if (marketRegime?.regime === 'trending_down') buyCooldown = Math.round(buyCooldown * 1.5);
   else if (marketRegime?.regime === 'choppy') buyCooldown = Math.round(buyCooldown * 1.2);
   const lastBuy = await db.prepare(
@@ -497,10 +504,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     '12qKJmoJj9hKs12S8kPhRMrWhsyfqaiEsDh9Z38xpump',  // MESSI (rug/wash)
     'BCjURyv9Zp2oNQfLxWe3q1PeWrFLQQ9C6vLQD7JFpump',  // SOYJAK (wash)
     '6RxB1KdzVMXrrYn7nQWvaGgh5e2EpbA1FcEFtq74pump',  // DELULU (wash)
+    'HbxYCvGuCbZXzPZYVkKuPR1nNQkEg8ZFycJCtYckpump',  // CRYPTOHOUSE (rug)
+    '6EEWHJBFbF4jQtXTn1NyGoA7WawF7W8fy1GQyvhqpump',  // CRYPTOHOUSE (rug)
+    '53bYXw3o1TDkLLN2Q71im3HxETGDa3PTR4LpQVKKpump',  // TRUMPKIM (rug)
+    '7wCX9qadjWgPWW6gp2SGQ3EKzV3W6zEMmzuUL8rdpump',  // baNana (rug)
   ]);
 
   // Symbol blacklist: repeated rug names that get relaunched with new mints
-  const SYMBOL_BLACKLIST = new Set(['BOI', 'ONO']);
+  const SYMBOL_BLACKLIST = new Set(['BOI', 'ONO', 'OIL', 'CRYPTOHOUSE', 'TRUMPKIM', 'baNana']);
 
   // Cross-agent limit: max 2 agents can hold the same token
   const crowdedRows = await db.prepare(
@@ -584,7 +595,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   console.log(`Agent ${agent.id} filter: ${JSON.stringify(filterStats)}`);
 
-  const minScore = isDegen ? 2 : 3;
+  const minScore = isDegen ? 4 : 5;
   const strongCandidates = scored.filter(t => t.score >= minScore);
   const skipped = [];
   if (strongCandidates.length === 0 && scored.length > 0) {
@@ -625,11 +636,11 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     // Wash trading is still caught by vol/liq ratio filter above
 
     // === HOLDER CONCENTRATION CHECK ===
-    // Require 3+ holders with >1% of total supply (LP counts as one, so need 2+ real holders)
+    // Require 5+ holders with >1.1% of total supply to filter wash-traded rugs
     try {
       const { bigHolders } = await getHolderConcentration(t.address, rpcUrl);
-      if (bigHolders < 3) {
-        skipped.push({ token: t.symbol, reason: `bad holder distribution (${bigHolders} holders >1%)` });
+      if (bigHolders < 5) {
+        skipped.push({ token: t.symbol, reason: `bad holder distribution (${bigHolders} holders >1.1%)` });
         continue;
       }
     } catch (e) {
@@ -646,6 +657,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           pool: 'auto',
         });
         if (!ppTx) { skipped.push({ token: t.symbol, reason: 'pumpportal tx failed' }); continue; }
+
+        // Set buy lock BEFORE sending tx to prevent duplicate buys on retry
+        if (kv) await kv.put(`buylock:${agent.id}`, Date.now().toString(), { expirationTtl: 60 });
 
         const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
 
@@ -685,6 +699,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
             denominatedInSol: true, slippage: 2, pool: 'auto',
           });
           if (ppTx) {
+            if (kv) await kv.put(`buylock:${agent.id}`, Date.now().toString(), { expirationTtl: 60 });
             const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
             let tokenAmount = 0;
             try {
@@ -711,6 +726,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     if (!swapTx) { skipped.push({ token: t.symbol, reason: 'swap tx failed' }); continue; }
 
     try {
+      if (kv) await kv.put(`buylock:${agent.id}`, Date.now().toString(), { expirationTtl: 60 });
       const txSig = await signAndSendSwapTx(swapTx, agentSecret, rpcUrl);
 
       // Query on-chain balance for actual token_amount (tx already confirmed by signAndSend)

@@ -1,5 +1,5 @@
 import { decode } from '../_lib/base58.js';
-import { generateKeypair, sendSol, getTokenBalances } from '../_lib/solana.js';
+import { generateKeypair, sendSol, getTokenBalances, verifyTokenTransfer } from '../_lib/solana.js';
 
 const GENESIS_DNA = {
   "the-berserker": { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 },
@@ -119,13 +119,11 @@ export async function onRequest(context) {
       // Find buyer wallet (first signer)
       const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
-      // Check $SPAWN token balance if required
+      // Verify $SPAWN token transfer if required
       if (pr.spawn_cost && pr.spawn_cost > 0) {
         const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
-        const protocolAddr = context.env.PROTOCOL_WALLET;
-        const tokens = await getTokenBalances(protocolAddr, rpcUrl);
-        const spawnToken = tokens.find(t => t.mint === SPAWN_MINT);
-        if (!spawnToken || spawnToken.amount < pr.spawn_cost) continue; // wait for token
+        const tokenResult = await verifyTokenTransfer(buyer, context.env.PROTOCOL_WALLET, SPAWN_MINT, pr.spawn_cost, rpcUrl);
+        if (!tokenResult.verified) continue; // wait for token transfer
       }
 
       // Update payment request
@@ -254,14 +252,15 @@ export async function onRequest(context) {
       ).all();
       const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
 
-      // Also exclude tx signatures used by spawn events (prevent spawn payments matching genesis claims)
-      const spawnEvents = await db.prepare(
-        "SELECT data FROM events WHERE type = 'spawn' AND created_at > datetime('now', '-24 hours')"
+      // Also exclude tx signatures used by spawn events and claim events
+      const excludeEvents = await db.prepare(
+        "SELECT data FROM events WHERE type IN ('spawn', 'genesis_claimed', 'custom_agent_created') AND created_at > datetime('now', '-24 hours')"
       ).all();
-      for (const se of spawnEvents.results) {
+      for (const se of excludeEvents.results) {
         try {
           const d = JSON.parse(se.data);
           if (d.sol_tx) usedSigs.add(d.sol_tx);
+          if (d.tx) usedSigs.add(d.tx);
         } catch {}
       }
 
@@ -292,23 +291,20 @@ export async function onRequest(context) {
             // Skip payment requests for agents that are already alive with a confirmed payment
             const agentCheck = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
             if (agentCheck && agentCheck.status === 'alive') {
-              const hasConfirmed = await db.prepare(
-                "SELECT id FROM payment_requests WHERE agent_id = ? AND status = 'confirmed' LIMIT 1"
-              ).bind(pr.agent_id).first();
-              if (hasConfirmed) { amountMatched.add(pr.id); continue; }
+              amountMatched.add(pr.id);
+              continue;
             }
 
             // Match within 5% tolerance (users may round amounts)
             if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.05) {
-              // Check $SPAWN token balance if required
+              const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+              // Verify $SPAWN token transfer if required
               if (pr.spawn_cost && pr.spawn_cost > 0) {
                 const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
-                const tokens = await getTokenBalances(protocolAddr, rpcUrl);
-                const spawnToken = tokens.find(t => t.mint === SPAWN_MINT);
-                if (!spawnToken || spawnToken.amount < pr.spawn_cost) continue; // wait for token
+                const tokenResult = await verifyTokenTransfer(buyer, protocolAddr, SPAWN_MINT, pr.spawn_cost, rpcUrl);
+                if (!tokenResult.verified) continue; // wait for token transfer
               }
-
-              const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
 
               // Update payment request
               await db.prepare(
@@ -389,6 +385,7 @@ export async function onRequest(context) {
               }
 
               amountMatched.add(pr.id);
+              usedSigs.add(sig.signature); // prevent this tx from matching another agent
               break;
             }
           }

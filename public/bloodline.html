@@ -1135,6 +1135,7 @@ const AGENT_IMAGES = {
   'agent_9beb5312': '/the-falcon.jpg',
   'agent_29f951ee': '/the-wraith-spawn.jpg',
   'agent_42f44230': '/the-packrunner.jpg',
+  'agent_6d124cb9': '/the-bunker.jpg',
 };
 
 let allAgents = [];
@@ -1364,7 +1365,7 @@ function renderTree(nodes, edges) {
     } else {
       const pnlColor = node.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
       const pnlSign = node.total_pnl >= 0 ? '+' : '';
-      html += `<text class="node-pnl-text" y="44" fill="${pnlColor}">${pnlSign}${node.total_pnl.toFixed(1)} SOL</text>`;
+      html += `<text class="node-pnl-text" y="44" fill="${pnlColor}">${pnlSign}${node.total_pnl.toFixed(2)} SOL</text>`;
     }
 
     // Gen badge
@@ -1524,7 +1525,7 @@ function selectNode(id) {
       html += `<div class="child-item" onclick="selectNode('${child.id}')">
         <div class="child-indicator ${child.status}"></div>
         <span class="child-name">${formatName(child.id, child.name)}</span>
-        <span class="child-pnl ${cPnlClass}">${cPnlSign}${child.total_pnl.toFixed(1)}</span>
+        <span class="child-pnl ${cPnlClass}">${cPnlSign}${child.total_pnl.toFixed(2)}</span>
       </div>`;
     });
     html += '</div>';

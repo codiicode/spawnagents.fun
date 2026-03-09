@@ -1310,7 +1310,7 @@
     <div id="buyPhase1">
       <div class="spawn-modal-row">
         <span class="k">Claim cost</span>
-        <span class="v" id="modalSpawnCost">FREE</span>
+        <span class="v" id="modalSpawnCost">1,500,000 $SPAWN</span>
       </div>
       <div class="spawn-modal-row">
         <span class="k">Tier</span>
@@ -1326,6 +1326,10 @@
 
     <!-- Phase 2: Payment instructions -->
     <div id="buyPhase2" style="display:none;">
+      <div class="spawn-modal-row" id="buyTokenRow" style="display:none;">
+        <span class="k">Send $SPAWN tokens</span>
+        <span class="v" id="modalTokenAmount">—</span>
+      </div>
       <div class="spawn-modal-row">
         <span class="k">Send SOL (exact amount)</span>
         <span class="v" id="modalSolAmount">—</span>
@@ -1334,7 +1338,7 @@
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Send both to:</div>
         <div class="modal-fallback-addr" id="modalAddr" onclick="copyAddr(this)"></div>
       </div>
-      <button class="pay-btn" id="modalPayBtn" onclick="handlePay()">Pay SOL with Phantom</button>
+      <button class="pay-btn" id="modalPayBtn" onclick="handlePay()">Pay with Phantom</button>
       <button class="verify-btn" id="verifyBtn" onclick="verifyManual()">Verify Payments</button>
     </div>
 
@@ -1390,12 +1394,16 @@
         <span class="k">Parent PnL</span>
         <span class="v" id="spawnParentPnl">—</span>
       </div>
+      <div class="spawn-modal-row">
+        <span class="k">Token cost</span>
+        <span class="v" id="spawnTokenCost">500,000 $SPAWN</span>
+      </div>
       <div style="margin-top:16px;">
         <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">SOL Capital (child's trading funds)</div>
         <input type="number" class="spawn-sol-input" id="spawnSolInput" placeholder="1.0" step="0.1" min="1" value="1">
-        <div class="spawn-sol-hint">Minimum 1 SOL — 95% to child wallet, 5% protocol fee</div>
+        <div class="spawn-sol-hint">500,000 $SPAWN + min 1 SOL deposit (95% to child, 5% protocol fee)</div>
       </div>
-      <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Send SOL</button>
+      <button class="pay-btn" id="spawnPayBtn" onclick="handleSpawnPay()">Pay with Phantom</button>
     </div>
     <div id="spawnPayInfo" style="display:none;">
       <div class="spawn-modal-row">
@@ -1630,7 +1638,7 @@ function agentCard(g, priceLabel) {
       <span class="agent-price-label">Price</span>
       <span class="agent-price-val">${priceLabel}</span>
     </div>
-    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; FREE</button>` : ''}
+    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; 1.5M $SPAWN</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<a href="/lab/?edit=${g.id}" class="withdraw-btn" style="text-align:center;text-decoration:none;display:block;margin-top:6px;">Edit Agent</a>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
@@ -1654,7 +1662,7 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="degen">
     <div class="tier-header">
       <div class="tier-label">Degen</div>
-      <div class="tier-price">FREE — just deposit min 1 SOL</div>
+      <div class="tier-price">1,500,000 $SPAWN + min 1 SOL deposit</div>
       <div class="tier-desc">${degens.filter(g => g.available).length} / ${degens.length} available &mdash; pump.fun hunters</div>
     </div>
     <div class="agent-grid">${degens.map(g => agentCard(g, "FREE")).join("")}</div>
@@ -1665,7 +1673,7 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="standard">
     <div class="tier-header">
       <div class="tier-label">Standard</div>
-      <div class="tier-price">FREE — just deposit min 1 SOL</div>
+      <div class="tier-price">1,500,000 $SPAWN + min 1 SOL deposit</div>
       <div class="tier-desc">${standard.filter(g => g.available).length} / ${standard.length} available &mdash; Jupiter traders</div>
     </div>
     <div class="agent-grid">${standard.map(g => agentCard(g, "FREE")).join("")}</div>
@@ -1999,7 +2007,38 @@ function checkWallet() {
 // BUY FLOW (Phantom provider + Solana Pay fallback)
 // ============================================================
 
-const { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } = solanaWeb3;
+const { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction, Connection } = solanaWeb3;
+const SPAWN_MINT = new PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump');
+const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const SPAWN_DECIMALS = 6;
+
+async function getATA(owner, mint) {
+  const [ata] = await PublicKey.findProgramAddress(
+    [owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+  return ata;
+}
+
+function createTokenTransferIx(source, dest, owner, amount, decimals, mint) {
+  const data = new Uint8Array(10);
+  data[0] = 12; // TransferChecked instruction
+  const amt = BigInt(amount);
+  const view = new DataView(data.buffer);
+  view.setBigUint64(1, amt, true); // little-endian
+  data[9] = decimals;
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: dest, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+    ],
+    programId: TOKEN_PROGRAM_ID,
+    data,
+  });
+}
 
 let pollInterval = null;
 let currentAgentId = null;
@@ -2010,7 +2049,7 @@ let currentBlockhash = null;
 let currentSpawnCostBuy = 0;
 let currentBuyTier = null;
 
-const SPAWN_COSTS_BUY = { degen: 0, standard: 0 };
+const SPAWN_COSTS_BUY = { degen: 1500000, standard: 1500000 };
 
 function initBuy(btn) {
   // Require login
@@ -2030,7 +2069,7 @@ function initBuy(btn) {
 
   // Show Phase 1
   document.getElementById('modalAgent').textContent = agentName;
-  document.getElementById('modalSpawnCost').textContent = 'FREE';
+  document.getElementById('modalSpawnCost').textContent = spawnCost > 0 ? spawnCost.toLocaleString() + ' $SPAWN' : 'FREE';
   document.getElementById('modalTier').textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
   document.getElementById('buySolInput').value = '1';
   document.getElementById('buyPhase1').style.display = '';
@@ -2080,16 +2119,21 @@ async function handleBuyProceed() {
     document.getElementById('buyPhase2').style.display = '';
     document.getElementById('modalSolAmount').textContent = data.amount.toFixed(6) + ' SOL';
     document.getElementById('modalAddr').textContent = data.recipient;
-    document.getElementById('modalStatus').textContent = 'Send SOL to the address above';
+
+    // Show token cost if applicable
+    if (data.spawn_cost > 0) {
+      document.getElementById('buyTokenRow').style.display = '';
+      document.getElementById('modalTokenAmount').textContent = data.spawn_cost.toLocaleString() + ' $SPAWN';
+      document.getElementById('modalStatus').textContent = 'Send $SPAWN tokens + SOL to the address above';
+    } else {
+      document.getElementById('buyTokenRow').style.display = 'none';
+      document.getElementById('modalStatus').textContent = 'Send SOL to the address above';
+    }
     document.getElementById('modalStatus').className = 'modal-status waiting';
 
     // Detect Phantom
     const payBtn = document.getElementById('modalPayBtn');
-    if (window.phantom?.solana) {
-      payBtn.textContent = 'Pay SOL with Phantom';
-    } else {
-      payBtn.textContent = 'Pay SOL with wallet';
-    }
+    payBtn.textContent = 'Pay with Phantom';
 
     // Start polling
     if (pollInterval) clearInterval(pollInterval);
@@ -2130,14 +2174,16 @@ async function handlePay() {
       feePayer: buyer,
     });
 
+    const recipientPk = new PublicKey(currentRecipient);
+
+    // 1. SOL transfer
     const transferIx = SystemProgram.transfer({
       fromPubkey: buyer,
-      toPubkey: new PublicKey(currentRecipient),
+      toPubkey: recipientPk,
       lamports: Math.round(currentAmount * LAMPORTS_PER_SOL),
     });
 
     // Add reference as extra account key (non-signer, non-writable)
-    // This is how our backend finds the transaction
     transferIx.keys.push({
       pubkey: new PublicKey(currentReference),
       isSigner: false,
@@ -2146,7 +2192,17 @@ async function handlePay() {
 
     tx.add(transferIx);
 
+    // 2. $SPAWN token transfer (if required)
+    if (currentSpawnCostBuy > 0) {
+      const senderATA = await getATA(buyer, SPAWN_MINT);
+      const recipientATA = await getATA(recipientPk, SPAWN_MINT);
+      const tokenAmount = BigInt(currentSpawnCostBuy) * BigInt(10 ** SPAWN_DECIMALS);
+      const tokenIx = createTokenTransferIx(senderATA, recipientATA, buyer, tokenAmount, SPAWN_DECIMALS, SPAWN_MINT);
+      tx.add(tokenIx);
+    }
+
     // Sign and send
+    status.textContent = 'Approve transaction in Phantom...';
     const { signature } = await provider.signAndSendTransaction(tx);
 
     status.textContent = 'Transaction sent. Confirming...';
@@ -2579,7 +2635,7 @@ setInterval(pollActivity, 5000);
 // SPAWN / REPRODUCE FLOW
 // ============================================================
 
-const SPAWN_COSTS = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
+const SPAWN_COSTS = { 1: 500000, 2: 500000, 3: 500000, 4: 500000, 5: 500000 };
 let spawnPollInterval = null;
 let currentSpawnId = null;
 let currentSpawnAgentId = null;
@@ -2604,6 +2660,7 @@ function initSpawn(btn) {
   document.getElementById('spawnModalAgent').textContent = agentName;
   document.getElementById('spawnChildGen').textContent = `Gen ${childGen}`;
   document.getElementById('spawnParentPnl').textContent = pnl.toFixed(3) + ' SOL';
+  document.getElementById('spawnTokenCost').textContent = tokenCost.toLocaleString() + ' $SPAWN';
   document.getElementById('spawnSolInput').value = '1';
   document.getElementById('spawnModalBody').style.display = '';
   document.getElementById('spawnPayInfo').style.display = 'none';
@@ -2626,6 +2683,7 @@ async function handleSpawnPay() {
   showSpawnStatus('', '');
 
   try {
+    // 1. Create spawn request on backend
     const res = await fetch('/api/spawn-request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2641,25 +2699,81 @@ async function handleSpawnPay() {
     if (!res.ok) {
       showSpawnStatus(data.error || 'Request failed', 'error');
       btn.disabled = false;
-      btn.textContent = 'Send SOL';
+      btn.textContent = 'Pay with Phantom';
       return;
     }
 
     currentSpawnId = data.spawn_id;
     currentSpawnData = data;
 
-    // Show payment info
+    // 2. Try to send via Phantom wallet
+    const provider = window.phantom?.solana;
+    if (!provider) {
+      // Fallback: show manual payment info
+      document.getElementById('spawnModalBody').style.display = 'none';
+      document.getElementById('spawnPayInfo').style.display = '';
+      document.getElementById('spawnSolAmount').textContent = data.sol_amount.toFixed(6) + ' SOL' + (data.spawn_cost_tokens > 0 ? ' + ' + data.spawn_cost_tokens.toLocaleString() + ' $SPAWN' : '');
+      document.getElementById('spawnProtocolAddr').textContent = data.protocol_wallet;
+      showSpawnStatus('Phantom not detected. Send payments manually, then click Verify.', 'waiting');
+      btn.disabled = false;
+      btn.textContent = 'Pay with Phantom';
+      return;
+    }
+
+    btn.textContent = 'Approve in Phantom...';
+    showSpawnStatus('Approve transaction in Phantom...', 'waiting pulse');
+
+    const resp = await provider.connect();
+    const buyer = resp.publicKey;
+    const recipientPk = new PublicKey(data.protocol_wallet);
+
+    // Get recent blockhash
+    const conn = new Connection('https://api.mainnet-beta.solana.com');
+    const { blockhash } = await conn.getRecentBlockhash();
+
+    const tx = new Transaction({
+      recentBlockhash: blockhash,
+      feePayer: buyer,
+    });
+
+    // SOL transfer
+    tx.add(SystemProgram.transfer({
+      fromPubkey: buyer,
+      toPubkey: recipientPk,
+      lamports: Math.round(data.sol_amount * LAMPORTS_PER_SOL),
+    }));
+
+    // $SPAWN token transfer
+    if (data.spawn_cost_tokens && data.spawn_cost_tokens > 0) {
+      const spawnMint = new PublicKey(data.spawn_mint || SPAWN_MINT);
+      const senderATA = await getATA(buyer, spawnMint);
+      const recipientATA = await getATA(recipientPk, spawnMint);
+      const tokenAmount = BigInt(data.spawn_cost_tokens) * BigInt(10 ** SPAWN_DECIMALS);
+      const tokenIx = createTokenTransferIx(senderATA, recipientATA, buyer, tokenAmount, SPAWN_DECIMALS, spawnMint);
+      tx.add(tokenIx);
+    }
+
+    // Sign and send
+    const { signature } = await provider.signAndSendTransaction(tx);
+
+    // Show payment info + start verification
     document.getElementById('spawnModalBody').style.display = 'none';
     document.getElementById('spawnPayInfo').style.display = '';
-    document.getElementById('spawnSolAmount').textContent = data.sol_amount.toFixed(6) + ' SOL';
+    document.getElementById('spawnSolAmount').textContent = data.sol_amount.toFixed(6) + ' SOL' + (data.spawn_cost_tokens > 0 ? ' + ' + data.spawn_cost_tokens.toLocaleString() + ' $SPAWN' : '');
     document.getElementById('spawnProtocolAddr').textContent = data.protocol_wallet;
+    showSpawnStatus('Transaction sent! Verifying on-chain...', 'waiting pulse');
 
-    showSpawnStatus('Send SOL to the address above, then click Verify', 'waiting');
+    // Auto-verify after a short delay
+    setTimeout(() => verifySpawn(), 5000);
 
   } catch (e) {
-    showSpawnStatus('Network error: ' + e.message, 'error');
+    if (e.code === 4001 || e.message?.includes('rejected')) {
+      showSpawnStatus('Transaction cancelled', 'error');
+    } else {
+      showSpawnStatus(e.message || 'Transaction failed', 'error');
+    }
     btn.disabled = false;
-    btn.textContent = 'Send SOL';
+    btn.textContent = 'Pay with Phantom';
   }
 }
 

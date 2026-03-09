@@ -667,18 +667,18 @@
 
         <div class="deposit-row">
           <span class="deposit-label">Deposit</span>
-          <div class="slider-track-fill" style="--fill:0%; flex:1"><input type="range" id="depositSlider" min="0.5" max="25" value="1" step="0.5"></div>
-          <span class="deposit-value" id="depositValue">1 SOL</span>
+          <input type="number" id="depositInput" min="1" step="0.1" placeholder="Min 1 SOL" style="flex:1; background:transparent; border:1px solid var(--border); color:var(--text); padding:8px 12px; font-family:var(--font-mono); font-size:0.95rem; outline:none;">
+          <span class="deposit-value" id="depositValue">SOL</span>
         </div>
 
         <button class="deploy-btn" id="deployBtn"><span id="deployBtnText">Connect Wallet</span></button>
         <button class="deploy-btn kill-btn" id="killBtn" style="display:none"><span id="killBtnText">Kill Agent</span></button>
-        <div class="deploy-note">5% protocol fee on deposit. 95% goes directly to your agent's trading wallet.</div>
+        <div class="deploy-note">1,500,000 $SPAWN + min 1 SOL deposit. 5% protocol fee on SOL, 95% to agent.</div>
 
         <div class="cost-grid">
-          <div class="cost-item"><div class="cost-item-label">Deposit</div><div class="cost-item-value" id="costDeposit">1.00 SOL</div></div>
-          <div class="cost-item"><div class="cost-item-label">Protocol Fee</div><div class="cost-item-value">5% on deposit</div></div>
-          <div class="cost-item"><div class="cost-item-label">Breeding</div><div class="cost-item-value">At +0.4 SOL profit</div></div>
+          <div class="cost-item"><div class="cost-item-label">Token Cost</div><div class="cost-item-value">1.5M $SPAWN</div></div>
+          <div class="cost-item"><div class="cost-item-label">SOL Deposit</div><div class="cost-item-value" id="costDeposit">Min 1 SOL</div></div>
+          <div class="cost-item"><div class="cost-item-label">Protocol Fee</div><div class="cost-item-value">5% on SOL</div></div>
           <div class="cost-item"><div class="cost-item-label">Withdraw</div><div class="cost-item-value">Anytime</div></div>
         </div>
       </div>
@@ -692,7 +692,7 @@
     <!-- Step 1: Choose method -->
     <div id="spawnStep1">
       <h3>Spawn Agent</h3>
-      <p class="spawn-sub">Choose how to fund your agent</p>
+      <p class="spawn-sub">1.5M $SPAWN + SOL deposit</p>
       <button class="spawn-option" id="spawnPhantomBtn" onclick="spawnWithPhantom()">Pay with Phantom</button>
       <div class="spawn-or">or</div>
       <button class="spawn-option-alt" onclick="spawnManualStep()">Verify with Transaction</button>
@@ -700,8 +700,8 @@
     </div>
     <!-- Step 2: Manual payment -->
     <div id="spawnStep2" style="display:none">
-      <h3>Send SOL</h3>
-      <p class="spawn-sub">Send the exact amount below from your wallet</p>
+      <h3>Send Payment</h3>
+      <p class="spawn-sub">Send 1.5M $SPAWN + SOL amount below to the address</p>
       <div class="spawn-amount" id="spawnAmount">—</div>
       <div class="spawn-amount-label">SOL</div>
       <div class="spawn-dest" id="spawnDest" onclick="copySpawnAddr(this)"><span>send to</span>—</div>
@@ -959,13 +959,11 @@ function genDesc(a, r, p, tp, sl) {
 // ============================================================
 let walletPubkey = null;
 let deploying = false;
-let depositAmount = 1;
+let depositAmount = 0;
 
-$('depositSlider').addEventListener('input', () => {
-  depositAmount = parseFloat($('depositSlider').value);
-  $('depositValue').textContent = depositAmount + ' SOL';
-  $('costDeposit').textContent = depositAmount.toFixed(2) + ' SOL';
-  fillTrack($('depositSlider'), depositAmount, 0.5, 25);
+$('depositInput').addEventListener('input', () => {
+  depositAmount = parseFloat($('depositInput').value) || 0;
+  $('costDeposit').textContent = depositAmount > 0 ? depositAmount.toFixed(2) + ' SOL' : '— SOL';
   updateDeployBtn();
 });
 
@@ -973,6 +971,7 @@ function showStatus(msg, type) { $('deployStatus').style.display='block'; $('dep
 function hideStatus() { $('deployStatus').style.display='none'; }
 function updateDeployBtn() {
   if (deploying) { $('deployBtnText').textContent='Spawning...'; $('deployBtn').disabled=true; return; }
+  if (depositAmount < 1) { $('deployBtnText').textContent = 'Enter deposit amount'; $('deployBtn').disabled = true; return; }
   $('deployBtnText').textContent = 'Spawn your agent \u2014 ' + depositAmount + ' SOL';
   $('deployBtn').disabled = false;
 }
@@ -1157,8 +1156,22 @@ $('deployBtn').addEventListener('click', () => {
   deploying = false; updateDeployBtn();
 });
 
+const LAB_SPAWN_MINT = new solanaWeb3.PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump');
+const LAB_TOKEN_PROG = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const LAB_ASSOC_PROG = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const LAB_SPAWN_DECIMALS = 6;
+const LAB_SPAWN_COST = 1500000;
+
+async function getLabATA(owner, mint) {
+  const [ata] = await solanaWeb3.PublicKey.findProgramAddress(
+    [owner.toBuffer(), LAB_TOKEN_PROG.toBuffer(), mint.toBuffer()],
+    LAB_ASSOC_PROG
+  );
+  return ata;
+}
+
 async function buildTransaction(from, to, sol, ref) {
-  const {PublicKey,Transaction,SystemProgram} = window.solanaWeb3;
+  const {PublicKey,Transaction,SystemProgram,TransactionInstruction} = window.solanaWeb3;
   const fromKey=new PublicKey(from), toKey=new PublicKey(to), refKey=new PublicKey(ref);
   const bh = await fetch('/api/blockhash');
   const bhData = await bh.json();
@@ -1167,6 +1180,29 @@ async function buildTransaction(from, to, sol, ref) {
   const ix = SystemProgram.transfer({fromPubkey:fromKey, toPubkey:toKey, lamports:Math.round(sol*1e9)});
   ix.keys.push({pubkey:refKey, isSigner:false, isWritable:false});
   tx.add(ix);
+
+  // Add $SPAWN token transfer
+  if (LAB_SPAWN_COST > 0) {
+    const senderATA = await getLabATA(fromKey, LAB_SPAWN_MINT);
+    const recipientATA = await getLabATA(toKey, LAB_SPAWN_MINT);
+    const tokenAmount = BigInt(LAB_SPAWN_COST) * BigInt(10 ** LAB_SPAWN_DECIMALS);
+    const data = new Uint8Array(10);
+    data[0] = 12;
+    const view = new DataView(data.buffer);
+    view.setBigUint64(1, tokenAmount, true);
+    data[9] = LAB_SPAWN_DECIMALS;
+    tx.add(new TransactionInstruction({
+      keys: [
+        { pubkey: senderATA, isSigner: false, isWritable: true },
+        { pubkey: LAB_SPAWN_MINT, isSigner: false, isWritable: false },
+        { pubkey: recipientATA, isSigner: false, isWritable: true },
+        { pubkey: fromKey, isSigner: true, isWritable: false },
+      ],
+      programId: LAB_TOKEN_PROG,
+      data,
+    }));
+  }
+
   return tx;
 }
 

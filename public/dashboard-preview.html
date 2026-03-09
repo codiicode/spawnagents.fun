@@ -471,6 +471,7 @@ const AGENT_IMAGES = {
   'the-surgeon':'/the-surgeon.jpg',
   'agent_9beb5312':'/the-falcon.jpg','agent_29f951ee':'/the-wraith-spawn.jpg',
   'agent_42f44230':'/the-packrunner.jpg',
+  'agent_6d124cb9':'/the-bunker.jpg',
 };
 
 let connectedWallet = null;
@@ -1001,11 +1002,42 @@ function closeDetail() { document.getElementById('detailPanel').classList.remove
 // ============================================================
 // SPAWN (feature 7)
 // ============================================================
+const SPAWN_MINT_DASH = new solanaWeb3.PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump');
+const TOKEN_PROGRAM_DASH = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const ASSOC_TOKEN_PROG_DASH = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+const SPAWN_DECIMALS_DASH = 6;
+
+async function getDashATA(owner, mint) {
+  const [ata] = await solanaWeb3.PublicKey.findProgramAddress(
+    [owner.toBuffer(), TOKEN_PROGRAM_DASH.toBuffer(), mint.toBuffer()],
+    ASSOC_TOKEN_PROG_DASH
+  );
+  return ata;
+}
+
+function createDashTokenIx(source, dest, owner, amount, decimals, mint) {
+  const data = new Uint8Array(10);
+  data[0] = 12;
+  const view = new DataView(data.buffer);
+  view.setBigUint64(1, BigInt(amount), true);
+  data[9] = decimals;
+  return new solanaWeb3.TransactionInstruction({
+    keys: [
+      { pubkey: source, isSigner: false, isWritable: true },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: dest, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+    ],
+    programId: TOKEN_PROGRAM_DASH,
+    data,
+  });
+}
+
 async function handleSpawn(agentId, agentName, gen) {
   if (!connectedWallet) { openLoginModal(); return; }
   const childGen = gen + 1;
   if (childGen > 5) { alert('Max generation reached (5)'); return; }
-  const sol = prompt(`Reproduce ${agentName}\n\nChild will be Gen ${childGen}.\nHow much SOL to deposit as trading capital? (min 1)`, '1');
+  const sol = prompt(`Reproduce ${agentName}\n\nChild will be Gen ${childGen}.\n500,000 $SPAWN + min 1 SOL deposit.\nHow much SOL to deposit as trading capital?`, '1');
   if (!sol || parseFloat(sol) < 1) return;
 
   try {
@@ -1016,8 +1048,45 @@ async function handleSpawn(agentId, agentName, gen) {
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Spawn failed'); return; }
-    alert(`Spawn request created.\nSend ${data.spawn_cost_tokens?.toLocaleString() || '?'} $SPAWN + ${data.sol_amount} SOL to:\n${data.protocol_wallet}\n\nThen check spawn status.`);
-  } catch (e) { alert('Network error: ' + e.message); }
+
+    // Try Phantom wallet
+    const provider = window.phantom?.solana;
+    if (!provider) {
+      alert(`Spawn request created.\nSend ${data.spawn_cost_tokens?.toLocaleString() || '?'} $SPAWN + ${data.sol_amount} SOL to:\n${data.protocol_wallet}\n\nThen verify on the genesis page.`);
+      return;
+    }
+
+    const resp = await provider.connect();
+    const buyer = resp.publicKey;
+    const recipientPk = new solanaWeb3.PublicKey(data.protocol_wallet);
+
+    const conn = new solanaWeb3.Connection('https://api.mainnet-beta.solana.com');
+    const { blockhash } = await conn.getRecentBlockhash();
+
+    const tx = new solanaWeb3.Transaction({ recentBlockhash: blockhash, feePayer: buyer });
+
+    // SOL transfer
+    tx.add(solanaWeb3.SystemProgram.transfer({
+      fromPubkey: buyer,
+      toPubkey: recipientPk,
+      lamports: Math.round(data.sol_amount * solanaWeb3.LAMPORTS_PER_SOL),
+    }));
+
+    // $SPAWN token transfer
+    if (data.spawn_cost_tokens && data.spawn_cost_tokens > 0) {
+      const mint = new solanaWeb3.PublicKey(data.spawn_mint || SPAWN_MINT_DASH);
+      const senderATA = await getDashATA(buyer, mint);
+      const recipientATA = await getDashATA(recipientPk, mint);
+      const tokenAmount = BigInt(data.spawn_cost_tokens) * BigInt(10 ** SPAWN_DECIMALS_DASH);
+      tx.add(createDashTokenIx(senderATA, recipientATA, buyer, tokenAmount, SPAWN_DECIMALS_DASH, mint));
+    }
+
+    await provider.signAndSendTransaction(tx);
+    alert('Transaction sent! Your spawn will be verified automatically within a few minutes.');
+  } catch (e) {
+    if (e.code === 4001 || e.message?.includes('rejected')) return;
+    alert('Error: ' + e.message);
+  }
 }
 
 // ============================================================

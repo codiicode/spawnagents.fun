@@ -476,51 +476,6 @@
       margin-bottom: 24px;
     }
 
-    /* Leaderboard */
-    .lb-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .lb-rank {
-      font-family: var(--font-display);
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-dim);
-      width: 26px;
-      text-align: center;
-      flex-shrink: 0;
-    }
-
-    .lb-rank.r1 { color: var(--blood-bright); }
-    .lb-rank.r2 { color: var(--blood); }
-    .lb-rank.r3 { color: var(--blood-deep); }
-
-    .lb-name {
-      flex: 1;
-      color: var(--text);
-      font-weight: 500;
-      font-size: 12px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .lb-gen { color: var(--text-muted); font-size: 10px; flex-shrink: 0; }
-
-    .lb-pnl {
-      font-weight: 600;
-      font-size: 12px;
-      flex-shrink: 0;
-      min-width: 64px;
-      text-align: right;
-    }
-
-    .lb-pnl.pos { color: var(--green); }
-    .lb-pnl.neg { color: var(--red); }
 
     .empty-state {
       font-size: 12px;
@@ -1012,13 +967,6 @@
   </div>
 </div>
 
-<!-- LEADERBOARD -->
-<hr class="section-divider">
-<div class="section" style="padding-bottom:0;">
-  <div class="section-title" data-text="Leaderboard">Leaderboard</div>
-  <div id="leaderboard"><div class="empty-state">Loading...</div></div>
-</div>
-
 <!-- LIVE ACTIVITY -->
 <hr class="section-divider">
 <div style="position:relative;overflow:hidden;height:80px;">
@@ -1157,7 +1105,7 @@ const SpawnAudio = (() => {
     const s = await r.json();
     document.getElementById('statAlive').textContent = s.agents_alive;
     document.getElementById('statTrades').textContent = s.total_trades.toLocaleString();
-    document.getElementById('statVol24').textContent = s.volume_24h_sol.toFixed(1) + ' SOL';
+    document.getElementById('statVol24').textContent = s.volume_24h_usd ? '$' + s.volume_24h_usd.toLocaleString() : s.volume_24h_sol.toFixed(1) + ' SOL';
     if (s.best_agent) {
       const pnl = s.best_agent.pnl;
       document.getElementById('statBest').textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' SOL';
@@ -1303,27 +1251,6 @@ function copyAddr(el) {
   });
 })();
 
-// ============================================================
-// LEADERBOARD
-// ============================================================
-function renderLeaderboard(agents) {
-  const el = document.getElementById('leaderboard');
-  if (!agents || agents.length === 0) { el.innerHTML = '<div class="empty-state">No agents competing yet...</div>'; return; }
-  el.innerHTML = agents.map((a, i) => {
-    const rank = i + 1;
-    const rc = rank <= 3 ? ' r' + rank : '';
-    const name = a.name || a.id;
-    const pnl = a.total_pnl || 0;
-    const pnlClass = pnl >= 0 ? 'pos' : 'neg';
-    const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(3) + ' SOL';
-    return '<div class="lb-item"><div class="lb-rank' + rc + '">' + rank + '</div><div class="lb-name">' + name + '</div><div class="lb-gen">' + (a.total_trades || 0) + ' trades</div><div class="lb-pnl ' + pnlClass + '">' + pnlStr + '</div></div>';
-  }).join('');
-}
-function fetchLeaderboard() {
-  fetch('/api/leaderboard').then(r => r.json()).then(d => renderLeaderboard(d.leaderboard || [])).catch(() => {});
-}
-fetchLeaderboard();
-setInterval(fetchLeaderboard, 30000);
 
 // ============================================================
 // LIVE ACTIVITY FEED

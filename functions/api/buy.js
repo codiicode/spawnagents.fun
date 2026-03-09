@@ -49,8 +49,8 @@ export async function onRequest(context) {
   const existing = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(agent_id).first();
   if (existing && existing.status !== 'dead' && existing.status !== 'unclaimed') return Response.json({ error: 'Already claimed' }, { status: 409 });
 
-  // Free claim — no $SPAWN cost
-  const spawn_cost = 0;
+  // Genesis agents cost 1.5M $SPAWN
+  const spawn_cost = 1500000;
   const spawn_mint = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
 
   // Generate reference (32 random bytes → base58)

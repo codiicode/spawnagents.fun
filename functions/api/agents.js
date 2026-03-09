@@ -8,8 +8,8 @@ export async function onRequest(context) {
       if (!agent) return Response.json({ error: "Not found" }, { status: 404 });
       const trades = await db.prepare("SELECT * FROM trades WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20").bind(id).all();
       const children = await db.prepare("SELECT id, name, generation, status, total_pnl FROM agents WHERE parent_id = ?").bind(id).all();
-      agent.dna = JSON.parse(agent.dna || "{}");
-      return Response.json({ agent, trades: trades.results, children: children.results });
+      const parsed = { ...agent, dna: JSON.parse(agent.dna || "{}") };
+      return Response.json({ agent: parsed, trades: trades.results, children: children.results });
     }
     const status = url.searchParams.get("status");
     let query, params;

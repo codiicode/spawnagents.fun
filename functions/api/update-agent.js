@@ -4,7 +4,8 @@ export async function onRequest(context) {
   }
 
   const body = await context.request.json();
-  const { agent_id, owner_wallet, signature, message, dna, meta, name } = body;
+  const { agent_id, owner_wallet, signature, message, meta, name } = body;
+  const dna = body.dna ? { ...body.dna } : undefined;
 
   if (!agent_id || !owner_wallet) {
     return Response.json({ error: 'Missing agent_id or owner_wallet' }, { status: 400 });

@@ -51,7 +51,7 @@ export async function getBalance(pubkeyB58, rpcUrl) {
   return (data?.value || 0) / 1e9;
 }
 
-// Check holder distribution — returns number of holders with >1% of TOTAL supply
+// Check holder distribution — returns number of holders with >1.1% of TOTAL supply
 export async function getHolderConcentration(mintAddress, rpcUrl) {
   const [data, supplyData] = await Promise.all([
     rpcCall(rpcUrl, 'getTokenLargestAccounts', [mintAddress, { commitment: 'confirmed' }]),
@@ -66,10 +66,49 @@ export async function getHolderConcentration(mintAddress, rpcUrl) {
 
   const topHolders = accounts
     .map(a => ({ amount: parseFloat(a.uiAmountString || '0'), pct: (parseFloat(a.uiAmountString || '0') / totalSupply) * 100 }))
-    .filter(h => h.pct > 1)
+    .filter(h => h.pct > 1.1)
     .sort((a, b) => b.pct - a.pct);
 
   return { bigHolders: topHolders.length, topHolders };
+}
+
+// Verify that a specific wallet sent tokens to the treasury
+export async function verifyTokenTransfer(senderWallet, recipientWallet, mint, expectedAmount, rpcUrl) {
+  // Get the recipient's token account for this mint
+  const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+  const ata = await rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
+    recipientWallet, { mint }, { encoding: 'jsonParsed', commitment: 'confirmed' },
+  ]).catch(() => ({ value: [] }));
+
+  const ataAddress = ata?.value?.[0]?.pubkey;
+  if (!ataAddress) return { verified: false, reason: 'no token account' };
+
+  // Check recent transactions to this token account
+  const sigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [ataAddress, { limit: 15 }]);
+  if (!sigs?.length) return { verified: false, reason: 'no recent txs' };
+
+  for (const sig of sigs) {
+    if (sig.err) continue;
+    const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+    if (!tx?.meta) continue;
+
+    // Check sender is the expected wallet
+    const accounts = tx.transaction.message.accountKeys;
+    const sender = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+    if (sender !== senderWallet) continue;
+
+    // Check token balance change for the recipient
+    const pre = (tx.meta.preTokenBalances || []).find(b => b.mint === mint && b.owner === recipientWallet);
+    const post = (tx.meta.postTokenBalances || []).find(b => b.mint === mint && b.owner === recipientWallet);
+    const preAmt = pre ? parseFloat(pre.uiTokenAmount.uiAmountString || '0') : 0;
+    const postAmt = post ? parseFloat(post.uiTokenAmount.uiAmountString || '0') : 0;
+    const delta = postAmt - preAmt;
+
+    if (delta >= expectedAmount * 0.95) {
+      return { verified: true, txSignature: sig.signature, amount: delta };
+    }
+  }
+  return { verified: false, reason: 'no matching transfer' };
 }
 
 // Get SPL token balances for a wallet — uses cache if available
@@ -113,7 +152,7 @@ export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit)
   const headers = {};
   if (_jupiterApiKey) headers['x-api-key'] = _jupiterApiKey;
   const res = await fetch(
-    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=150`,
+    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=100`,
     { headers }
   );
   if (!res.ok) return null;
@@ -132,7 +171,7 @@ export async function getJupiterSwapTx(quoteResponse, userPublicKey) {
       userPublicKey,
       wrapAndUnwrapSol: true,
       dynamicComputeUnitLimit: true,
-      prioritizationFeeLamports: 'auto',
+      prioritizationFeeLamports: 50000,
     }),
   });
   if (!res.ok) return null;
@@ -152,8 +191,8 @@ export async function getPumpPortalTx(publicKey, action, mint, amount, opts = {}
       mint,
       amount,           // SOL amount (if denominatedInSol) or token amount
       denominatedInSol: opts.denominatedInSol !== undefined ? opts.denominatedInSol : (action === 'buy'),
-      slippage: opts.slippage || 15,
-      priorityFee: opts.priorityFee || 0.0005,
+      slippage: opts.slippage || 10,
+      priorityFee: opts.priorityFee || 0.0003,
       pool: opts.pool || 'auto',
     }),
   });

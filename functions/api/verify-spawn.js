@@ -1,4 +1,4 @@
-import { getTokenBalances, generateKeypair, sendSol } from '../_lib/solana.js';
+import { getTokenBalances, generateKeypair, sendSol, verifyTokenTransfer } from '../_lib/solana.js';
 import { mutate, crossover } from '../_lib/mutator.js';
 
 const SPAWN_MINT = '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
@@ -26,7 +26,22 @@ export async function onRequest(context) {
     return Response.json({ status: 'expired', reason: 'Spawn request expired (30 min)' });
   }
 
-  // $SPAWN token check SKIPPED — free spawn for now
+  // === VERIFY $SPAWN TOKEN PAYMENT ===
+  let tokenVerified = false;
+  if (!pending.spawn_cost || pending.spawn_cost <= 0) {
+    tokenVerified = true;
+  } else {
+    const tokenResult = await verifyTokenTransfer(pending.owner_wallet, protocolWallet, SPAWN_MINT, pending.spawn_cost, rpcUrl);
+    tokenVerified = tokenResult.verified;
+  }
+
+  if (!tokenVerified) {
+    return Response.json({
+      status: 'pending',
+      checks: { token: false, sol: false },
+      reason: `Waiting for ${pending.spawn_cost.toLocaleString()} $SPAWN tokens`,
+    });
+  }
 
   // === VERIFY SOL PAYMENT (micro-amount matching) ===
   let solVerified = false;
@@ -71,8 +86,8 @@ export async function onRequest(context) {
   if (!solVerified) {
     return Response.json({
       status: 'pending',
-      checks: { token: true, sol: false },
-      reason: `$SPAWN verified. Waiting for SOL payment (${pending.sol_amount} SOL)`,
+      checks: { token: tokenVerified, sol: false },
+      reason: `Waiting for SOL payment (${pending.sol_amount} SOL)`,
     });
   }
 
