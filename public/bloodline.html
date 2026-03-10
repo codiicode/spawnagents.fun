@@ -2216,7 +2216,11 @@ async function fetchAgents() {
     const r = await fetch('/api/agents');
     if (r.ok) {
       const d = await r.json();
-      if (d.agents?.length > 0) return d.agents.filter(a => a.status !== 'unclaimed' && a.status !== 'dead');
+      if (d.agents?.length > 0) {
+        const all = d.agents.filter(a => a.status !== 'unclaimed');
+        const parentsOfAlive = new Set(all.filter(a => a.status === 'alive').map(a => a.parent_id).filter(Boolean));
+        return all.filter(a => a.status === 'alive' || parentsOfAlive.has(a.id));
+      }
     }
   } catch {}
   return [];

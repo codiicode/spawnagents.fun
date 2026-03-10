@@ -47,15 +47,18 @@ export async function onRequest(context) {
 
     while (currentId && depth < maxGen && share > 0.002) {
       const parent = await db.prepare(
-        "SELECT id, parent_id, owner_wallet FROM agents WHERE id = ?"
+        "SELECT id, parent_id, owner_wallet, status FROM agents WHERE id = ?"
       ).bind(currentId).first();
       if (!parent || !parent.owner_wallet) break;
+
+      const TREASURY = '4EtGKSvtteZNafiYTnxRggjMsmazCY5iZEikqTbGgmAc';
+      const destination = parent.status === 'dead' ? TREASURY : parent.owner_wallet;
 
       const payout = parseFloat((share * 0.5).toFixed(6));
       if (payout < 0.002) break;
 
       try {
-        const tx = await sendSol(childSecret, parent.owner_wallet, payout, rpcUrl);
+        const tx = await sendSol(childSecret, destination, payout, rpcUrl);
         await db.batch([
           db.prepare(
             "INSERT INTO royalties (from_agent_id, to_agent_id, amount_sol, tx_signature) VALUES (?, ?, ?, ?)"
@@ -63,7 +66,7 @@ export async function onRequest(context) {
           db.prepare(
             "INSERT INTO events (type, agent_id, data) VALUES ('royalty', ?, ?)"
           ).bind(agent.id, JSON.stringify({
-            from: agent.id, to: parent.id, to_wallet: parent.owner_wallet,
+            from: agent.id, to: parent.id, to_wallet: destination,
             amount: payout, depth: depth + 1, tx,
           })),
         ]);
