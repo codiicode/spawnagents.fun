@@ -1,34 +1,55 @@
 # SPAWN
 
-**Darwinian evolution with real money.** Autonomous AI trading agents that live, trade, reproduce, and die on Solana. The fittest survive. The rest go extinct.
+**Darwinian evolution with real money.** Autonomous trading agents that live, trade, reproduce, and die on Solana. The fittest survive. The rest go extinct.
 
 ## The Concept
 
-SPAWN is an autonomous agent evolution ecosystem. You buy a genesis agent with SOL. That SOL becomes the agent's trading capital (85%, 15% protocol fee). The agent trades autonomously via Jupiter based on its DNA — a set of parameters that control aggression, patience, risk tolerance, position sizing, and timing.
+SPAWN is an autonomous agent evolution ecosystem. You claim a genesis agent or create a custom one by burning **$SPAWN tokens** + depositing SOL. That SOL becomes the agent's trading capital (95%, 5% protocol fee). The agent trades autonomously via Jupiter and PumpPortal based on its DNA — a set of parameters that control aggression, patience, risk tolerance, position sizing, filters, and exit strategy.
 
 Profitable agents can **reproduce**. Their offspring inherit mutated DNA (each parameter ±20%). Children pay **10% royalties** to their parent on every profitable trade, up to 5 generations deep. Bad DNA dies. Good DNA multiplies. Natural selection plays out in real-time with real money.
 
 ### How It Works
 
 ```
-1. Buy a Genesis Agent        → 85% of SOL becomes trading capital
-2. Agent Trades Autonomously   → DNA controls every decision via Jupiter
-3. Profitable Agents Reproduce → DNA mutates, children pay royalties
-4. Bad DNA Goes Extinct        → Only the fittest lineages survive
+1. Claim or Create an Agent      → 500K $SPAWN burned + SOL deposit (95% = trading capital)
+2. Agent Trades Autonomously      → DNA controls every decision via Jupiter / PumpPortal
+3. Profitable Agents Reproduce    → 250K $SPAWN + SOL deposit, DNA mutates, children pay royalties
+4. Bad DNA Goes Extinct           → Only the fittest lineages survive
 ```
 
 ## Genesis Agents
 
-15 unique genesis agents with hand-crafted DNA, split into tiers:
+15 unique genesis agents with hand-crafted DNA. Claiming costs **500,000 $SPAWN** + minimum **1 SOL** deposit:
 
-| Tier | Agents | Price | Style |
-|------|--------|-------|-------|
-| **Auction** | Berserker, Gambler, Beast, Turtle, Monk | Bid | Extreme archetypes |
-| **III** | Wolf, Jackal, Viper | 4 SOL | Aggressive hunters |
-| **II** | Sniper, Surgeon, Oracle | 3 SOL | Precision traders |
-| **I** | Hawk, Phantom, Specter, Colossus | 2 SOL | Balanced operators |
+| Agent | Style |
+|-------|-------|
+| The Berserker | Ultra-aggressive, fast, high risk |
+| The Gambler | Maximum risk, massive swings |
+| The Beast | Reckless, heavy positions |
+| The Turtle | Ultra-patient, conservative |
+| The Monk | Minimal activity, only the safest plays |
+| The Wolf | Aggressive pack hunter |
+| The Jackal | Fast, opportunistic |
+| The Viper | Strike hard, strike fast |
+| The Sniper | Patient precision, big targets |
+| The Surgeon | Calculated, clean entries |
+| The Oracle | Waits for near-certainty |
+| The Hawk | Balanced, mid-range |
+| The Phantom | Quiet, selective |
+| The Specter | Rare trades, high conviction |
+| The Colossus | Steady, balanced positions |
 
-Each genesis agent is a one-of-one. Once claimed, it's gone.
+Each genesis agent is a one-of-one. Once claimed, it's gone. If it dies (loses 80%+ of capital), it returns to market for someone else to claim.
+
+## Custom Agents
+
+Anyone can create a custom agent through the [Spawn Lab](/lab/). You choose your own name, avatar, and DNA parameters. Costs **500,000 $SPAWN** + minimum **1 SOL** deposit.
+
+Custom agents support:
+- Full DNA customization (aggression, risk, patience, TP, SL, position size)
+- Advanced filters (min/max market cap, max token age, trailing stop %)
+- Take-profit levels (up to 5 TP levels, each selling a % of original position)
+- Degen mode (unlocks pump.fun tokens)
 
 ## Agent DNA
 
@@ -36,17 +57,35 @@ Every agent carries a DNA object that fully determines its behavior:
 
 ```json
 {
-  "aggression": 0.75,          // how often it trades (0-1)
-  "patience": 0.35,            // how long it holds positions (0-1)
-  "risk_tolerance": 0.7,       // how much capital it risks (0-1)
-  "sell_profit_pct": 40,       // take profit target (%)
-  "sell_loss_pct": 15,         // stop loss trigger (%)
-  "max_position_pct": 60,      // max capital per trade (%)
-  "check_interval_min": 3      // minutes between market scans
+  "aggression": 0.75,
+  "patience": 0.35,
+  "risk_tolerance": 0.7,
+  "sell_profit_pct": 40,
+  "sell_loss_pct": 15,
+  "max_position_pct": 60,
+  "buy_threshold_holders": 200,
+  "buy_threshold_volume": 5000,
+  "min_mcap": 10000,
+  "max_mcap": 500000,
+  "max_pair_age_hours": 24,
+  "trailing_stop_pct": 20,
+  "check_interval_min": 3
 }
 ```
 
-When an agent reproduces, each DNA parameter mutates ±20%. Over generations, the most profitable DNA configurations emerge through natural selection.
+When an agent reproduces, 1-2 DNA parameters mutate ±20%. Over generations, the most profitable DNA configurations emerge through natural selection.
+
+## Take-Profit Levels
+
+Agents can have up to 5 TP levels. Each level triggers at a profit % and sells a portion of the **original** position:
+
+```
+TP1: +30% → sell 30% of original
+TP2: +75% → sell 30% of original
+TP3: +150% → sell 40% of original
+```
+
+After all TP levels are exhausted, remaining tokens auto-enable a **50% trailing stop** from peak — protecting gains while letting the position run further.
 
 ## Royalty System
 
@@ -61,28 +100,43 @@ Genesis (Gen 0)  ← receives 10% from Gen 1
 
 As a genesis owner, you earn royalties from every descendant in your lineage. The deeper your tree grows, the more passive income you generate.
 
+## Costs
+
+| Action | $SPAWN Cost | SOL Cost |
+|--------|-------------|----------|
+| Claim genesis agent | 500,000 $SPAWN (burned) | Min 1 SOL deposit |
+| Create custom agent | 500,000 $SPAWN (burned) | Min 1 SOL deposit |
+| Reproduce (spawn child) | 250,000 $SPAWN (burned) | Min 1 SOL deposit |
+| Protocol fee | — | 5% of SOL deposit |
+| Royalty | — | 10% of child's profits → parent |
+
 ## Architecture
 
 ```
 public/                          Static frontend (Cloudflare Pages)
 ├── index.html                   Landing page
-├── genesis.html                 Genesis agent marketplace + Solana Pay
-└── bloodline.html               Interactive family tree visualization
+├── genesis.html                 Genesis agent marketplace
+├── bloodline.html               Interactive family tree visualization
+├── dashboard-preview.html       Agent dashboard
+├── how.html                     Full specification
+└── lab/index.html               Custom agent creation (Spawn Lab)
 
 functions/api/                   Serverless API (Cloudflare Workers)
-├── create-genesis.js            List/claim genesis agents
-├── buy.js                       Initiate Solana Pay purchase
+├── buy.js                       Initiate genesis claim
+├── create-custom.js             Create custom agent
 ├── payment-status.js            Poll payment confirmation
 ├── verify-payments.js           Verify on-chain payments (cron)
 ├── agents.js                    Agent data + history
 ├── tree.js                      Recursive family tree queries
-├── spawn.js                     Agent reproduction + DNA mutation
-├── process-trades.js            Execute autonomous trades via Jupiter (cron)
+├── spawn-request.js             Agent reproduction request
+├── verify-spawn.js              Verify spawn payment
+├── process-trades.js            Execute autonomous trades (cron)
 ├── distribute-royalties.js      Calculate + pay royalties (cron)
 ├── leaderboard.js               Top agents by PnL
 ├── events.js                    Activity feed
-├── stats.js                     Ecosystem statistics
-└── info.js                      General info
+├── update-agent.js              Owner edits agent DNA/meta
+├── kill-agent.js                Kill agent + return SOL
+└── withdraw.js                  Owner withdrawals
 
 functions/_lib/                  Shared logic
 ├── engine.js                    Trading decision engine
@@ -90,9 +144,6 @@ functions/_lib/                  Shared logic
 ├── market-data.js               Token data + Jupiter quotes
 ├── mutator.js                   DNA mutation algorithm
 └── base58.js                    Base58 encode/decode
-
-cron-worker/                     Scheduled tasks (every 5 min)
-└── worker.js                    Triggers trades, royalties, payment verification
 ```
 
 ### Stack
@@ -100,106 +151,17 @@ cron-worker/                     Scheduled tasks (every 5 min)
 - **Frontend:** Static HTML/CSS/JS — no frameworks, no build step
 - **Backend:** Cloudflare Workers (serverless, edge-deployed)
 - **Database:** Cloudflare D1 (SQLite at the edge)
-- **Key Storage:** Cloudflare KV (agent private keys)
+- **Key Storage:** Cloudflare KV (agent private keys, TP tracking, peak tracking)
 - **Payments:** Solana Pay + Phantom wallet
-- **Trading:** Jupiter V6 (DEX aggregator)
+- **Trading:** Jupiter V6 (DEX aggregator) + PumpPortal (pump.fun)
 - **Blockchain:** Solana (mainnet)
 - **RPC:** Helius
-
-### Database Schema
-
-**agents** — The core table. Every agent (genesis and spawned) with DNA, PnL, status, lineage.
-
-**trades** — Full trade history per agent. Token, amount, PnL, tx signature.
-
-**royalties** — Every royalty payment from child to parent.
-
-**spawns** — Reproduction events with mutation logs.
-
-**payment_requests** — Solana Pay purchase flow tracking (pending → confirmed/expired).
-
-## Purchase Flow
-
-SPAWN uses Solana Pay for a frictionless buy experience — no wallet connect, no permissions. Just a transaction.
-
-```
-User clicks "Buy"
-  → POST /api/buy (generates unique reference + Solana Pay URL)
-  → Phantom popup with pre-filled transaction
-  → User confirms in Phantom
-  → Frontend polls /api/payment-status every 3 seconds
-  → Cron calls /api/verify-payments (finds tx via reference on-chain)
-  → Agent keypair generated, 85% of SOL sent to agent wallet
-  → Agent claimed, starts trading autonomously
-```
-
-## Development
-
-### Prerequisites
-
-- Node.js 18+
-- Wrangler CLI (`npm install`)
-- Cloudflare account with D1 database + KV namespace
-
-### Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Create D1 database (first time only)
-npx wrangler d1 create bloodline-db
-
-# Create KV namespace for agent keys
-npx wrangler kv namespace create AGENT_KEYS
-
-# Apply schema
-npx wrangler d1 execute bloodline-db --remote --file=schema.sql
-
-# Set secrets
-npx wrangler pages secret put RPC_URL              # Solana RPC endpoint (Helius)
-npx wrangler pages secret put CRON_SECRET           # Shared secret for cron auth
-npx wrangler pages secret put PROTOCOL_PRIVATE_KEY  # Protocol wallet private key
-
-# Deploy
-npx wrangler pages deploy public --project-name=bloodline
-```
-
-### Environment Variables
-
-| Variable | Location | Description |
-|----------|----------|-------------|
-| `PROTOCOL_WALLET` | wrangler.toml | SOL payment recipient |
-| `RPC_URL` | Secret | Solana RPC endpoint (Helius) |
-| `CRON_SECRET` | Secret | Auth token for cron worker |
-| `PROTOCOL_PRIVATE_KEY` | Secret | Protocol wallet private key (for funding agents) |
-| `SITE_URL` | Cron worker | Base URL for API calls |
-| `MIN_SPAWN_PNL` | wrangler.toml | Min PnL to reproduce (0.5 SOL) |
-| `ROYALTY_PCT` | wrangler.toml | Royalty rate (10%) |
-| `GENESIS_FEE_PCT` | wrangler.toml | Protocol fee on genesis purchase (15%) |
-| `MAX_GENERATIONS` | wrangler.toml | Max tree depth (5) |
-
-### Deploy Cron Worker
-
-```bash
-cd cron-worker
-npx wrangler deploy
-```
-
-## Tokenomics
-
-**$SPAWN** is the ecosystem token on Solana (pump.fun).
-
-- **Spawning** requires burning $SPAWN (1000 × generation number)
-- **Genesis fee:** 15% protocol fee on agent purchase
-- **Protocol fee:** 2% on all trades
-- **Royalties:** 10% of profitable trades flow to parent
 
 ## Links
 
 - **Website:** [spawnagents.fun](https://spawnagents.fun)
 - **Twitter:** [@spawnagents](https://x.com/spawnagents)
-- **Token:** $SPAWN on pump.fun
+- **Token:** $SPAWN on pump.fun (`4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump`)
 
 ---
 

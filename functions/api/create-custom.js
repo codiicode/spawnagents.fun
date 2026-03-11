@@ -57,6 +57,12 @@ export async function onRequest(context) {
   const maxPositions = (typeof dna.max_positions === 'number' && dna.max_positions >= 1 && dna.max_positions <= 5)
     ? dna.max_positions : undefined;
 
+  // Optional new filters
+  const minMcap = (typeof dna.min_mcap === 'number' && dna.min_mcap >= 5000 && dna.min_mcap <= 1000000) ? dna.min_mcap : undefined;
+  const maxMcap = (typeof dna.max_mcap === 'number' && dna.max_mcap >= 50000 && dna.max_mcap <= 5000000) ? dna.max_mcap : undefined;
+  const maxPairAge = (typeof dna.max_pair_age_hours === 'number' && dna.max_pair_age_hours >= 1 && dna.max_pair_age_hours <= 720) ? dna.max_pair_age_hours : undefined;
+  const trailingStop = (typeof dna.trailing_stop_pct === 'number' && dna.trailing_stop_pct >= 5 && dna.trailing_stop_pct <= 50) ? dna.trailing_stop_pct : undefined;
+
   const fullDna = {
     aggression: dna.aggression,
     patience: dna.patience,
@@ -69,6 +75,10 @@ export async function onRequest(context) {
     check_interval_min: Math.max(2, Math.round(2 + dna.patience * 10)),
     ...(maxPositions ? { max_positions: maxPositions } : {}),
     ...(isDegen ? { degen: true } : {}),
+    ...(minMcap ? { min_mcap: minMcap } : {}),
+    ...(maxMcap ? { max_mcap: maxMcap } : {}),
+    ...(maxPairAge ? { max_pair_age_hours: maxPairAge } : {}),
+    ...(trailingStop ? { trailing_stop_pct: trailingStop } : {}),
   };
 
   // Generate reference address for payment tracking
@@ -84,7 +94,7 @@ export async function onRequest(context) {
 
   // Store payment request with custom DNA
   await db.prepare(
-    "INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status, spawn_cost, created_at) VALUES (?, ?, ?, ?, ?, 'pending', 1500000, datetime('now'))"
+    "INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status, spawn_cost, created_at) VALUES (?, ?, ?, ?, ?, 'pending', 500000, datetime('now'))"
   ).bind(paymentId, agentId, totalSol, reference, protocolWallet).run();
 
   // Store custom DNA, name, and meta in KV (verify-payments will read this when confirming)

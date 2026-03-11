@@ -2217,9 +2217,9 @@ async function fetchAgents() {
     if (r.ok) {
       const d = await r.json();
       if (d.agents?.length > 0) {
-        const all = d.agents.filter(a => a.status !== 'unclaimed');
-        const parentsOfAlive = new Set(all.filter(a => a.status === 'alive').map(a => a.parent_id).filter(Boolean));
-        return all.filter(a => a.status === 'alive' || parentsOfAlive.has(a.id));
+        const all = d.agents;
+        const aliveParentIds = new Set(all.filter(a => a.status === 'alive').map(a => a.parent_id).filter(Boolean));
+        return all.filter(a => a.status === 'alive' || aliveParentIds.has(a.id));
       }
     }
   } catch {}

@@ -174,10 +174,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     }
 
     // Sum only trades from current position onward
-    let totalBought = 0, totalSold = 0, sellCount = 0;
+    let totalBought = 0, totalSold = 0, sellCount = 0, totalBoughtTokens = 0;
     for (let i = positionStartIdx; i < allTrades.results.length; i++) {
       const t = allTrades.results[i];
-      if (t.action === 'buy') totalBought += t.amount_sol || 0;
+      if (t.action === 'buy') { totalBought += t.amount_sol || 0; totalBoughtTokens += t.token_amount || 0; }
       else if (t.action === 'sell') { totalSold += t.amount_sol || 0; sellCount++; }
     }
 
@@ -229,19 +229,99 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
     }
 
-    const trailPct = Math.min(20 + dna.patience * 30, 35);
+    const trailPct = dna.trailing_stop_pct || Math.min(20 + dna.patience * 30, 35);
 
-    // Phase 1: Take profit (requires hold time to be met — SL still triggers below)
-    // trail strategy: skip fixed TP, only trailing stop
-    if (sellStrategy !== 'trail' && !costRecovered && pnlPct >= tpThreshold && holdTimeMet) {
+    // Phase 1: Take profit levels
+    // tp_levels = [{pct: 30, sell_pct: 30}, {pct: 60, sell_pct: 40}, ...] — sell % of ORIGINAL position at each trigger
+    const tpLevels = meta.tp_levels && meta.tp_levels.length > 0 ? meta.tp_levels : null;
+
+    if (tpLevels && holdTimeMet && pnlPct > 0) {
+      // Track which levels have been hit via KV
+      const tpKey = kv ? `tphit:${agent.id}:${token.mint}` : null;
+      let hitsCompleted = tpKey ? parseInt(await kv.get(tpKey) || '0') : 0;
+
+      // Find next unhit level that's triggered
+      const nextLevel = tpLevels.length > hitsCompleted ? tpLevels[hitsCompleted] : null;
+      // All TP levels exhausted — auto 50% trailing stop on remaining position
+      if (!nextLevel && hitsCompleted >= tpLevels.length && token.amount > 0 && kv) {
+        const tpTrailKey = `tptrail:${agent.id}:${token.mint}`;
+        const storedPeak = parseFloat(await kv.get(tpTrailKey) || '0');
+        const peak = Math.max(storedPeak, fullOutSol);
+        if (fullOutSol > storedPeak) {
+          await kv.put(tpTrailKey, fullOutSol.toString(), { expirationTtl: 86400 * 7 });
+        }
+        const dropFromPeak = peak > 0 ? (1 - fullOutSol / peak) * 100 : 0;
+        if (dropFromPeak >= 50 && peak > 0.005) {
+          const reason = `TP trail (all ${tpLevels.length} TPs hit, peak ${peak.toFixed(4)} SOL, now ${fullOutSol.toFixed(4)} SOL, drop ${dropFromPeak.toFixed(0)}% >= 50%)`;
+          let result;
+          if (isDegen) {
+            result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
+            }, kv, agent.id);
+          } else {
+            result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
+              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            });
+          }
+          if (result && result.action === 'sell') { sellResults.push(result); await kv.delete(tpTrailKey); await kv.delete(peakKey); await kv.delete(tpKey); continue; }
+        }
+        continue; // skip legacy TP / other sell logic — trailing stop is managing this position
+      }
+
+      if (nextLevel && pnlPct >= nextLevel.pct) {
+        // sell_pct is % of ORIGINAL bought tokens
+        const sellTokens = totalBoughtTokens * (nextLevel.sell_pct / 100);
+        const sellFraction = Math.min(sellTokens / token.amount, 1); // fraction of current holding
+
+        const isLastLevel = hitsCompleted + 1 >= tpLevels.length;
+        const reason = `TP${hitsCompleted + 1} (${pnlPct.toFixed(1)}% >= ${nextLevel.pct}%, sell ${nextLevel.sell_pct}% of original)`;
+
+        let result;
+        if (sellFraction >= 0.95 || isLastLevel && sellFraction > 0.8) {
+          // Sell everything if close to 100% or last level
+          if (isDegen) {
+            result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
+              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
+            }, kv, agent.id);
+          } else {
+            result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
+              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            });
+          }
+          if (result && result.action === 'sell') { sellResults.push(result); if (kv) { await kv.delete(peakKey); await kv.delete(tpKey); } continue; }
+        } else {
+          // Partial sell
+          if (isDegen) {
+            result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, `${Math.round(sellFraction * 100)}%`, {
+              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: sellTokens, estimatedSol: fullOutSol * sellFraction,
+            }, kv, agent.id);
+          } else {
+            const partialRaw = Math.floor(parseInt(token.rawAmount) * sellFraction).toString();
+            const partialQuote = await getJupiterQuote(token.mint, SOL_MINT, partialRaw);
+            if (partialQuote) {
+              const partialOutSol = parseInt(partialQuote.outAmount) / 1e9;
+              result = await executeSell(partialQuote, agentPubkey, agentSecret, rpcUrl, {
+                token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: partialOutSol, tokenAmount: sellTokens,
+              });
+            }
+          }
+          if (result && result.action === 'sell') {
+            sellResults.push(result);
+            if (tpKey) await kv.put(tpKey, (hitsCompleted + 1).toString(), { expirationTtl: 86400 * 7 });
+          }
+          continue;
+        }
+      }
+    }
+
+    // Legacy TP: single threshold (for agents without tp_levels)
+    if (!tpLevels && sellStrategy !== 'trail' && !costRecovered && pnlPct >= tpThreshold && holdTimeMet) {
       if (sellStrategy === 'full') {
-        // Full exit: sell 100% at TP
         let result;
         if (isDegen) {
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol, reason: `take profit FULL (${pnlPct.toFixed(1)}% >= ${tpThreshold.toFixed(0)}%)`,
-            pnlPct, tokenAmount: token.amount,
-            estimatedSol: fullOutSol,
+            pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
           }, kv, agent.id);
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
@@ -255,18 +335,16 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         continue;
       }
 
-      // Phased exit: recover cost basis first, then let rest ride
+      // Phased exit: recover cost basis first
       const currentValue = fullOutSol;
       const costRemaining = totalBought - totalSold;
       const sellPct = Math.min(0.9, Math.max(0.2, costRemaining / currentValue));
       const partialAmount = token.amount * sellPct;
-
       let result;
       if (isDegen) {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, `${Math.round(sellPct * 100)}%`, {
           symbol: tokenData.symbol, reason: `take profit (recover cost ${Math.round(sellPct * 100)}%)`,
-          pnlPct, tokenAmount: partialAmount,
-          estimatedSol: fullOutSol * sellPct,
+          pnlPct, tokenAmount: partialAmount, estimatedSol: fullOutSol * sellPct,
         }, kv, agent.id);
       } else {
         const partialRaw = Math.floor(parseInt(token.rawAmount) * sellPct).toString();
@@ -554,10 +632,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       const liqScale = isDegen ? 2000 : (isFresh ? 5000 : 15000);
       const minAgeBase = isDegen ? 0.03 : 0.08; // ~2 min degen, ~5 min standard
       const minAgeScale = isDegen ? 0.1 : 0.4;
-      const maxAge = isDegen ? 24 : 168;
+      const maxAge = dna.max_pair_age_hours || (isDegen ? 24 : 168);
 
-      const minMcap = isDegen ? 5000 : 20000;
-      const maxMcap = isDegen ? 500000 : Infinity;
+      const minMcap = dna.min_mcap || (isDegen ? 5000 : 20000);
+      const maxMcap = dna.max_mcap || (isDegen ? 500000 : Infinity);
       if ((t.market_cap || 0) < minMcap) { filterStats.mcap++; return false; }
       if ((t.market_cap || 0) > maxMcap) { filterStats.mcap++; return false; }
 

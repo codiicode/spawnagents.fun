@@ -191,7 +191,7 @@
     .advanced-body {
       max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
     }
-    .advanced-body.open { max-height: 600px; }
+    .advanced-body.open { max-height: 1200px; }
     .advanced-body-inner { padding: 0 20px 20px; }
 
     /* --- DEGEN TOGGLE --- */
@@ -226,6 +226,18 @@
     .strategy-option.active .strategy-radio { border-color: var(--agent-color); background: var(--agent-color); }
     .strategy-label { font-family: var(--font-mono); font-size: 11px; color: var(--text); font-weight: 500; }
     .strategy-desc { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+    /* --- TP LEVELS --- */
+    .tp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .tp-row input {
+      width: 70px; background: transparent; border: 1px solid var(--border); color: var(--text);
+      padding: 6px 8px; font-family: var(--font-mono); font-size: 0.85rem; outline: none; text-align: center;
+    }
+    .tp-row input:focus { border-color: var(--agent-color); }
+    .tp-row-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); min-width: 28px; }
+    .tp-row-at { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
+    .tp-remove { background: none; border: 1px solid var(--border); color: var(--text-dim); cursor: pointer; padding: 4px 8px; font-size: 11px; font-family: var(--font-mono); }
+    .tp-remove:hover { border-color: var(--red); color: var(--red); }
 
     /* --- PREVIEW --- */
     .preview-card { position: sticky; top: 32px; }
@@ -588,6 +600,51 @@
 
             <div class="section-divider"></div>
 
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Min Market Cap</span>
+                <span class="slider-value" id="val-minmcap">$5K</span>
+              </div>
+              <div class="slider-desc">Skip tokens below this market cap. Higher = safer entries</div>
+              <div class="slider-track-fill" style="--fill:0%"><input type="range" id="minmcap" min="5000" max="1000000" value="5000" step="5000" data-key="minmcap"></div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Max Market Cap</span>
+                <span class="slider-value" id="val-maxmcap">$500K</span>
+              </div>
+              <div class="slider-desc">Skip tokens above this market cap. Lower = early plays only</div>
+              <div class="slider-track-fill" style="--fill:100%"><input type="range" id="maxmcap" min="50000" max="5000000" value="5000000" step="50000" data-key="maxmcap"></div>
+            </div>
+
+            <div class="slider-group">
+              <div class="slider-header">
+                <span class="slider-name">Max Token Age</span>
+                <span class="slider-value" id="val-maxage">24h</span>
+              </div>
+              <div class="slider-desc">Skip tokens older than this. Lower = fresher plays</div>
+              <div class="slider-track-fill" style="--fill:7%"><input type="range" id="maxage" min="1" max="720" value="48" data-key="maxage"></div>
+            </div>
+
+            <div class="degen-toggle-row">
+              <div class="degen-toggle-left">
+                <span class="degen-toggle-name">Trailing Stop</span>
+                <span class="degen-toggle-desc">Sell when price drops X% from peak. Lets winners run further before exiting</span>
+              </div>
+              <div class="degen-switch" id="trailToggle"></div>
+            </div>
+            <div class="slider-group" id="trailSliderGroup" style="display:none">
+              <div class="slider-header">
+                <span class="slider-name">Trail %</span>
+                <span class="slider-value" id="val-trail">20%</span>
+              </div>
+              <div class="slider-desc">% drop from peak to trigger sell. Lower = tighter, higher = more room</div>
+              <div class="slider-track-fill" style="--fill:33%"><input type="range" id="trail" min="5" max="50" value="20" data-key="trail"></div>
+            </div>
+
+            <div class="section-divider"></div>
+
             <div class="degen-toggle-row">
               <div class="degen-toggle-left">
                 <span class="degen-toggle-name">Degen Mode</span>
@@ -600,31 +657,15 @@
         </div>
       </div>
 
-      <!-- SELL STRATEGY -->
+      <!-- TAKE PROFIT LEVELS -->
       <div class="panel">
-        <div class="panel-label">Sell Strategy</div>
-
-        <div class="strategy-option active" data-strategy="phased">
-          <div class="strategy-radio"></div>
-          <div>
-            <div class="strategy-label">Phased Exit</div>
-            <div class="strategy-desc">Sell in phases — recover cost first, then let the rest ride with trailing stop. Safer.</div>
-          </div>
+        <div class="panel-label">Take Profit Levels</div>
+        <div style="font-family:var(--font-body); font-size:0.78rem; color:var(--text-dim); margin-bottom:16px; line-height:1.5;">
+          Set up to 5 TP levels. Each sells a % of your <strong style="color:var(--text-muted)">original</strong> position when the price gain hits the trigger. Remaining tokens ride until SL or trailing stop.
         </div>
-        <div class="strategy-option" data-strategy="full">
-          <div class="strategy-radio"></div>
-          <div>
-            <div class="strategy-label">Full Exit</div>
-            <div class="strategy-desc">Sell entire position at take profit or stop loss. Simpler, more decisive.</div>
-          </div>
-        </div>
-        <div class="strategy-option" data-strategy="trail">
-          <div class="strategy-radio"></div>
-          <div>
-            <div class="strategy-label">Trail Only</div>
-            <div class="strategy-desc">No fixed TP — only trailing stop from peak. Rides winners as far as they go.</div>
-          </div>
-        </div>
+        <div id="tpLevelsContainer"></div>
+        <button class="preset-btn" id="addTpLevel" style="margin-top:8px; width:100%;">+ Add TP Level</button>
+        <div id="tpTotalWarning" style="font-family:var(--font-mono); font-size:0.72rem; color:var(--red); margin-top:8px; display:none;"></div>
       </div>
 
     </div>
@@ -673,10 +714,10 @@
 
         <button class="deploy-btn" id="deployBtn"><span id="deployBtnText">Connect Wallet</span></button>
         <button class="deploy-btn kill-btn" id="killBtn" style="display:none"><span id="killBtnText">Kill Agent</span></button>
-        <div class="deploy-note">1,500,000 $SPAWN + min 1 SOL deposit. 5% protocol fee on SOL, 95% to agent.</div>
+        <div class="deploy-note">500,000 $SPAWN + min 1 SOL deposit. 5% protocol fee on SOL, 95% to agent.</div>
 
         <div class="cost-grid">
-          <div class="cost-item"><div class="cost-item-label">Token Cost</div><div class="cost-item-value">1.5M $SPAWN</div></div>
+          <div class="cost-item"><div class="cost-item-label">Token Cost</div><div class="cost-item-value">500K $SPAWN</div></div>
           <div class="cost-item"><div class="cost-item-label">SOL Deposit</div><div class="cost-item-value" id="costDeposit">Min 1 SOL</div></div>
           <div class="cost-item"><div class="cost-item-label">Protocol Fee</div><div class="cost-item-value">5% on SOL</div></div>
           <div class="cost-item"><div class="cost-item-label">Withdraw</div><div class="cost-item-value">Anytime</div></div>
@@ -692,7 +733,7 @@
     <!-- Step 1: Choose method -->
     <div id="spawnStep1">
       <h3>Spawn Agent</h3>
-      <p class="spawn-sub">1.5M $SPAWN + SOL deposit</p>
+      <p class="spawn-sub">500K $SPAWN + SOL deposit</p>
       <button class="spawn-option" id="spawnPhantomBtn" onclick="spawnWithPhantom()">Pay with Phantom</button>
       <div class="spawn-or">or</div>
       <button class="spawn-option-alt" onclick="spawnManualStep()">Verify with Transaction</button>
@@ -701,7 +742,7 @@
     <!-- Step 2: Manual payment -->
     <div id="spawnStep2" style="display:none">
       <h3>Send Payment</h3>
-      <p class="spawn-sub">Send 1.5M $SPAWN + SOL amount below to the address</p>
+      <p class="spawn-sub">Send 500K $SPAWN + SOL amount below to the address</p>
       <div class="spawn-amount" id="spawnAmount">—</div>
       <div class="spawn-amount-label">SOL</div>
       <div class="spawn-dest" id="spawnDest" onclick="copySpawnAddr(this)"><span>send to</span>—</div>
@@ -802,27 +843,84 @@ function updatePreviewTags() {
 }
 
 // ============================================================
-// SELL STRATEGY
+// TP LEVELS
 // ============================================================
-let sellStrategy = 'phased';
-document.querySelectorAll('.strategy-option').forEach(opt => {
-  opt.addEventListener('click', () => {
-    document.querySelectorAll('.strategy-option').forEach(o => o.classList.remove('active'));
-    opt.classList.add('active');
-    sellStrategy = opt.dataset.strategy;
+let tpLevels = [
+  { pct: 30, sell_pct: 30 },
+  { pct: 75, sell_pct: 30 },
+  { pct: 150, sell_pct: 40 },
+];
+
+function renderTpLevels() {
+  const container = $('tpLevelsContainer');
+  container.innerHTML = '';
+  tpLevels.forEach((level, i) => {
+    const row = document.createElement('div');
+    row.className = 'tp-row';
+    row.innerHTML = `
+      <span class="tp-row-label">TP${i+1}</span>
+      <span class="tp-row-at">at +</span>
+      <input type="number" min="5" max="1000" value="${level.pct}" data-idx="${i}" data-field="pct">
+      <span class="tp-row-at">% sell</span>
+      <input type="number" min="5" max="100" value="${level.sell_pct}" data-idx="${i}" data-field="sell_pct">
+      <span class="tp-row-at">%</span>
+      <button class="tp-remove" data-idx="${i}">&times;</button>
+    `;
+    container.appendChild(row);
   });
+  // Event listeners
+  container.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const idx = parseInt(inp.dataset.idx);
+      tpLevels[idx][inp.dataset.field] = Math.max(1, parseInt(inp.value) || 0);
+      updateTpWarning();
+    });
+  });
+  container.querySelectorAll('.tp-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      tpLevels.splice(parseInt(btn.dataset.idx), 1);
+      renderTpLevels();
+    });
+  });
+  updateTpWarning();
+}
+
+function updateTpWarning() {
+  const total = tpLevels.reduce((s, l) => s + l.sell_pct, 0);
+  const warn = $('tpTotalWarning');
+  if (total > 100) {
+    warn.textContent = `Total sell: ${total}% — exceeds 100%`;
+    warn.style.display = 'block';
+  } else {
+    const remaining = 100 - total;
+    warn.style.display = 'block';
+    warn.style.color = 'var(--text-dim)';
+    warn.textContent = remaining > 0 ? `${remaining}% rides after all TPs (auto 50% trailing stop)` : 'Full exit across all TP levels';
+  }
+}
+
+$('addTpLevel').addEventListener('click', () => {
+  if (tpLevels.length >= 5) return;
+  const lastPct = tpLevels.length > 0 ? tpLevels[tpLevels.length - 1].pct : 0;
+  tpLevels.push({ pct: lastPct + 50, sell_pct: 20 });
+  renderTpLevels();
 });
+
+renderTpLevels();
+
+// Legacy sell strategy kept for backward compat
+let sellStrategy = 'phased';
 
 // ============================================================
 // SLIDER STATE
 // ============================================================
-const state = { aggression: 50, risk: 50, patience: 50, tp: 50, sl: 20, pos: 25, holders: 100, volume: 10000, maxpos: 3, degen: false };
+const state = { aggression: 50, risk: 50, patience: 50, tp: 50, sl: 20, pos: 25, holders: 100, volume: 10000, maxpos: 3, minmcap: 5000, maxmcap: 5000000, maxage: 48, trail: 20, trailEnabled: false, degen: false };
 
 const presets = {
-  sniper:       { aggression: 80, risk: 50, patience: 20, tp: 40, sl: 20, pos: 20, holders: 200, volume: 5000, maxpos: 2, degen: false },
-  diamond:      { aggression: 20, risk: 25, patience: 90, tp: 200, sl: 35, pos: 30, holders: 500, volume: 50000, maxpos: 4, degen: false },
-  degen:        { aggression: 95, risk: 95, patience: 15, tp: 100, sl: 50, pos: 60, holders: 10, volume: 1000, maxpos: 2, degen: true },
-  conservative: { aggression: 15, risk: 15, patience: 70, tp: 30, sl: 15, pos: 15, holders: 1000, volume: 100000, maxpos: 4, degen: false },
+  sniper:       { aggression: 80, risk: 50, patience: 20, tp: 40, sl: 20, pos: 20, holders: 200, volume: 5000, maxpos: 2, minmcap: 10000, maxmcap: 300000, maxage: 12, trail: 15, trailEnabled: true, degen: false },
+  diamond:      { aggression: 20, risk: 25, patience: 90, tp: 200, sl: 35, pos: 30, holders: 500, volume: 50000, maxpos: 4, minmcap: 50000, maxmcap: 5000000, maxage: 720, trail: 30, trailEnabled: true, degen: false },
+  degen:        { aggression: 95, risk: 95, patience: 15, tp: 100, sl: 50, pos: 60, holders: 10, volume: 1000, maxpos: 2, minmcap: 5000, maxmcap: 500000, maxage: 6, trail: 10, trailEnabled: false, degen: true },
+  conservative: { aggression: 15, risk: 15, patience: 70, tp: 30, sl: 15, pos: 15, holders: 1000, volume: 100000, maxpos: 4, minmcap: 50000, maxmcap: 2000000, maxage: 168, trail: 35, trailEnabled: true, degen: false },
 };
 
 document.querySelectorAll('input[type="range"]').forEach(slider => {
@@ -857,6 +955,15 @@ $('degenToggle').addEventListener('click', () => {
   updateAll();
 });
 
+// Trailing stop toggle
+$('trailToggle').addEventListener('click', () => {
+  state.trailEnabled = !state.trailEnabled;
+  $('trailToggle').classList.toggle('on', state.trailEnabled);
+  $('trailSliderGroup').style.display = state.trailEnabled ? '' : 'none';
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  updateAll();
+});
+
 $('agentName').addEventListener('input', () => {
   const name = $('agentName').value.trim();
   const el = $('previewName');
@@ -869,8 +976,10 @@ $('agentBio').addEventListener('input', () => {
 });
 
 function syncSliders() {
-  ['aggression','risk','patience','tp','sl','pos','holders','volume','maxpos'].forEach(k => $(k).value = state[k]);
+  ['aggression','risk','patience','tp','sl','pos','holders','volume','maxpos','minmcap','maxmcap','maxage','trail'].forEach(k => $(k).value = state[k]);
   $('degenToggle').classList.toggle('on', state.degen);
+  $('trailToggle').classList.toggle('on', state.trailEnabled);
+  $('trailSliderGroup').style.display = state.trailEnabled ? '' : 'none';
 }
 
 function fillTrack(el, val, min, max) {
@@ -889,6 +998,10 @@ function updateAll() {
   $('val-holders').textContent = state.holders.toLocaleString();
   $('val-volume').textContent = '$' + state.volume.toLocaleString();
   $('val-maxpos').textContent = state.maxpos;
+  $('val-minmcap').textContent = state.minmcap >= 1000000 ? '$' + (state.minmcap/1000000).toFixed(1) + 'M' : '$' + (state.minmcap/1000).toFixed(0) + 'K';
+  $('val-maxmcap').textContent = state.maxmcap >= 1000000 ? '$' + (state.maxmcap/1000000).toFixed(1) + 'M' : '$' + (state.maxmcap/1000).toFixed(0) + 'K';
+  $('val-maxage').textContent = state.maxage >= 24 ? (state.maxage/24).toFixed(0) + 'd' : state.maxage + 'h';
+  $('val-trail').textContent = state.trail + '%';
 
   fillTrack($('aggression'), state.aggression, 0, 100);
   fillTrack($('risk'), state.risk, 0, 100);
@@ -899,6 +1012,10 @@ function updateAll() {
   fillTrack($('holders'), state.holders, 10, 2000);
   fillTrack($('volume'), state.volume, 1000, 1000000);
   fillTrack($('maxpos'), state.maxpos, 1, 5);
+  fillTrack($('minmcap'), state.minmcap, 5000, 1000000);
+  fillTrack($('maxmcap'), state.maxmcap, 50000, 5000000);
+  fillTrack($('maxage'), state.maxage, 1, 720);
+  fillTrack($('trail'), state.trail, 5, 50);
 
   $('bar-agr').style.width = state.aggression + '%'; $('bv-agr').textContent = a.toFixed(2);
   $('bar-risk').style.width = state.risk + '%'; $('bv-risk').textContent = r.toFixed(2);
@@ -943,9 +1060,11 @@ function genDesc(a, r, p, tp, sl) {
   if (p>0.7) parts.push('Holds through volatility, rides the full move.');
   else if (p>0.4) parts.push('Standard hold times, exits when signals fade.');
   else parts.push('Quick flips, takes profit fast.');
-  if (sellStrategy==='trail') parts.push('No fixed TP — rides winners with trailing stop only.');
-  else if (sellStrategy==='full') parts.push('Full exits at target.');
-  else parts.push('Phased exits — recovers cost, then lets profits ride.');
+  if (tpLevels.length > 0) {
+    const totalSell = tpLevels.reduce((s, l) => s + l.sell_pct, 0);
+    parts.push(`${tpLevels.length} TP levels covering ${totalSell}% of position.`);
+    if (totalSell < 100) parts.push(`Remaining ${100-totalSell}% rides with trailing stop.`);
+  } else parts.push('No TP levels set — uses legacy exit strategy.');
   if (tp>=60) parts.push('Lets winners run big.');
   if (sl>=35) parts.push('Wide stops, tolerates drawdowns.');
   else if (sl<=15) parts.push('Tight stops, cuts losses fast.');
@@ -990,11 +1109,15 @@ function buildDnaAndMeta() {
       sell_profit_pct: state.tp, sell_loss_pct: state.sl, max_position_pct: state.pos,
       buy_threshold_holders: state.holders, buy_threshold_volume: state.volume,
       max_positions: state.maxpos, degen: state.degen,
+      min_mcap: state.minmcap, max_mcap: state.maxmcap,
+      max_pair_age_hours: state.maxage,
+      trailing_stop_pct: state.trailEnabled ? state.trail : undefined,
     },
     meta: {
       avatar: customAvatarB64 || null,
       bio: $('agentBio').value.trim(), focus: [...selectedFocus],
-      sell_strategy: sellStrategy,
+      sell_strategy: tpLevels.length > 0 ? 'tp_levels' : sellStrategy,
+      tp_levels: tpLevels.length > 0 ? tpLevels : undefined,
     },
   };
 }
@@ -1160,7 +1283,7 @@ const LAB_SPAWN_MINT = new solanaWeb3.PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37
 const LAB_TOKEN_PROG = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
 const LAB_ASSOC_PROG = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const LAB_SPAWN_DECIMALS = 6;
-const LAB_SPAWN_COST = 1500000;
+const LAB_SPAWN_COST = 500000;
 
 async function getLabATA(owner, mint) {
   const [ata] = await solanaWeb3.PublicKey.findProgramAddress(
@@ -1261,31 +1384,39 @@ async function initEditMode() {
     state.holders = dna.buy_threshold_holders || 100;
     state.volume = dna.buy_threshold_volume || 10000;
     state.maxpos = dna.max_positions || 3;
+    state.minmcap = dna.min_mcap || 5000;
+    state.maxmcap = dna.max_mcap || 5000000;
+    state.maxage = dna.max_pair_age_hours || 48;
+    state.trailEnabled = !!dna.trailing_stop_pct;
+    state.trail = dna.trailing_stop_pct || 20;
     state.degen = dna.degen || false;
     syncSliders();
     updateAll();
 
-    // Fill sell strategy
-    if (meta.sell_strategy) {
-      sellStrategy = meta.sell_strategy;
-      document.querySelectorAll('.strategy-option').forEach(o => {
-        o.classList.toggle('active', o.dataset.strategy === sellStrategy);
-      });
+    // Fill TP levels
+    if (meta.tp_levels && meta.tp_levels.length > 0) {
+      tpLevels = meta.tp_levels;
+      renderTpLevels();
     }
+    if (meta.sell_strategy) sellStrategy = meta.sell_strategy;
 
     // Fill focus tags
     if (meta.focus && meta.focus.length > 0) {
-      selectedFocus = new Set(meta.focus);
-      document.querySelectorAll('.focus-tag').forEach(t => {
-        t.classList.toggle('active', selectedFocus.has(t.dataset.focus));
+      selectedFocus.clear();
+      meta.focus.forEach(f => selectedFocus.add(f));
+      document.querySelectorAll('.tag-btn').forEach(t => {
+        t.classList.toggle('active', selectedFocus.has(t.textContent));
       });
-      renderFocusPreview();
+      updatePreviewTags();
     }
 
     // Fill avatar
     if (meta.avatar) {
       customAvatarB64 = meta.avatar;
-      $('avatarPreview').innerHTML = '<img src="' + meta.avatar + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%">';
+      $('previewAvatar').innerHTML = '<img src="' + meta.avatar + '" style="width:100%;height:100%;object-fit:cover">';
+      $('uploadPreview').src = meta.avatar;
+      $('uploadPreview').classList.add('visible');
+      $('uploadClear').classList.add('visible');
     }
 
     // Store owner wallet for verification

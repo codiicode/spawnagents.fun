@@ -1310,7 +1310,7 @@
     <div id="buyPhase1">
       <div class="spawn-modal-row">
         <span class="k">Claim cost</span>
-        <span class="v" id="modalSpawnCost">1,500,000 $SPAWN</span>
+        <span class="v" id="modalSpawnCost">500,000 $SPAWN</span>
       </div>
       <div class="spawn-modal-row">
         <span class="k">Tier</span>
@@ -1638,7 +1638,7 @@ function agentCard(g, priceLabel) {
       <span class="agent-price-label">Price</span>
       <span class="agent-price-val">${priceLabel}</span>
     </div>
-    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; 1.5M $SPAWN</button>` : ''}
+    ${g.available ? `<button class="buy-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-price="${priceLabel}" data-tier="${DEGEN_IDS.has(g.id) ? 'degen' : 'standard'}" onclick="initBuy(this)">Claim &mdash; 500K $SPAWN</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<a href="/lab/?edit=${g.id}" class="withdraw-btn" style="text-align:center;text-decoration:none;display:block;margin-top:6px;">Edit Agent</a>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce</button>` : ''}
@@ -1662,7 +1662,7 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="degen">
     <div class="tier-header">
       <div class="tier-label">Degen</div>
-      <div class="tier-price">1,500,000 $SPAWN + min 1 SOL deposit</div>
+      <div class="tier-price">500,000 $SPAWN + min 1 SOL deposit</div>
       <div class="tier-desc">${degens.filter(g => g.available).length} / ${degens.length} available &mdash; pump.fun hunters</div>
     </div>
     <div class="agent-grid">${degens.map(g => agentCard(g, "FREE")).join("")}</div>
@@ -1673,7 +1673,7 @@ function renderAgents(data) {
   html += `<div class="tier-section" data-tier="standard">
     <div class="tier-header">
       <div class="tier-label">Standard</div>
-      <div class="tier-price">1,500,000 $SPAWN + min 1 SOL deposit</div>
+      <div class="tier-price">500,000 $SPAWN + min 1 SOL deposit</div>
       <div class="tier-desc">${standard.filter(g => g.available).length} / ${standard.length} available &mdash; Jupiter traders</div>
     </div>
     <div class="agent-grid">${standard.map(g => agentCard(g, "FREE")).join("")}</div>
@@ -2049,7 +2049,7 @@ let currentBlockhash = null;
 let currentSpawnCostBuy = 0;
 let currentBuyTier = null;
 
-const SPAWN_COSTS_BUY = { degen: 1500000, standard: 1500000 };
+const SPAWN_COSTS_BUY = { degen: 500000, standard: 500000 };
 
 function initBuy(btn) {
   // Require login

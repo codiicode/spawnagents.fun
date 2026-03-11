@@ -28,8 +28,8 @@ export async function onRequest(context) {
   // Calculate costs
   const childGen = parent.generation + 1;
   if (childGen > 5) return Response.json({ error: 'Max generation reached (5)' }, { status: 400 });
-  // Reproduction costs 500K $SPAWN
-  const spawnCost = 500000;
+  // Reproduction costs 250K $SPAWN
+  const spawnCost = 250000;
 
   // Min 1 SOL deposit
   const solDeposit = Math.max(1, parseFloat(sol_amount));
