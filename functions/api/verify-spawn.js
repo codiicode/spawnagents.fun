@@ -143,11 +143,20 @@ export async function onRequest(context) {
     return Response.json({ error: `Funding failed: ${e.message}` }, { status: 500 });
   }
 
+  // Inherit parent's image/avatar meta
+  let childMeta = null;
+  if (parent.meta) {
+    try {
+      const pm = typeof parent.meta === 'string' ? JSON.parse(parent.meta) : parent.meta;
+      if (pm.avatar || pm.image) childMeta = JSON.stringify({ avatar: pm.avatar || pm.image });
+    } catch {}
+  }
+
   // Insert child agent + spawn record + event, update pending status
   await db.batch([
     db.prepare(
-      "INSERT INTO agents (id, name, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood) VALUES (?, ?, ?, ?, ?, ?, ?, 'alive', ?, ?)"
-    ).bind(childId, childName, pending.parent_id, childGen, pending.owner_wallet, keypair.publicKey, JSON.stringify(childDna), tradingCapital, pending.spawn_cost),
+      "INSERT INTO agents (id, name, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood, meta) VALUES (?, ?, ?, ?, ?, ?, ?, 'alive', ?, ?, ?)"
+    ).bind(childId, childName, pending.parent_id, childGen, pending.owner_wallet, keypair.publicKey, JSON.stringify(childDna), tradingCapital, pending.spawn_cost, childMeta),
     db.prepare(
       "INSERT INTO spawns (parent_id, child_id, blood_burned, mutation_log) VALUES (?, ?, ?, ?)"
     ).bind(pending.parent_id, childId, pending.spawn_cost, JSON.stringify(mutations)),
@@ -199,12 +208,28 @@ async function generateChildName(dna, parent, db) {
     'the-gambler':   ['The Bluffer', 'The Ace', 'The Wildcard', 'The Hustler', 'The Jackpot', 'The Diceroll', 'The High Roller', 'The Joker', 'The Ante', 'The Flush'],
   };
 
-  const pool = FAMILY_NAMES[rootId];
-  if (pool) return pool[Math.floor(Math.random() * pool.length)];
+  // Get names already taken
+  const existing = await db.prepare("SELECT name FROM agents WHERE name IS NOT NULL").all();
+  const taken = new Set((existing.results || []).map(r => r.name));
 
-  // Fallback for unknown lineages
-  const fallback = ['The Offspring', 'The Heir', 'The Scion', 'The Progeny', 'The Descendant'];
-  return fallback[Math.floor(Math.random() * fallback.length)];
+  const pool = FAMILY_NAMES[rootId];
+  if (pool) {
+    // Shuffle and pick first untaken
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    for (const name of shuffled) {
+      if (!taken.has(name)) return name;
+    }
+    // All taken — append number
+    return pool[0] + ' ' + (Math.floor(Math.random() * 90) + 10);
+  }
+
+  // Fallback for unknown lineages (custom agents)
+  const fallback = ['The Offspring', 'The Heir', 'The Scion', 'The Progeny', 'The Descendant', 'The Successor', 'The Legacy', 'The Inheritor', 'The Protege', 'The Spawn'];
+  const shuffledFb = fallback.sort(() => Math.random() - 0.5);
+  for (const name of shuffledFb) {
+    if (!taken.has(name)) return name;
+  }
+  return fallback[0] + ' ' + (Math.floor(Math.random() * 90) + 10);
 }
 
 async function getGenesisId(agent, db) {

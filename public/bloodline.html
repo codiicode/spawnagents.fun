@@ -1121,7 +1121,7 @@ function buildForest(agents) {
   const map = {};
   agents.forEach(a => {
     const node = { ...a, dna: typeof a.dna === 'string' ? JSON.parse(a.dna) : (a.dna || {}), children: [] };
-    try { const m = typeof a.meta === 'string' ? JSON.parse(a.meta) : a.meta; if (m && m.avatar) node._metaAvatar = m.avatar; } catch {}
+    try { const m = typeof a.meta === 'string' ? JSON.parse(a.meta) : a.meta; if (m && (m.image || m.avatar)) node._metaAvatar = m.image || m.avatar; } catch {}
     map[a.id] = node;
   });
   const roots = [];

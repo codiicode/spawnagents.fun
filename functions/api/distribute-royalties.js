@@ -40,7 +40,7 @@ export async function onRequest(context) {
     const childSecret = await kv.get(`agent:${agent.id}:secret`);
     if (!childSecret) continue;
 
-    // Walk parent chain — 50% to parent, 25% to grandparent, etc.
+    // Walk parent chain — split among ancestors, remainder to direct parent
     let currentId = agent.parent_id;
     let depth = 0;
     let share = payableAmount;
@@ -54,7 +54,9 @@ export async function onRequest(context) {
       const TREASURY = '4EtGKSvtteZNafiYTnxRggjMsmazCY5iZEikqTbGgmAc';
       const destination = parent.status === 'dead' ? TREASURY : parent.owner_wallet;
 
-      const payout = parseFloat((share * 0.5).toFixed(6));
+      // If no grandparent (or last in chain), give 100% of remaining share
+      const hasNextAncestor = parent.parent_id && depth + 1 < maxGen;
+      const payout = parseFloat((hasNextAncestor ? share * 0.5 : share).toFixed(6));
       if (payout < 0.002) break;
 
       try {

@@ -195,7 +195,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
     } else {
       fullOutSol = (tokenData.price_native || 0) * token.amount;
-      if (fullOutSol <= 0) fullOutSol = totalBought;
+      if (fullOutSol <= 0) {
+        console.warn(`[${agent.id}] price_native=0 for ${tokenData.symbol || token.mint.substring(0,8)}, skipping sell eval`);
+        continue;
+      }
     }
 
     // costRecovered: have we gotten back >= 90% of what we spent?
@@ -235,7 +238,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     // tp_levels = [{pct: 30, sell_pct: 30}, {pct: 60, sell_pct: 40}, ...] — sell % of ORIGINAL position at each trigger
     const tpLevels = meta.tp_levels && meta.tp_levels.length > 0 ? meta.tp_levels : null;
 
-    if (tpLevels && holdTimeMet && pnlPct > 0) {
+    if (tpLevels && pnlPct > 0) {
       // Track which levels have been hit via KV
       const tpKey = kv ? `tphit:${agent.id}:${token.mint}` : null;
       let hitsCompleted = tpKey ? parseInt(await kv.get(tpKey) || '0') : 0;
@@ -628,15 +631,15 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (t.address === SOL_MINT) { filterStats.sol++; return false; }
 
       const isFresh = (t.pair_age_hours || 0) < 1; // just migrated / still on pump
-      const volFloor = isDegen ? 2000 : (isFresh ? 3000 : 10000);
-      const vol1hFloor = isDegen ? 500 : (isFresh ? 500 : 1000);
-      const liqBase = isDegen ? 500 : (isFresh ? 1000 : 2000);
-      const liqScale = isDegen ? 2000 : (isFresh ? 5000 : 15000);
-      const minAgeBase = isDegen ? 0.03 : 0.08; // ~2 min degen, ~5 min standard
-      const minAgeScale = isDegen ? 0.1 : 0.4;
+      const volFloor = isDegen ? 2000 : (isFresh ? 2000 : 4000);
+      const vol1hFloor = isDegen ? 500 : (isFresh ? 300 : 7500);
+      const liqBase = isDegen ? 500 : (isFresh ? 600 : 1000);
+      const liqScale = isDegen ? 2000 : (isFresh ? 3000 : 6000);
+      const minAgeBase = isDegen ? 0.03 : 0.05; // ~2 min degen, ~3 min standard
+      const minAgeScale = isDegen ? 0.1 : 0.2;
       const maxAge = dna.max_pair_age_hours || (isDegen ? 24 : 168);
 
-      const minMcap = dna.min_mcap || (isDegen ? 5000 : 20000);
+      const minMcap = dna.min_mcap || (isDegen ? 5000 : 10000);
       const maxMcap = dna.max_mcap || (isDegen ? 500000 : Infinity);
       if ((t.market_cap || 0) < minMcap) { filterStats.mcap++; return false; }
       if ((t.market_cap || 0) > maxMcap) { filterStats.mcap++; return false; }
@@ -645,12 +648,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if ((t.volume_1h || 0) < vol1hFloor) { filterStats.volume1h++; return false; }
 
       // Require positive momentum
-      const minMomentum = isDegen ? -10 : -3;
+      const minMomentum = isDegen ? -10 : -5;
       if ((t.price_change_1h || 0) < minMomentum) { filterStats.momentum++; return false; }
 
       const minTxns = isDegen
         ? Math.max(5, Math.round((dna.buy_threshold_holders || 50) * 0.1))
-        : Math.max(15, Math.round((dna.buy_threshold_holders || 100) * 0.15));
+        : Math.max(10, Math.round((dna.buy_threshold_holders || 100) * 0.05));
       if (t.txns_24h < minTxns) { filterStats.txns++; return false; }
 
       const minLiq = liqBase + (1 - dna.risk_tolerance) * liqScale;
@@ -675,7 +678,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
   console.log(`Agent ${agent.id} filter: ${JSON.stringify(filterStats)}`);
 
-  const minScore = isDegen ? 4 : 5;
+  const minScore = isDegen ? 4 : 4.5;
   const strongCandidates = scored.filter(t => t.score >= minScore);
   const skipped = [];
   if (strongCandidates.length === 0 && scored.length > 0) {

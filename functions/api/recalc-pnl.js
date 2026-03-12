@@ -40,7 +40,14 @@ export async function onRequest(context) {
       }
       const totalValue = solBal + tokenValueSol;
       const withdrawn = agent.total_withdrawn || 0;
-      const realPnl = (totalValue + withdrawn) - (agent.initial_capital || 0);
+
+      // Include royalties paid OUT from this agent (so they don't count as losses)
+      const royaltiesPaidRow = await db.prepare(
+        "SELECT COALESCE(SUM(amount_sol), 0) as total FROM royalties WHERE from_agent_id = ? AND tx_signature IS NOT NULL"
+      ).bind(agent.id).first();
+      const royaltiesPaid = royaltiesPaidRow?.total || 0;
+
+      const realPnl = (totalValue + withdrawn + royaltiesPaid) - (agent.initial_capital || 0);
 
       // Fitness: Sharpe ratio + win rate + drawdown
       const agentTrades = await db.prepare(

@@ -234,6 +234,22 @@
     .withdraw-inline .w-status.error { color: var(--red); }
     .withdraw-inline .w-status.ok { color: var(--green); }
 
+    /* EDIT INLINE */
+    .edit-inline { padding: 0 24px 24px; }
+    .edit-inline .edit-field { margin-bottom: 12px; }
+    .edit-inline .edit-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
+    .edit-inline input[type="text"], .edit-inline textarea { width: 100%; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-strong); color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; }
+    .edit-inline input[type="text"]:focus, .edit-inline textarea:focus { border-color: var(--blood); }
+    .edit-inline textarea { resize: vertical; min-height: 60px; }
+    .edit-inline .dna-slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .edit-inline .dna-slider-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); width: 110px; flex-shrink: 0; }
+    .edit-inline .dna-slider-val { font-family: var(--font-mono); font-size: 11px; color: var(--text); width: 45px; text-align: right; flex-shrink: 0; }
+    .edit-inline input[type="range"] { flex: 1; accent-color: var(--blood); height: 2px; -webkit-appearance: none; background: var(--border-strong); outline: none; }
+    .edit-inline input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--blood); cursor: pointer; }
+    .edit-inline .edit-status { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+    .edit-inline .edit-status.error { color: var(--red); }
+    .edit-inline .edit-status.ok { color: var(--green); }
+
     /* SHARE CARD */
     .share-overlay {
       display: none; position: fixed; inset: 0; z-index: 200;
@@ -553,8 +569,20 @@ function getHeartbeatHtml(agent) {
 
 function getAgentImage(agent) {
   if (AGENT_IMAGES[agent.id]) return AGENT_IMAGES[agent.id];
+  // Check if agent has a custom uploaded image
+  const meta = agent.meta ? (typeof agent.meta === 'string' ? (() => { try { return JSON.parse(agent.meta); } catch { return {}; } })() : agent.meta) : {};
+  if (meta.image || meta.avatar) return meta.image || meta.avatar;
+  // Fall back to parent image
   let cur = agent; const visited = new Set();
-  while (cur && cur.parent_id && !visited.has(cur.parent_id)) { visited.add(cur.parent_id); const p = allAgents.find(a=>a.id===cur.parent_id); if(!p)break; if(AGENT_IMAGES[p.id])return AGENT_IMAGES[p.id]; cur=p; }
+  while (cur && cur.parent_id && !visited.has(cur.parent_id)) {
+    visited.add(cur.parent_id);
+    const p = allAgents.find(a=>a.id===cur.parent_id);
+    if(!p) break;
+    if (AGENT_IMAGES[p.id]) return AGENT_IMAGES[p.id];
+    const pm = p.meta ? (typeof p.meta === 'string' ? (() => { try { return JSON.parse(p.meta); } catch { return {}; } })() : p.meta) : {};
+    if (pm.image || pm.avatar) return pm.image || pm.avatar;
+    cur = p;
+  }
   return null;
 }
 
@@ -580,7 +608,7 @@ async function loadDashboard() {
     allEvents = (eventsData.events || []).filter(e => !e.agent_id?.startsWith('test-'));
 
     // Filter to only agents owned by connected wallet
-    myAgents = allAgents.filter(a => a.owner_wallet === connectedWallet);
+    myAgents = allAgents.filter(a => a.owner_wallet === connectedWallet && a.status !== 'dead');
 
     if (myAgents.length === 0) { showState('empty'); return; }
 
@@ -958,6 +986,7 @@ async function openAgentDetail(id) {
     html += `<div class="detail-actions">`;
     if (canSpawn && isOwner) html += `<button class="detail-action-btn primary" onclick="handleSpawn('${agent.id}','${name}',${gen})">Reproduce</button>`;
     if (isOwner) html += `<button class="detail-action-btn" onclick="toggleWithdraw('${agent.id}')">Withdraw</button>`;
+    if (isOwner) html += `<button class="detail-action-btn" onclick="toggleEdit('${agent.id}')">Edit</button>`;
     html += `<button class="detail-action-btn" onclick="openShareCard('${agent.id}')">Share PnL</button>`;
     html += `<a class="detail-action-btn" href="/bloodline.html" target="_blank">Bloodline</a>`;
     if (agent.agent_wallet) html += `<a class="detail-action-btn" href="https://solscan.io/account/${agent.agent_wallet}" target="_blank">Solscan</a>`;
@@ -970,6 +999,47 @@ async function openAgentDetail(id) {
         <input type="number" id="withdrawAmount-${agent.id}" placeholder="Amount in SOL" step="0.01" min="0.01">
         <button class="detail-action-btn primary" style="width:100%;" onclick="executeWithdraw('${agent.id}')">Send to my wallet</button>
         <div class="w-status" id="withdrawStatus-${agent.id}"></div>
+      </div>`;
+    }
+
+    // Edit inline (hidden by default)
+    if (isOwner) {
+      const meta = agent.meta ? (typeof agent.meta === 'string' ? JSON.parse(agent.meta) : agent.meta) : {};
+      const bio = meta.bio || '';
+      const currentImg = getAgentImage(agent);
+      html += `<div class="edit-inline" id="editSection-${agent.id}" style="display:none;">
+        <div class="detail-section-title">Edit Agent</div>
+        <div class="edit-field">
+          <div class="edit-label">Avatar</div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div id="editImgPreview-${agent.id}" style="width:56px;height:56px;border:1px solid var(--border);background:var(--blood-dim);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+              ${currentImg ? `<img src="${currentImg}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-family:var(--font-mono);font-size:12px;color:var(--text-dim);">--</span>`}
+            </div>
+            <label style="flex:1;padding:8px;border:1px dashed var(--border-strong);text-align:center;cursor:pointer;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:0.06em;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--blood)'" onmouseout="this.style.borderColor=''">
+              Choose image
+              <input type="file" accept="image/*" style="display:none;" onchange="previewAgentImage('${agent.id}', this)">
+            </label>
+          </div>
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Name</div>
+          <input type="text" id="editName-${agent.id}" value="${(name||'').replace(/"/g,'&quot;')}" maxlength="32">
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Bio</div>
+          <textarea id="editBio-${agent.id}" maxlength="200" placeholder="Short description of your agent...">${bio.replace(/</g,'&lt;')}</textarea>
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">DNA</div>
+          ${buildDnaSlider('aggression', dna.aggression || 0.5, agent.id, 0, 1, 0.01)}
+          ${buildDnaSlider('patience', dna.patience || 0.5, agent.id, 0, 1, 0.01)}
+          ${buildDnaSlider('risk_tolerance', dna.risk_tolerance || 0.5, agent.id, 0, 1, 0.01)}
+          ${buildDnaSlider('sell_profit_pct', dna.sell_profit_pct || 50, agent.id, 5, 1000, 1)}
+          ${buildDnaSlider('sell_loss_pct', dna.sell_loss_pct || 15, agent.id, 1, 100, 1)}
+          ${buildDnaSlider('max_position_pct', dna.max_position_pct || 50, agent.id, 10, 90, 1)}
+        </div>
+        <button class="detail-action-btn primary" style="width:100%;" onclick="saveAgentEdit('${agent.id}')">Save Changes</button>
+        <div class="edit-status" id="editStatus-${agent.id}"></div>
       </div>`;
     }
 
@@ -1126,6 +1196,118 @@ async function executeWithdraw(agentId) {
     amountEl.value = '';
   } catch (e) {
     statusEl.textContent = e.message || 'Cancelled'; statusEl.className = 'w-status error';
+  }
+}
+
+// ============================================================
+// EDIT AGENT
+// ============================================================
+// Pending image data per agent (set by file picker, uploaded on save)
+const pendingImages = {};
+
+function previewAgentImage(agentId, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      // Resize to max 200x200
+      const size = 200;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // Center crop
+      const s = Math.min(img.width, img.height);
+      const sx = (img.width - s) / 2, sy = (img.height - s) / 2;
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      pendingImages[agentId] = dataUrl;
+      const preview = document.getElementById(`editImgPreview-${agentId}`);
+      if (preview) preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;">`;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function buildDnaSlider(key, val, agentId, min, max, step) {
+  const label = key.replace(/_/g, ' ');
+  const display = step < 1 ? parseFloat(val).toFixed(2) : Math.round(val);
+  return `<div class="dna-slider-row">
+    <span class="dna-slider-label">${label}</span>
+    <input type="range" id="editDna-${agentId}-${key}" min="${min}" max="${max}" step="${step}" value="${val}" oninput="this.nextElementSibling.textContent=${step<1?'parseFloat(this.value).toFixed(2)':'this.value'}">
+    <span class="dna-slider-val">${display}</span>
+  </div>`;
+}
+
+function toggleEdit(agentId) {
+  const el = document.getElementById(`editSection-${agentId}`);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function saveAgentEdit(agentId) {
+  const statusEl = document.getElementById(`editStatus-${agentId}`);
+  statusEl.textContent = 'Saving...'; statusEl.className = 'edit-status';
+
+  const name = document.getElementById(`editName-${agentId}`).value.trim();
+  const bio = document.getElementById(`editBio-${agentId}`).value.trim();
+
+  const dna = {};
+  ['aggression','patience','risk_tolerance','sell_profit_pct','sell_loss_pct','max_position_pct'].forEach(k => {
+    const el = document.getElementById(`editDna-${agentId}-${k}`);
+    if (el) dna[k] = parseFloat(el.value);
+  });
+
+  // Get existing DNA fields we don't edit (thresholds etc)
+  const agent = allAgents.find(a => a.id === agentId);
+  if (agent) {
+    const oldDna = typeof agent.dna === 'string' ? JSON.parse(agent.dna) : (agent.dna || {});
+    ['buy_threshold_holders','buy_threshold_volume','check_interval_min','degen','min_mcap'].forEach(k => {
+      if (oldDna[k] !== undefined) dna[k] = oldDna[k];
+    });
+  }
+
+  // Merge with existing meta to preserve avatar/other fields
+  const existingMeta = agent?.meta ? (typeof agent.meta === 'string' ? (() => { try { return JSON.parse(agent.meta); } catch { return {}; } })() : agent.meta) : {};
+  const meta = { ...existingMeta, bio };
+  // If image was uploaded, store reference URL in meta
+  if (AGENT_IMAGES[agentId]?.startsWith('/api/agent-image')) meta.image = AGENT_IMAGES[agentId].split('&t=')[0];
+
+  try {
+    // Upload image if changed
+    if (pendingImages[agentId]) {
+      statusEl.textContent = 'Uploading image...';
+      const imgRes = await fetch(`/api/agent-image?id=${agentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_wallet: connectedWallet, image_data: pendingImages[agentId] }),
+      });
+      const imgData = await imgRes.json();
+      if (!imgRes.ok) { statusEl.textContent = imgData.error || 'Image upload failed'; statusEl.className = 'edit-status error'; return; }
+      // Update local image map so it shows immediately
+      AGENT_IMAGES[agentId] = `/api/agent-image?id=${agentId}&t=${Date.now()}`;
+      delete pendingImages[agentId];
+    }
+
+    statusEl.textContent = 'Saving...';
+    const res = await fetch('/api/update-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, owner_wallet: connectedWallet, name, meta, dna }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.textContent = data.error || 'Failed'; statusEl.className = 'edit-status error'; return; }
+    statusEl.textContent = 'Saved!'; statusEl.className = 'edit-status ok';
+    // Update local data
+    if (agent) {
+      agent.name = name;
+      agent.dna = JSON.stringify(dna);
+      agent.meta = JSON.stringify(meta);
+    }
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  } catch (e) {
+    statusEl.textContent = e.message || 'Error'; statusEl.className = 'edit-status error';
   }
 }
 
