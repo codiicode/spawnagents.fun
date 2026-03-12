@@ -75,12 +75,15 @@ export async function getHolderConcentration(mintAddress, rpcUrl) {
 // Verify that a specific wallet sent tokens to the treasury
 export async function verifyTokenTransfer(senderWallet, recipientWallet, mint, expectedAmount, rpcUrl) {
   // Get the recipient's token account for this mint
-  const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
-  const ata = await rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
-    recipientWallet, { mint }, { encoding: 'jsonParsed', commitment: 'confirmed' },
-  ]).catch(() => ({ value: [] }));
-
-  const ataAddress = ata?.value?.[0]?.pubkey;
+  // Try both Token programs (legacy + Token-2022) since getTokenAccountsByOwner only searches one at a time
+  let ataAddress = null;
+  for (const prog of ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb']) {
+    const ata = await rpcCall(rpcUrl, 'getTokenAccountsByOwner', [
+      recipientWallet, { programId: prog }, { encoding: 'jsonParsed', commitment: 'confirmed' },
+    ]).catch(() => ({ value: [] }));
+    const match = (ata?.value || []).find(a => a.account?.data?.parsed?.info?.mint === mint);
+    if (match) { ataAddress = match.pubkey; break; }
+  }
   if (!ataAddress) return { verified: false, reason: 'no token account' };
 
   // Check recent transactions to this token account

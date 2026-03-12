@@ -16,6 +16,7 @@
   <meta name="twitter:image" content="https://spawnagents.fun/ogg.jpg">
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="/theme.js"></script>
   <style>
     :root {
       --bg: #0a0608;
@@ -654,15 +655,6 @@
     .vein-bg { animation: heartbeat-glow 2.5s ease-in-out infinite; }
     .hero { position: relative; }
 
-    /* === SOUND TOGGLE === */
-    .nav-sound {
-      background: none; border: 1px solid var(--border); color: var(--text-dim);
-      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
-      font-family: var(--font-mono); line-height: 1;
-    }
-    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
-    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
-
     /* === RIPPLE === */
     .hero-cta, .hero-cta-alt, .buy-btn, .pay-btn, .login-option, .filter-btn { position: relative; overflow: hidden; }
     .ripple {
@@ -838,7 +830,6 @@
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
-    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -997,106 +988,6 @@
 </footer>
 
 <script>
-// ============================================================
-// SPAWN SOUND ENGINE
-// ============================================================
-const SpawnAudio = (() => {
-  let ctx = null;
-  let enabled = false;
-
-  function getCtx() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
-
-  function toggle() {
-    enabled = !enabled;
-    localStorage.setItem('spawn_sound', enabled ? '1' : '0');
-    const btn = document.getElementById('soundBtn');
-    if (btn) btn.classList.toggle('active', enabled);
-    return enabled;
-  }
-
-  function isEnabled() { return enabled; }
-
-  function playClick() {
-    if (!enabled) return;
-    const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(300, c.currentTime);
-    o.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.12);
-    g.gain.setValueAtTime(0.25, c.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.15);
-    o.connect(g); g.connect(c.destination);
-    o.start(); o.stop(c.currentTime + 0.18);
-  }
-
-  function playBuy() {
-    if (!enabled) return;
-    const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(400, c.currentTime);
-    o.frequency.exponentialRampToValueAtTime(120, c.currentTime + 0.2);
-    g.gain.setValueAtTime(0.3, c.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.3);
-    o.connect(g); g.connect(c.destination);
-    o.start(); o.stop(c.currentTime + 0.35);
-  }
-
-  function playSell() {
-    if (!enabled) return;
-    const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = 'triangle';
-    o.frequency.setValueAtTime(600, c.currentTime);
-    o.frequency.exponentialRampToValueAtTime(250, c.currentTime + 0.35);
-    g.gain.setValueAtTime(0.2, c.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.4);
-    o.connect(g); g.connect(c.destination);
-    o.start(); o.stop(c.currentTime + 0.45);
-  }
-
-  function playSpawn() {
-    if (!enabled) return;
-    const c = getCtx();
-    [220, 330, 440].forEach((freq, i) => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = i === 0 ? 'sine' : 'triangle';
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0, c.currentTime);
-      g.gain.linearRampToValueAtTime(0.2, c.currentTime + 0.15);
-      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 1.2);
-      o.connect(g); g.connect(c.destination);
-      o.start(c.currentTime + i * 0.05);
-      o.stop(c.currentTime + 1.3);
-    });
-  }
-
-  function playDeath() {
-    if (!enabled) return;
-    const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(500, c.currentTime);
-    o.frequency.exponentialRampToValueAtTime(60, c.currentTime + 0.8);
-    g.gain.setValueAtTime(0.25, c.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 1);
-    o.connect(g); g.connect(c.destination);
-    o.start(); o.stop(c.currentTime + 1.1);
-  }
-
-  // Restore state across page navigations
-  if (localStorage.getItem('spawn_sound') === '1') {
-    enabled = true;
-    requestAnimationFrame(() => document.getElementById('soundBtn')?.classList.add('active'));
-  }
-
-  return { toggle, isEnabled, playClick, playBuy, playSell, playSpawn, playDeath };
-})();
-
 // === LIVE STATS ===
 (async () => {
   try {
@@ -1113,11 +1004,6 @@ const SpawnAudio = (() => {
     }
   } catch {}
 })();
-
-// === SOUND HOOKS ===
-document.addEventListener('click', (e) => {
-  if (e.target.matches('button, a.hero-cta, a.hero-cta-alt, a.nav-wallet')) SpawnAudio.playClick();
-});
 
 // ============================================================
 // MOBILE MENU
@@ -1302,12 +1188,13 @@ function renderActivity() {
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
       </div>`;
-    } else if (ev.type === 'genesis_claimed') {
+    } else if (ev.type === 'genesis_claimed' || ev.type === 'custom_agent_created') {
       const txLink = d.tx ? `<a class="activity-tx" href="https://solscan.io/tx/${d.tx}" target="_blank">tx</a>` : '';
+      const label = ev.type === 'custom_agent_created' ? 'created' : 'claimed';
       return `<div class="activity-item${i === 0 ? ' new' : ''}">
         <span class="activity-action buy">spawn</span>
-        <span class="activity-agent">${agentName(ev.agent_id)}</span>
-        <span class="activity-detail">claimed for ${parseFloat(d.amount).toFixed(2)} SOL</span>
+        <span class="activity-agent">${d.name || agentName(ev.agent_id)}</span>
+        <span class="activity-detail">${label} for ${parseFloat(d.amount).toFixed(2)} SOL</span>
         <span class="activity-time">${timeAgo(ev.created_at)}</span>
         ${txLink}
       </div>`;
@@ -1330,16 +1217,6 @@ async function pollActivity() {
     const data = await res.json();
     if (data.events && data.events.length > 0) {
       activityEvents = data.events.filter(e => !e.agent_id.startsWith('test-') && e.type !== 'death');
-      // Play sound for new events
-      if (lastTopEventId > 0 && activityEvents[0] && activityEvents[0].id > lastTopEventId) {
-        const latest = activityEvents[0];
-        try {
-          const d = JSON.parse(latest.data);
-          if (d.action === 'buy') SpawnAudio.playBuy();
-          else if (d.action === 'sell') SpawnAudio.playSell();
-          else if (latest.type === 'genesis_claimed') SpawnAudio.playSpawn();
-        } catch {}
-      }
       if (activityEvents[0]) lastTopEventId = activityEvents[0].id;
       renderActivity();
       updateTicker();

@@ -520,7 +520,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   const availableSol = solBalance - SOL_RESERVE;
 
   // Min trade: at least 0.15 SOL (~$13) to make trades worthwhile after fees
-  const MIN_TRADE_SOL = Math.max(0.15, availableSol * 0.15);
+  // But never exceed max_position_pct so user-set limits are respected
+  const maxPctLimit = (Math.min(dna.max_position_pct, 90) / 100) * availableSol;
+  const MIN_TRADE_SOL = Math.min(Math.max(0.15, availableSol * 0.15), Math.max(0.15, maxPctLimit));
 
   // Don't trade if balance is too low
   if (availableSol < 0.15) return { sells: sellResults, action: 'hold', reason: `balance too low to trade (${availableSol.toFixed(3)} SOL)`, _debug };

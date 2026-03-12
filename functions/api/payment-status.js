@@ -47,15 +47,50 @@ export async function onRequest(context) {
     const { reference, tx_signature } = body;
     if (!reference) return Response.json({ error: 'Missing reference' }, { status: 400 });
 
+    // Fetch payment request by reference — no status filter so we can handle all states
     const pr = await db.prepare(
-      'SELECT id, agent_id, amount, reference, recipient, spawn_cost FROM payment_requests WHERE reference = ? AND status = ?'
-    ).bind(reference, 'pending').first();
+      'SELECT id, agent_id, amount, reference, recipient, spawn_cost, status, buyer_wallet, tx_signature FROM payment_requests WHERE reference = ?'
+    ).bind(reference).first();
 
-    if (!pr) return Response.json({ error: 'No pending payment found' }, { status: 404 });
+    if (!pr) return Response.json({ error: 'No payment request found for this reference' }, { status: 404 });
 
     const rpcUrl = context.env.RPC_URL;
     if (!rpcUrl) return Response.json({ error: 'RPC not configured' }, { status: 500 });
 
+    // --- Already fully confirmed with agent created ---
+    if (pr.status === 'confirmed') {
+      const agent = await db.prepare('SELECT agent_wallet FROM agents WHERE id = ?').bind(pr.agent_id).first();
+      if (agent) {
+        return Response.json({
+          status: 'confirmed', agent_id: pr.agent_id,
+          agent_wallet: agent.agent_wallet, tx_signature: pr.tx_signature,
+        });
+      }
+    }
+
+    // --- Funding failed — payment was verified but agent creation failed. Retry funding. ---
+    if (pr.status === 'funding_failed' && pr.tx_signature) {
+      try {
+        const funded = await fundAgent(context, db, rpcUrl, pr);
+        if (funded) {
+          const agent = await db.prepare('SELECT agent_wallet FROM agents WHERE id = ?').bind(pr.agent_id).first();
+          return Response.json({
+            status: 'confirmed', agent_id: pr.agent_id,
+            agent_wallet: agent?.agent_wallet, tx_signature: pr.tx_signature,
+          });
+        }
+      } catch (e) {
+        console.error('Funding retry error:', e.message);
+      }
+      return Response.json({ status: 'funding_retry', message: 'Payment verified. Agent funding in progress...' });
+    }
+
+    // --- Expired or already claimed — not actionable ---
+    if (pr.status === 'expired' || pr.status === 'already_claimed') {
+      return Response.json({ status: pr.status, message: `Payment ${pr.status}` });
+    }
+
+    // --- Status is 'pending' — do on-chain verification ---
     let found = false;
 
     // --- Method 1: Reference-based lookup (Phantom flow — reference key is in the tx) ---
@@ -77,6 +112,35 @@ export async function onRequest(context) {
       }
     }
 
+    // --- Method 3: Amount-matching for THIS specific payment request only (manual flow without tx sig) ---
+    if (!found) {
+      try {
+        const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [pr.recipient, { limit: 20 }]);
+        const usedTxs = await db.prepare("SELECT tx_signature FROM payment_requests WHERE tx_signature IS NOT NULL").all();
+        const usedSigs = new Set(usedTxs.results.map(r => r.tx_signature));
+
+        for (const sig of (recentSigs || [])) {
+          if (sig.err || usedSigs.has(sig.signature)) continue;
+          const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+          if (!tx?.meta) continue;
+          const accounts = tx.transaction.message.accountKeys;
+          let protoIdx = -1;
+          for (let i = 0; i < accounts.length; i++) {
+            const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+            if (pk === pr.recipient) { protoIdx = i; break; }
+          }
+          if (protoIdx < 0) continue;
+          const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
+          if (Math.abs(solReceived - pr.amount) <= pr.amount * 0.01) {
+            found = await verifyAndConfirm(context, db, rpcUrl, pr, sig.signature);
+            if (found) break;
+          }
+        }
+      } catch (e) {
+        console.error('Amount-match lookup error:', e.message);
+      }
+    }
+
     if (found) {
       const agent = await db.prepare('SELECT agent_wallet FROM agents WHERE id = ?').bind(pr.agent_id).first();
       const updated = await db.prepare('SELECT status, amount, buyer_wallet, tx_signature FROM payment_requests WHERE id = ?').bind(pr.id).first();
@@ -90,10 +154,112 @@ export async function onRequest(context) {
       });
     }
 
+    // Check if verifyAndConfirm changed the status (e.g. to funding_failed)
+    const refreshed = await db.prepare('SELECT status FROM payment_requests WHERE id = ?').bind(pr.id).first();
+    if (refreshed && refreshed.status === 'funding_failed') {
+      return Response.json({ status: 'funding_retry', message: 'Payment verified. Agent funding in progress...' });
+    }
+
     return Response.json({ status: 'pending', message: 'Payment not found on-chain yet' });
   }
 
   return Response.json({ error: 'Method not allowed' }, { status: 405 });
+}
+
+// Retry funding for a payment that was verified but funding failed
+async function fundAgent(context, db, rpcUrl, pr) {
+  const { generateKeypair, sendSol } = await import('../_lib/solana.js');
+  const kv = context.env.AGENT_KEYS;
+  const protocolSecret = context.env.PROTOCOL_PRIVATE_KEY;
+  if (!protocolSecret) return false;
+
+  // Get saved keypair or generate new one
+  let agentPubkey = kv ? await kv.get(`funding:${pr.id}:pubkey`) : null;
+  let secretKey = kv ? await kv.get(`agent:${pr.agent_id}:secret`) : null;
+
+  if (!agentPubkey || !secretKey) {
+    const keypair = await generateKeypair();
+    agentPubkey = keypair.publicKey;
+    secretKey = keypair.secretKey;
+    if (kv) {
+      await kv.put(`agent:${pr.agent_id}:secret`, secretKey);
+      await kv.put(`funding:${pr.id}:pubkey`, agentPubkey);
+    }
+  }
+
+  const feePct = parseFloat(context.env.GENESIS_FEE_PCT || '0.05');
+  const tradingCapital = pr.amount * (1 - feePct);
+
+  const fundingTx = await sendSol(protocolSecret, agentPubkey, tradingCapital, rpcUrl);
+
+  // Get DNA and name
+  const GENESIS_DNA = {
+    "the-berserker": { degen: true, aggression: 0.95, patience: 0.05, risk_tolerance: 0.95, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 100, sell_loss_pct: 15, max_position_pct: 80, check_interval_min: 2 },
+    "the-monk": { degen: true, aggression: 0.88, patience: 0.2, risk_tolerance: 0.9, buy_threshold_holders: 50, buy_threshold_volume: 20000, sell_profit_pct: 200, sell_loss_pct: 12, max_position_pct: 60, check_interval_min: 3 },
+    "the-wolf": { aggression: 0.75, patience: 0.35, risk_tolerance: 0.7, buy_threshold_holders: 300, buy_threshold_volume: 800, sell_profit_pct: 40, sell_loss_pct: 15, max_position_pct: 60, check_interval_min: 3 },
+    "the-hawk": { aggression: 0.6, patience: 0.5, risk_tolerance: 0.5, buy_threshold_holders: 500, buy_threshold_volume: 2000, sell_profit_pct: 35, sell_loss_pct: 10, max_position_pct: 45, check_interval_min: 5 },
+  };
+
+  let dna = GENESIS_DNA[pr.agent_id];
+  let agentName = null;
+  let agentMeta = null;
+  let customOwner = null;
+  const isCustom = !dna && kv;
+
+  if (isCustom) {
+    const customDnaStr = await kv.get(`custom:${pr.agent_id}:dna`);
+    if (!customDnaStr) return false;
+    dna = JSON.parse(customDnaStr);
+    agentName = await kv.get(`custom:${pr.agent_id}:name`);
+    agentMeta = await kv.get(`custom:${pr.agent_id}:meta`);
+    customOwner = await kv.get(`custom:${pr.agent_id}:owner`);
+  }
+  if (!dna) return false;
+
+  const ownerWallet = (customOwner && customOwner !== 'manual') ? customOwner : pr.buyer_wallet;
+
+  // Check if agent already exists
+  const existingAgent = await db.prepare('SELECT id, status FROM agents WHERE id = ?').bind(pr.agent_id).first();
+  const reclaimExisting = existingAgent && (existingAgent.status === 'dead' || existingAgent.status === 'unclaimed');
+
+  if (existingAgent && existingAgent.status !== 'dead' && existingAgent.status !== 'unclaimed') {
+    return false; // agent already alive
+  }
+
+  if (reclaimExisting) {
+    await db.prepare(
+      "UPDATE agents SET owner_wallet = ?, agent_wallet = ?, dna = ?, status = 'alive', initial_capital = ?, total_pnl = 0, total_trades = 0, total_royalties_paid = 0, name = COALESCE(?, name), meta = ? WHERE id = ?"
+    ).bind(ownerWallet, agentPubkey, JSON.stringify(dna), tradingCapital, agentName, agentMeta, pr.agent_id).run();
+  } else {
+    await db.prepare(
+      "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?)"
+    ).bind(pr.agent_id, ownerWallet, agentPubkey, JSON.stringify(dna), tradingCapital, agentName, agentMeta).run();
+  }
+
+  // Update payment to confirmed
+  await db.prepare(
+    "UPDATE payment_requests SET status = 'confirmed', confirmed_at = datetime('now') WHERE id = ?"
+  ).bind(pr.id).run();
+
+  // Clean up KV
+  if (isCustom && kv) {
+    await kv.delete(`custom:${pr.agent_id}:dna`);
+    await kv.delete(`custom:${pr.agent_id}:name`);
+    await kv.delete(`custom:${pr.agent_id}:owner`);
+    await kv.delete(`custom:${pr.agent_id}:meta`);
+  }
+  if (kv) await kv.delete(`funding:${pr.id}:pubkey`);
+
+  const eventType = isCustom ? 'custom_agent_created' : 'genesis_claimed';
+  await db.prepare(
+    "INSERT INTO events (agent_id, type, data) VALUES (?, ?, ?)"
+  ).bind(pr.agent_id, eventType, JSON.stringify({
+    buyer: ownerWallet, amount: pr.amount, tx: pr.tx_signature,
+    agent_wallet: agentPubkey, trading_capital: tradingCapital,
+    funding_tx: fundingTx, retried: true,
+  })).run();
+
+  return true;
 }
 
 // Verify a single transaction and confirm the payment + create agent
@@ -115,6 +281,14 @@ async function verifyAndConfirm(context, db, rpcUrl, pr, txSignature) {
   if (solReceived < pr.amount * 0.90) return false; // 10% tolerance
 
   const buyer = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+  // Verify $SPAWN token transfer if required
+  if (pr.spawn_cost && pr.spawn_cost > 0) {
+    const { verifyTokenTransfer } = await import('../_lib/solana.js');
+    const SPAWN_MINT = context.env.SPAWN_MINT || '4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump';
+    const tokenResult = await verifyTokenTransfer(buyer, pr.recipient, SPAWN_MINT, pr.spawn_cost, rpcUrl);
+    if (!tokenResult.verified) return false;
+  }
 
   // Check tx signature not already used
   const existingTx = await db.prepare(

@@ -15,6 +15,7 @@
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+  <script src="/theme.js"></script>
   <style>
     :root {
       --bg: #0e0a0c;
@@ -305,10 +306,6 @@
     footer a { color: var(--text-dim); text-decoration: none; transition: color 0.2s; }
     footer a:hover { color: var(--blood); }
     .footer-links { display: flex; gap: 20px; }
-    .sound-toggle { background: none; border: 1px solid var(--border-strong); color: var(--text-muted); font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; padding: 4px 10px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
-    .sound-toggle:hover { border-color: var(--blood); color: var(--blood); }
-    .sound-toggle.off { border-color: var(--border); color: var(--text-dim); opacity: 0.5; }
-
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -373,7 +370,6 @@
     <a href="/dashboard-preview.html" class="active">dashboard</a>
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
-    <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">SOUND ON</button>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()"><span></span><span></span><span></span></button>
@@ -384,7 +380,6 @@
   <a href="/bloodline.html">bloodline</a>
   <a href="/how.html">how?</a>
   <a href="https://x.com/spawnagents" target="_blank">X</a>
-  <button class="sound-toggle" id="soundToggleMobile" onclick="toggleSound()">SOUND ON</button>
   <a href="#" class="nav-wallet" id="walletBtnMobile" onclick="handleWalletClick()">log in</a>
 </div>
 
@@ -1518,156 +1513,13 @@ async function refreshEvents() {
 }
 
 // ============================================================
-// AUDIO — Cyber UI sounds (Web Audio API, no files)
-// ============================================================
-let audioCtx = null;
-let sfxEnabled = localStorage.getItem('spawn_sfx') !== 'off';
-
-function getAudio() {
-  if (!sfxEnabled) return null;
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  return audioCtx;
-}
-
-function toggleSound() {
-  sfxEnabled = !sfxEnabled;
-  localStorage.setItem('spawn_sfx', sfxEnabled ? 'on' : 'off');
-  updateSoundButtons();
-  if (sfxEnabled) sfxClick();
-}
-
-function updateSoundButtons() {
-  ['soundToggle', 'soundToggleMobile'].forEach(id => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    btn.textContent = sfxEnabled ? 'SOUND ON' : 'SOUND OFF';
-    btn.classList.toggle('off', !sfxEnabled);
-  });
-}
-
-function initSoundToggle() { updateSoundButtons(); }
-
-function sfxClick() {
-  const ctx = getAudio(); if (!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'square';
-  osc.frequency.setValueAtTime(1800, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.06);
-  gain.gain.setValueAtTime(0.07, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
-  osc.connect(gain); gain.connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime + 0.06);
-}
-
-function sfxOpen() {
-  const ctx = getAudio(); if (!ctx) return;
-  // Layer 1: rising tone
-  const osc1 = ctx.createOscillator();
-  const g1 = ctx.createGain();
-  osc1.type = 'sine';
-  osc1.frequency.setValueAtTime(200, ctx.currentTime);
-  osc1.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.12);
-  g1.gain.setValueAtTime(0.06, ctx.currentTime);
-  g1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-  osc1.connect(g1); g1.connect(ctx.destination);
-  osc1.start(); osc1.stop(ctx.currentTime + 0.25);
-  // Layer 2: echo tick
-  const osc2 = ctx.createOscillator();
-  const g2 = ctx.createGain();
-  osc2.type = 'square';
-  osc2.frequency.setValueAtTime(1200, ctx.currentTime + 0.08);
-  osc2.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.15);
-  g2.gain.setValueAtTime(0, ctx.currentTime);
-  g2.gain.setValueAtTime(0.04, ctx.currentTime + 0.08);
-  g2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-  osc2.connect(g2); g2.connect(ctx.destination);
-  osc2.start(); osc2.stop(ctx.currentTime + 0.2);
-}
-
-function sfxClose() {
-  const ctx = getAudio(); if (!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(600, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.15);
-  gain.gain.setValueAtTime(0.05, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-  osc.connect(gain); gain.connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime + 0.15);
-}
-
-function sfxHover() {
-  const ctx = getAudio(); if (!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(1400, ctx.currentTime);
-  osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.02);
-  gain.gain.setValueAtTime(0.015, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-  osc.connect(gain); gain.connect(ctx.destination);
-  osc.start(); osc.stop(ctx.currentTime + 0.04);
-}
-
-function sfxAccept() {
-  const ctx = getAudio(); if (!ctx) return;
-  // Two-note confirmation: low → high
-  [0, 0.08].forEach((delay, i) => {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'sine';
-    const freq = i === 0 ? 500 : 750;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-    g.gain.setValueAtTime(0, ctx.currentTime);
-    g.gain.setValueAtTime(0.06, ctx.currentTime + delay);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12);
-    osc.connect(g); g.connect(ctx.destination);
-    osc.start(); osc.stop(ctx.currentTime + delay + 0.12);
-  });
-}
-
-// Wire sounds to interactions
-document.addEventListener('DOMContentLoaded', () => {
-  // Delegate clicks
-  document.addEventListener('click', e => {
-    const el = e.target;
-    // Agent cards
-    if (el.closest('.agent-card')) { sfxOpen(); return; }
-    // Share buttons (open)
-    if (el.closest('.portfolio-share-btn') || el.closest('[onclick*="openShareCard"]')) { sfxAccept(); return; }
-    // Download / tweet
-    if (el.closest('.share-btn')) { sfxAccept(); return; }
-    // Close buttons
-    if (el.closest('.share-close') || el.closest('.detail-close button')) { sfxClose(); return; }
-    // Overlay close (clicking background)
-    if (el.classList.contains('share-overlay') || el.classList.contains('detail-overlay')) { sfxClose(); return; }
-    // Nav links, section actions, detail action buttons, login buttons
-    if (el.closest('.nav-wallet') || el.closest('.section-action') || el.closest('.detail-action-btn') || el.closest('.login-option') || el.closest('.login-option-alt') || el.closest('.connect-btn') || el.closest('.verify-btn') || el.closest('.tree-agent')) { sfxClick(); return; }
-  });
-
-  // Hover on agent cards
-  document.addEventListener('mouseover', e => {
-    if (e.target.closest('.agent-card') && !e.target.closest('.agent-card').dataset.hovered) {
-      e.target.closest('.agent-card').dataset.hovered = '1';
-      sfxHover();
-    }
-  });
-  document.addEventListener('mouseout', e => {
-    const card = e.target.closest('.agent-card');
-    if (card) delete card.dataset.hovered;
-  });
-});
-
-// ============================================================
 // KEYBOARD
 // ============================================================
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (document.getElementById('shareOverlay').classList.contains('open')) { sfxClose(); closeShareCard(); return; }
-    if (document.getElementById('detailPanel').classList.contains('open')) { sfxClose(); closeDetail(); return; }
-    if (document.getElementById('loginOverlay').classList.contains('open')) { sfxClose(); closeLoginModal(); return; }
+    if (document.getElementById('shareOverlay').classList.contains('open')) { closeShareCard(); return; }
+    if (document.getElementById('detailPanel').classList.contains('open')) { closeDetail(); return; }
+    if (document.getElementById('loginOverlay').classList.contains('open')) { closeLoginModal(); return; }
   }
 });
 
@@ -1676,7 +1528,6 @@ document.addEventListener('keydown', e => {
 // ============================================================
 checkWallet();
 if (connectedWallet) { loadDashboard(); } else { showState('connect'); }
-initSoundToggle();
 </script>
 </body>
 </html>

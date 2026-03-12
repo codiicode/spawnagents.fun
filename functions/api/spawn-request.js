@@ -1,4 +1,4 @@
-const SPAWN_COSTS = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
+const SPAWN_COST_REPRODUCE = 250000; // flat 250K $SPAWN for all reproductions
 
 export async function onRequest(context) {
   if (context.request.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 });

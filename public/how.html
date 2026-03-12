@@ -12,6 +12,7 @@
   <meta name="twitter:image" content="https://spawnagents.fun/ogg.jpg">
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="/theme.js"></script>
   <style>
     :root {
       --bg: #0a0608;
@@ -372,14 +373,6 @@
     }
     .vein-bg { animation: heartbeat-glow 2.5s ease-in-out infinite; }
 
-    /* === SOUND TOGGLE === */
-    .nav-sound {
-      background: none; border: 1px solid var(--border); color: var(--text-dim);
-      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
-      font-family: var(--font-mono); line-height: 1;
-    }
-    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
-    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
   </style>
 </head>
 <body>
@@ -396,7 +389,6 @@
     <a href="/how.html" class="active">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
-    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -765,21 +757,6 @@
 </footer>
 
 <script>
-// Sound engine (minimal for how page)
-const SpawnAudio = (() => {
-  let ctx=null,enabled=false;
-  function getCtx(){if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();return ctx;}
-  function toggle(){
-    enabled=!enabled;localStorage.setItem('spawn_sound',enabled?'1':'0');
-    document.getElementById('soundBtn')?.classList.toggle('active',enabled);
-  }
-  if(localStorage.getItem('spawn_sound')==='1'){
-    enabled=true;
-    requestAnimationFrame(()=>document.getElementById('soundBtn')?.classList.add('active'));
-  }
-  return {toggle};
-})();
-
 function toggleMobileMenu() {
   document.getElementById("mobileMenu").classList.toggle("open");
   document.getElementById("hamburgerBtn").classList.toggle("open");

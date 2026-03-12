@@ -13,6 +13,7 @@
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+  <script src="/theme.js"></script>
   <style>
     :root {
       --bg: #0a0608;
@@ -1093,14 +1094,6 @@
     }
     .vein-bg { animation: heartbeat-glow 2.5s ease-in-out infinite; }
 
-    /* === SOUND TOGGLE === */
-    .nav-sound {
-      background: none; border: 1px solid var(--border); color: var(--text-dim);
-      font-size: 11px; padding: 3px 8px; cursor: pointer; transition: all 0.2s;
-      font-family: var(--font-mono); line-height: 1;
-    }
-    .nav-sound:hover { border-color: var(--border-strong); color: var(--text-muted); }
-    .nav-sound.active { color: var(--blood); border-color: var(--blood-deep); }
 
     /* === BREATHING AGENTS === */
     @keyframes breathe {
@@ -1215,7 +1208,7 @@
     <a href="/how.html">how?</a>
     <a href="https://x.com/spawnagents" target="_blank">X</a>
     <a href="#" class="nav-wallet" id="walletBtn" onclick="handleWalletClick()">log in</a>
-    <button class="nav-sound" id="soundBtn" onclick="SpawnAudio.toggle()" title="Toggle sound">&#9835;</button>
+
   </div>
   <button class="nav-hamburger" id="hamburgerBtn" onclick="toggleMobileMenu()">
     <span></span><span></span><span></span>
@@ -1431,61 +1424,6 @@
 </footer>
 
 <script>
-// ============================================================
-// SPAWN SOUND ENGINE
-// ============================================================
-const SpawnAudio = (() => {
-  let ctx = null, enabled = false;
-  function getCtx() {
-    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
-  function toggle() {
-    enabled = !enabled;
-    localStorage.setItem('spawn_sound', enabled ? '1' : '0');
-    document.getElementById('soundBtn')?.classList.toggle('active', enabled);
-  }
-  function playClick() {
-    if (!enabled) return; const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type='sine'; o.frequency.setValueAtTime(300,c.currentTime); o.frequency.exponentialRampToValueAtTime(80,c.currentTime+0.12);
-    g.gain.setValueAtTime(0.25,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.15);
-    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.18);
-  }
-  function playBuy() {
-    if (!enabled) return; const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type='sine'; o.frequency.setValueAtTime(400,c.currentTime); o.frequency.exponentialRampToValueAtTime(120,c.currentTime+0.2);
-    g.gain.setValueAtTime(0.3,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.3);
-    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.35);
-  }
-  function playSell() {
-    if (!enabled) return; const c = getCtx();
-    const o = c.createOscillator(), g = c.createGain();
-    o.type='triangle'; o.frequency.setValueAtTime(600,c.currentTime); o.frequency.exponentialRampToValueAtTime(250,c.currentTime+0.35);
-    g.gain.setValueAtTime(0.2,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.4);
-    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+0.45);
-  }
-  function playSpawn() {
-    if (!enabled) return; const c = getCtx();
-    [220,330,440].forEach((f,i) => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = i===0?'sine':'triangle'; o.frequency.value=f;
-      g.gain.setValueAtTime(0,c.currentTime); g.gain.linearRampToValueAtTime(0.2,c.currentTime+0.15);
-      g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+1.2);
-      o.connect(g); g.connect(c.destination); o.start(c.currentTime+i*0.05); o.stop(c.currentTime+1.3);
-    });
-  }
-  if (localStorage.getItem('spawn_sound') === '1') {
-    enabled = true;
-    requestAnimationFrame(() => document.getElementById('soundBtn')?.classList.add('active'));
-  }
-  return { toggle, playClick, playBuy, playSell, playSpawn };
-})();
-document.addEventListener('click', (e) => {
-  if (e.target.matches('button, .buy-btn, .pay-btn, .filter-btn, .reproduce-btn, .withdraw-btn, a.nav-wallet')) SpawnAudio.playClick();
-});
 
 // ============================================================
 // AGENT DATA
@@ -1585,8 +1523,8 @@ function agentCard(g, priceLabel) {
   const d = g.dna;
   const isDegen = DEGEN_IDS.has(g.id);
   const st = !g.available ? "claimed" : "available";
-  const flavor = FLAVOR[g.id] || "";
   const meta = g.meta ? (typeof g.meta === 'string' ? JSON.parse(g.meta) : g.meta) : {};
+  const flavor = FLAVOR[g.id] || meta.bio || "";
   const img = AGENT_IMAGES[g.id] || meta.avatar || null;
 
   return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}" data-pnl="${g.total_pnl || 0}">
@@ -2009,7 +1947,7 @@ function checkWallet() {
 
 const { PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL, TransactionInstruction, Connection } = solanaWeb3;
 const SPAWN_MINT = new PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump');
-const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const TOKEN_PROGRAM_ID = new PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const SPAWN_DECIMALS = 6;
 
@@ -2196,6 +2134,20 @@ async function handlePay() {
     if (currentSpawnCostBuy > 0) {
       const senderATA = await getATA(buyer, SPAWN_MINT);
       const recipientATA = await getATA(recipientPk, SPAWN_MINT);
+      // Create recipient ATA if it doesn't exist (idempotent)
+      const SYS_PROG = new PublicKey('11111111111111111111111111111111');
+      tx.add(new TransactionInstruction({
+        keys: [
+          { pubkey: buyer, isSigner: true, isWritable: true },
+          { pubkey: recipientATA, isSigner: false, isWritable: true },
+          { pubkey: recipientPk, isSigner: false, isWritable: false },
+          { pubkey: SPAWN_MINT, isSigner: false, isWritable: false },
+          { pubkey: SYS_PROG, isSigner: false, isWritable: false },
+          { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        ],
+        programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+        data: new Uint8Array([1]), // CreateIdempotent
+      }));
       const tokenAmount = BigInt(currentSpawnCostBuy) * BigInt(10 ** SPAWN_DECIMALS);
       const tokenIx = createTokenTransferIx(senderATA, recipientATA, buyer, tokenAmount, SPAWN_DECIMALS, SPAWN_MINT);
       tx.add(tokenIx);
@@ -2205,8 +2157,34 @@ async function handlePay() {
     status.textContent = 'Approve transaction in Phantom...';
     const { signature } = await provider.signAndSendTransaction(tx);
 
-    status.textContent = 'Transaction sent. Confirming...';
+    status.textContent = 'Transaction sent. Verifying on-chain...';
     status.className = 'modal-status waiting pulse';
+
+    // Trigger POST verification immediately (don't wait for cron)
+    if (currentReference) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+          const vRes = await fetch('/api/payment-status', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reference: currentReference }),
+          });
+          const vData = await vRes.json();
+          console.log('genesis POST verify:', vData);
+          if (vData.status === 'confirmed') {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            showConfirmed(vData);
+            return;
+          }
+          if (vData.status === 'funding_retry') {
+            status.textContent = 'Payment verified! Creating agent... (attempt ' + (i+1) + ')';
+          } else {
+            status.textContent = 'Verifying... (attempt ' + (i+1) + ')';
+          }
+        } catch (e2) { console.error('verify poll error:', e2); }
+      }
+      status.textContent = 'Payment sent. Agent will appear shortly.';
+    }
 
   } catch (e) {
     if (e.code === 4001 || e.message?.includes('rejected')) {
@@ -2235,14 +2213,15 @@ async function verifyManual() {
     const data = await res.json();
 
     if (data.status === 'confirmed') {
-      // Stop polling — we got it
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       showConfirmed(data);
+    } else if (data.status === 'funding_retry') {
+      status.textContent = 'Payment verified! Creating agent...';
+      status.className = 'modal-status waiting pulse';
+      btn.textContent = 'Verify Payments';
+      btn.disabled = false;
     } else {
-      const checks = data.checks || {};
       let msg = 'Not found yet — it can take a minute for the transaction to confirm on Solana.';
-      if (checks.token === true && checks.sol === false) msg = '$SPAWN received. Waiting for SOL payment...';
-      else if (checks.token === false && checks.sol === false) msg = 'Waiting for $SPAWN tokens and SOL payment...';
       status.textContent = msg;
       status.className = 'modal-status waiting';
       btn.textContent = 'Verify Payments';
@@ -2296,10 +2275,27 @@ async function pollPayment(reference) {
       clearInterval(pollInterval);
       pollInterval = null;
       showConfirmed(data);
+    } else if (data.status === 'funding_failed') {
+      // Trigger POST to retry funding
+      try {
+        const retryRes = await fetch('/api/payment-status', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference }),
+        });
+        const retryData = await retryRes.json();
+        if (retryData.status === 'confirmed') {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          showConfirmed(retryData);
+        } else {
+          const status = document.getElementById('modalStatus');
+          status.textContent = 'Payment verified! Creating agent...';
+          status.className = 'modal-status waiting pulse';
+        }
+      } catch (e2) { /* retry next poll */ }
     } else if (data.status === 'expired') {
       clearInterval(pollInterval);
       pollInterval = null;
-
       const status = document.getElementById('modalStatus');
       status.textContent = 'Payment expired. Please try again.';
       status.className = 'modal-status error';
@@ -2635,7 +2631,7 @@ setInterval(pollActivity, 5000);
 // SPAWN / REPRODUCE FLOW
 // ============================================================
 
-const SPAWN_COSTS = { 1: 500000, 2: 500000, 3: 500000, 4: 500000, 5: 500000 };
+const SPAWN_COSTS = { 1: 250000, 2: 250000, 3: 250000, 4: 250000, 5: 250000 };
 let spawnPollInterval = null;
 let currentSpawnId = null;
 let currentSpawnAgentId = null;
@@ -2748,6 +2744,20 @@ async function handleSpawnPay() {
       const spawnMint = new PublicKey(data.spawn_mint || SPAWN_MINT);
       const senderATA = await getATA(buyer, spawnMint);
       const recipientATA = await getATA(recipientPk, spawnMint);
+      // Create recipient ATA if it doesn't exist (idempotent)
+      const SYS_PROG = new PublicKey('11111111111111111111111111111111');
+      tx.add(new TransactionInstruction({
+        keys: [
+          { pubkey: buyer, isSigner: true, isWritable: true },
+          { pubkey: recipientATA, isSigner: false, isWritable: true },
+          { pubkey: recipientPk, isSigner: false, isWritable: false },
+          { pubkey: spawnMint, isSigner: false, isWritable: false },
+          { pubkey: SYS_PROG, isSigner: false, isWritable: false },
+          { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        ],
+        programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+        data: new Uint8Array([1]), // CreateIdempotent
+      }));
       const tokenAmount = BigInt(data.spawn_cost_tokens) * BigInt(10 ** SPAWN_DECIMALS);
       const tokenIx = createTokenTransferIx(senderATA, recipientATA, buyer, tokenAmount, SPAWN_DECIMALS, spawnMint);
       tx.add(tokenIx);

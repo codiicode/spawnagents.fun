@@ -7,6 +7,7 @@
   <link rel="icon" href="/S.jpg" type="image/jpeg">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/@solana/web3.js@1/lib/index.iife.min.js"></script>
+  <script src="/theme.js"></script>
   <style>
     :root {
       --bg: #0a0608;
@@ -450,10 +451,22 @@
 <div class="container">
 
   <header class="lab-header fade-in">
-    <a href="/" class="lab-back">&larr; back to spawn</a>
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <a href="/" class="lab-back">&larr; back to spawn</a>
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode" id="labThemeToggle">&#9728;</button>
+    </div>
     <h1 class="lab-title">SPAWN <span class="accent">LAB</span></h1>
     <p class="lab-subtitle">Design your agent</p>
   </header>
+  <script>
+    // Update lab theme toggle icon on load
+    (function(){
+      var btn = document.getElementById('labThemeToggle');
+      if (btn) btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'light' ? '&#9790;' : '&#9728;';
+      var origToggle = window.toggleTheme;
+      window.toggleTheme = function() { origToggle(); if (btn) btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'light' ? '&#9790;' : '&#9728;'; };
+    })();
+  </script>
 
   <div class="lab-grid">
 
@@ -746,8 +759,7 @@
       <div class="spawn-amount" id="spawnAmount">—</div>
       <div class="spawn-amount-label">SOL</div>
       <div class="spawn-dest" id="spawnDest" onclick="copySpawnAddr(this)"><span>send to</span>—</div>
-      <input type="text" class="text-input" id="spawnTxSig" placeholder="Paste your transaction signature here" style="margin-top:12px;font-size:11px;">
-      <button class="spawn-verify-btn" id="spawnVerifyBtn" onclick="verifySpawnPayment()">Verify payment</button>
+      <button class="spawn-verify-btn" id="spawnVerifyBtn" onclick="verifySpawnPayment()">I've paid — verify</button>
       <div class="spawn-status" id="spawnModalStatus"></div>
       <button class="spawn-cancel" onclick="spawnBack()">back</button>
     </div>
@@ -1089,6 +1101,7 @@ $('depositInput').addEventListener('input', () => {
 function showStatus(msg, type) { $('deployStatus').style.display='block'; $('deployStatus').textContent=msg; $('deployStatus').className='deploy-status '+type; }
 function hideStatus() { $('deployStatus').style.display='none'; }
 function updateDeployBtn() {
+  if (editAgentId) { $('deployBtnText').textContent = 'Save Changes'; $('deployBtn').disabled = false; return; }
   if (deploying) { $('deployBtnText').textContent='Spawning...'; $('deployBtn').disabled=true; return; }
   if (depositAmount < 1) { $('deployBtnText').textContent = 'Enter deposit amount'; $('deployBtn').disabled = true; return; }
   $('deployBtnText').textContent = 'Spawn your agent \u2014 ' + depositAmount + ' SOL';
@@ -1144,13 +1157,14 @@ async function pollConfirmation(agentId) {
   for (let i=0; i<40; i++) {
     await new Promise(r=>setTimeout(r,4000));
     try {
-      // First try POST to trigger on-chain verification (faster than waiting for cron)
-      if (ref && i < 10) {
+      // POST to trigger on-chain verification + funding retry
+      if (ref) {
         const p = await fetch('/api/payment-status', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ reference: ref }),
         });
         const pd = await p.json();
+        console.log('payment-status POST response:', pd);
         if (pd.status==='confirmed') {
           $('spawnConfirmStatus').textContent='Agent "'+name+'" is live and trading!';
           $('spawnConfirmStatus').className='spawn-status success';
@@ -1160,10 +1174,16 @@ async function pollConfirmation(agentId) {
           setTimeout(closeSpawnModal, 2500);
           return true;
         }
+        if (pd.status==='funding_retry') {
+          $('spawnConfirmStatus').textContent='Payment verified! Creating agent... (attempt '+(i+1)+')';
+        } else {
+          $('spawnConfirmStatus').textContent='Verifying... (attempt '+(i+1)+') ' + (pd.message || pd.error || '');
+        }
       }
       // Also poll GET in case cron confirmed it
       const c = await fetch('/api/payment-status?agent_id='+agentId);
       const s = await c.json();
+      console.log('payment-status GET response:', s);
       if (s.status==='confirmed'||s.status==='alive') {
         $('spawnConfirmStatus').textContent='Agent "'+name+'" is live and trading!';
         $('spawnConfirmStatus').className='spawn-status success';
@@ -1173,7 +1193,7 @@ async function pollConfirmation(agentId) {
         setTimeout(closeSpawnModal, 2500);
         return true;
       }
-    } catch{}
+    } catch(e) { console.error('poll error:', e); }
   }
   $('spawnConfirmStatus').textContent='Payment sent. Agent will appear shortly.';
   $('spawnConfirmStatus').className='spawn-status pending';
@@ -1202,11 +1222,10 @@ async function spawnWithPhantom() {
     btn.textContent='Confirming...'; btn.disabled=true;
     await pollConfirmation(data.agent_id);
   } catch(e) {
+    console.error('Phantom flow error:', e);
     btn.disabled=false; btn.textContent='Pay with Phantom';
-    if (e.message) {
-      $('spawnStep1').style.display='block'; $('spawnStep2').style.display='none'; $('spawnStep3').style.display='none';
-      showStatus(e.message, 'error');
-    }
+    $('spawnStep1').style.display='block'; $('spawnStep2').style.display='none'; $('spawnStep3').style.display='none';
+    showStatus(e.message || 'Transaction failed', 'error');
   }
 }
 
@@ -1232,30 +1251,24 @@ async function verifySpawnPayment() {
   if (!pendingSpawnData) return;
   const btn = $('spawnVerifyBtn');
   const status = $('spawnModalStatus');
-  const txSig = $('spawnTxSig').value.trim();
-  if (!txSig || txSig.length < 30) {
-    status.textContent='Paste your transaction signature above first.';
-    status.className='spawn-status error';
-    return;
-  }
   btn.disabled=true; btn.textContent='Verifying...';
   status.textContent='Checking transaction on-chain...';
   status.className='spawn-status pending';
   try {
     const res = await fetch('/api/payment-status', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ reference: pendingSpawnData.reference, tx_signature: txSig }),
+      body: JSON.stringify({ reference: pendingSpawnData.reference }),
     });
     const data = await res.json();
     if (data.status==='confirmed') {
       await pollConfirmation(pendingSpawnData.agent_id);
     } else {
-      status.textContent='Transaction not matching. Check the signature and try again.';
-      status.className='spawn-status error'; btn.textContent='Verify payment'; btn.disabled=false;
+      status.textContent='Payment not found yet. Send the exact amount and try again.';
+      status.className='spawn-status error'; btn.textContent='I\'ve paid — verify'; btn.disabled=false;
     }
   } catch(e) {
     status.textContent='Error checking \u2014 try again.';
-    status.className='spawn-status error'; btn.textContent='Verify payment'; btn.disabled=false;
+    status.className='spawn-status error'; btn.textContent='I\'ve paid — verify'; btn.disabled=false;
   }
 }
 
@@ -1280,7 +1293,7 @@ $('deployBtn').addEventListener('click', () => {
 });
 
 const LAB_SPAWN_MINT = new solanaWeb3.PublicKey('4C4uA2TRtoyPQLrXQ1itQawgDgCtW37N6cUpoYWopump');
-const LAB_TOKEN_PROG = new solanaWeb3.PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+const LAB_TOKEN_PROG = new solanaWeb3.PublicKey('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const LAB_ASSOC_PROG = new solanaWeb3.PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const LAB_SPAWN_DECIMALS = 6;
 const LAB_SPAWN_COST = 500000;
@@ -1308,9 +1321,25 @@ async function buildTransaction(from, to, sol, ref) {
   if (LAB_SPAWN_COST > 0) {
     const senderATA = await getLabATA(fromKey, LAB_SPAWN_MINT);
     const recipientATA = await getLabATA(toKey, LAB_SPAWN_MINT);
+
+    // Create recipient ATA if it doesn't exist (idempotent)
+    const SYS_PROG = new PublicKey('11111111111111111111111111111111');
+    tx.add(new TransactionInstruction({
+      keys: [
+        { pubkey: fromKey, isSigner: true, isWritable: true },
+        { pubkey: recipientATA, isSigner: false, isWritable: true },
+        { pubkey: toKey, isSigner: false, isWritable: false },
+        { pubkey: LAB_SPAWN_MINT, isSigner: false, isWritable: false },
+        { pubkey: SYS_PROG, isSigner: false, isWritable: false },
+        { pubkey: LAB_TOKEN_PROG, isSigner: false, isWritable: false },
+      ],
+      programId: LAB_ASSOC_PROG,
+      data: new Uint8Array([1]), // 1 = CreateIdempotent
+    }));
+
     const tokenAmount = BigInt(LAB_SPAWN_COST) * BigInt(10 ** LAB_SPAWN_DECIMALS);
     const data = new Uint8Array(10);
-    data[0] = 12;
+    data[0] = 12; // TransferChecked
     const view = new DataView(data.buffer);
     view.setBigUint64(1, tokenAmount, true);
     data[9] = LAB_SPAWN_DECIMALS;

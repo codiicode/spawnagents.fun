@@ -12,8 +12,7 @@ export async function onRequest(context) {
   if (parent.status !== "alive") return Response.json({ error: "Parent not alive" }, { status: 400 });
   if (parent.total_pnl < parseFloat(context.env.MIN_SPAWN_PNL || "0.4")) return Response.json({ error: "Insufficient PnL" }, { status: 400 });
   const childGen = parent.generation + 1;
-  const SPAWN_COSTS = { 1: 1000000, 2: 750000, 3: 500000, 4: 250000, 5: 100000 };
-  const minBlood = SPAWN_COSTS[childGen] || 100000;
+  const minBlood = 250000; // flat 250K $SPAWN for all reproductions
   if (blood_fee < minBlood) return Response.json({ error: `Need ${minBlood.toLocaleString()} $SPAWN (gen ${childGen})` }, { status: 400 });
   const parentDna = JSON.parse(parent.dna);
   const { childDna, mutations } = mutate(parentDna);

@@ -94,8 +94,8 @@ export async function onRequest(context) {
 
   // Store payment request with custom DNA
   await db.prepare(
-    "INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status, spawn_cost, created_at) VALUES (?, ?, ?, ?, ?, 'pending', 500000, datetime('now'))"
-  ).bind(paymentId, agentId, totalSol, reference, protocolWallet).run();
+    "INSERT INTO payment_requests (id, agent_id, amount, reference, recipient, status, spawn_cost, owner_wallet, created_at) VALUES (?, ?, ?, ?, ?, 'pending', 500000, ?, datetime('now'))"
+  ).bind(paymentId, agentId, totalSol, reference, protocolWallet, owner_wallet || null).run();
 
   // Store custom DNA, name, and meta in KV (verify-payments will read this when confirming)
   const kv = context.env.AGENT_KEYS;
