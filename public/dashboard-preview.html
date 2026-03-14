@@ -111,8 +111,8 @@
     .skeleton-line.short { width: 40%; }
     .skeleton-line.num { width: 30%; height: 28px; margin-bottom: 6px; }
 
-    /* STAT CARDS — 5 columns for royalties */
-    .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 40px; }
+    /* STAT CARDS — 6 columns */
+    .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 40px; }
     .stat-card { background: var(--surface); border: 1px solid var(--border); padding: 20px 24px; transition: border-color 0.3s, box-shadow 0.3s; }
     .stat-card:hover { border-color: var(--border-strong); box-shadow: 0 0 30px rgba(196,30,58,0.04); }
     .stat-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
@@ -236,6 +236,8 @@
 
     /* EDIT INLINE */
     .edit-inline { padding: 0 24px 24px; }
+    .edit-inline.flash { animation: editFlash 0.6s ease; }
+    @keyframes editFlash { 0% { background: rgba(196,30,58,0.15); } 100% { background: transparent; } }
     .edit-inline .edit-field { margin-bottom: 12px; }
     .edit-inline .edit-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
     .edit-inline input[type="text"], .edit-inline textarea { width: 100%; padding: 8px 10px; background: rgba(255,255,255,0.03); border: 1px solid var(--border-strong); color: var(--text); font-family: var(--font-mono); font-size: 12px; outline: none; }
@@ -437,7 +439,8 @@
       <div class="stat-card"><div class="stat-label">Agents Owned</div><div class="stat-value" id="statAgents">0</div></div>
       <div class="stat-card"><div class="stat-label">Portfolio Value</div><div class="stat-value" id="statValue">--</div></div>
       <div class="stat-card"><div class="stat-label">Total PnL</div><div class="stat-value" id="statPnl">--</div></div>
-      <div class="stat-card"><div class="stat-label">Royalties</div><div class="stat-value positive" id="statRoyalties">--</div></div>
+      <div class="stat-card"><div class="stat-label">Royalties Paid</div><div class="stat-value" id="statRoyaltiesPaid" style="color:var(--blood)">--</div></div>
+      <div class="stat-card"><div class="stat-label">Royalties Earned</div><div class="stat-value positive" id="statRoyaltiesReceived">--</div></div>
       <div class="stat-card"><div class="stat-label">Trades</div><div class="stat-value" id="statTrades">0</div></div>
     </div>
     <div class="section-header"><div class="section-title">My Agents</div><div style="display:flex;gap:8px;"><button class="portfolio-share-btn" onclick="openPortfolioShareCard()">Share Portfolio PnL</button><button class="section-action" onclick="refreshData()">Refresh</button></div></div>
@@ -596,16 +599,19 @@ async function loadDashboard() {
   showState('loading');
 
   try {
-    // Fetch all agents and events from API
-    const [agentsRes, eventsRes] = await Promise.all([
+    // Fetch all agents, events, and royalties from API
+    const [agentsRes, eventsRes, royaltiesRes] = await Promise.all([
       fetch('/api/agents'),
-      fetch('/api/events?limit=50'),
+      fetch('/api/events?limit=200'),
+      fetch(`/api/royalties?wallet=${encodeURIComponent(connectedWallet)}`),
     ]);
     const agentsData = await agentsRes.json();
     const eventsData = await eventsRes.json();
+    const royaltiesData = await royaltiesRes.json().catch(() => ({ paid: {}, received: {} }));
 
     allAgents = agentsData.agents || [];
     allEvents = (eventsData.events || []).filter(e => !e.agent_id?.startsWith('test-'));
+    window._royaltiesData = royaltiesData;
 
     // Filter to only agents owned by connected wallet
     myAgents = allAgents.filter(a => a.owner_wallet === connectedWallet && a.status !== 'dead');
@@ -637,12 +643,16 @@ function renderStats() {
   document.getElementById('statAgents').textContent = myAgents.length;
   const totalPnl = myAgents.reduce((s,a)=>s+(a.total_pnl||0),0);
   const totalTrades = myAgents.reduce((s,a)=>s+(a.total_trades||0),0);
-  const totalRoyalties = myAgents.reduce((s,a)=>s+(a.total_royalties_paid||0),0);
+  // Royalties from DB (accurate, not limited by events window)
+  const rd = window._royaltiesData || { paid: {}, received: {} };
+  const royaltiesPaid = Object.values(rd.paid).reduce((s,v) => s+v, 0);
+  const royaltiesReceived = Object.values(rd.received).reduce((s,v) => s+v, 0);
   const pnlEl = document.getElementById('statPnl');
   pnlEl.textContent = formatSol(totalPnl);
   pnlEl.className = 'stat-value '+(totalPnl>=0?'positive':'negative');
   document.getElementById('statTrades').textContent = totalTrades;
-  document.getElementById('statRoyalties').textContent = formatSol(totalRoyalties);
+  document.getElementById('statRoyaltiesPaid').textContent = royaltiesPaid > 0 ? formatSol(royaltiesPaid) : '0 SOL';
+  document.getElementById('statRoyaltiesReceived').textContent = royaltiesReceived > 0 ? formatSol(royaltiesReceived) : '0 SOL';
   document.getElementById('statValue').textContent = 'loading...';
   document.getElementById('statValue').style.fontSize = '18px';
 }
@@ -718,11 +728,17 @@ function renderActivityFeed() {
   if (relevant.length===0) { feed.innerHTML='<div class="activity-empty">No recent activity</div>'; return; }
   feed.innerHTML = relevant.slice(0,30).map(e => {
     const d=typeof e.data==='string'?JSON.parse(e.data):(e.data||{}); const action=d.action||e.type||'trade';
-    const agentName=getAgentName(e.agent_id||d.agent_id); const token=d.token_symbol||d.symbol||(d.token_address?d.token_address.slice(0,6):'');
-    const amount=d.amount_sol?d.amount_sol.toFixed(3)+' SOL':''; const tx=d.tx_signature||d.signature||'';
+    const agentName=getAgentName(e.agent_id||d.agent_id);
+    const token=d.token||d.token_symbol||d.symbol||(d.token_address?d.token_address.slice(0,6):'');
+    let detail = '';
+    if (action==='buy') { detail = token + (d.amount ? ' · ' + parseFloat(d.amount).toFixed(3) + ' SOL' : ''); }
+    else if (action==='sell') { detail = token + (d.pnl_pct !== undefined ? ' · ' + (d.pnl_pct >= 0 ? '+' : '') + parseFloat(d.pnl_pct).toFixed(1) + '%' : ''); }
+    else if (action==='spawn') { detail = 'new agent spawned'; }
+    else { detail = token; }
+    const tx=d.tx||d.tx_signature||d.signature||'';
     const txLink=tx?`<a class="activity-tx" href="https://solscan.io/tx/${tx}" target="_blank">tx</a>`:'';
     let cls='death'; if(action==='buy')cls='buy';else if(action==='sell')cls='sell';else if(action==='spawn')cls='spawn';
-    return `<div class="activity-item"><span class="activity-action ${cls}">${action}</span><span class="activity-agent">${agentName}</span><span class="activity-detail">${token} ${amount}</span><span class="activity-time">${timeAgo(e.created_at)}</span>${txLink}</div>`;
+    return `<div class="activity-item"><span class="activity-action ${cls}">${action}</span><span class="activity-agent">${agentName}</span><span class="activity-detail">${detail}</span><span class="activity-time">${timeAgo(e.created_at)}</span>${txLink}</div>`;
   }).join('');
 }
 
@@ -874,12 +890,12 @@ async function openAgentDetail(id) {
     const agent = allAgents.find(a => a.id === id);
     if (!agent) { content.innerHTML='<div style="padding:40px;text-align:center;color:var(--text-dim);">Agent not found</div>'; return; }
     const children = allAgents.filter(a => a.parent_id === id);
-    // Fetch trades from events
+    // Fetch trades from agents API
     let trades = [];
     try {
-      const evRes = await fetch(`/api/events?limit=50`);
-      const evData = await evRes.json();
-      trades = (evData.events || []).filter(e => e.agent_id === id && (e.type === 'trade' || e.type === 'buy' || e.type === 'sell'));
+      const trRes = await fetch(`/api/agents?id=${id}`);
+      const trData = await trRes.json();
+      trades = trData.trades || [];
     } catch {}
 
     const img = getAgentImage(agent);
@@ -936,8 +952,12 @@ async function openAgentDetail(id) {
             <div class="detail-stat-value" style="color:${tradeStats.streak>=0?'var(--green)':'var(--red)'}">${tradeStats.streak>0?'+'+tradeStats.streak:tradeStats.streak}</div>
           </div>
           <div class="detail-stat">
-            <div class="detail-stat-label">Royalties</div>
-            <div class="detail-stat-value" style="font-size:13px;color:var(--blood);">${(agent.total_royalties_paid||0)>0?formatSol(agent.total_royalties_paid):'0 SOL'}</div>
+            <div class="detail-stat-label">Royalties Paid</div>
+            <div class="detail-stat-value" style="font-size:13px;color:var(--blood);">${((window._royaltiesData||{}).paid||{})[agent.id]>0?formatSol(window._royaltiesData.paid[agent.id]):'0 SOL'}</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-label">Royalties Earned</div>
+            <div class="detail-stat-value" style="font-size:13px;color:var(--green);">${((window._royaltiesData||{}).received||{})[agent.id]>0?formatSol(window._royaltiesData.received[agent.id]):'0 SOL'}</div>
           </div>
         </div>
       </div>
@@ -965,14 +985,32 @@ async function openAgentDetail(id) {
     }
     html += `</div>`;
 
-    // Recent trades
+    // Recent trades — resolve token symbols from events data
     html += `<div class="detail-section"><div class="detail-section-title">Recent Trades</div>`;
     if (trades.length > 0) {
-      html += trades.slice(0,10).map(t => {
-        const action=t.action||'trade'; const symbol=t.token_symbol||(t.token_address?t.token_address.slice(0,6):'--');
-        const amount=t.amount_sol?t.amount_sol.toFixed(3)+' SOL':''; const tx=t.tx_signature||'';
-        const txLink=tx?`<a class="trade-tx" href="https://solscan.io/tx/${tx}" target="_blank">tx</a>`:'';
-        return `<div class="trade-item"><span class="trade-badge ${action}">${action}</span><span class="trade-token">${symbol}</span><span class="trade-amount">${amount}</span><span class="trade-time">${timeAgo(t.created_at)}</span>${txLink}</div>`;
+      // Build token_address → symbol map from events
+      const tokenSymbols = {};
+      allEvents.filter(e => e.agent_id === agent.id && e.type === 'trade').forEach(e => {
+        try {
+          const d = typeof e.data === 'string' ? JSON.parse(e.data) : (e.data || {});
+          if (d.token && d.token.length <= 20) {
+            // Match event to trade by tx signature
+            const evTx = d.tx || d.tx_signature || '';
+            trades.forEach(t => {
+              if (t.tx_signature && t.tx_signature === evTx && t.token_address) {
+                tokenSymbols[t.token_address] = d.token;
+              }
+            });
+          }
+        } catch {}
+      });
+      html += trades.slice(0,20).map(t => {
+        const action = t.action || 'trade';
+        const symbol = tokenSymbols[t.token_address] || (t.token_address ? t.token_address.slice(0,6) + '...' : '--');
+        const sol = t.amount_sol ? parseFloat(t.amount_sol).toFixed(3) + ' SOL' : '';
+        const tx = t.tx_signature || '';
+        const txLink = tx ? `<a class="trade-tx" href="https://solscan.io/tx/${tx}" target="_blank">tx</a>` : '';
+        return `<div class="trade-item"><span class="trade-badge ${action}">${action}</span><span class="trade-token">${symbol}</span><span class="trade-amount">${sol}</span><span class="trade-time">${timeAgo(t.created_at)}</span>${txLink}</div>`;
       }).join('');
     } else { html += '<div class="holdings-empty">No trades yet</div>'; }
     html += '</div>';
@@ -986,7 +1024,7 @@ async function openAgentDetail(id) {
     html += `<div class="detail-actions">`;
     if (canSpawn && isOwner) html += `<button class="detail-action-btn primary" onclick="handleSpawn('${agent.id}','${name}',${gen})">Reproduce</button>`;
     if (isOwner) html += `<button class="detail-action-btn" onclick="toggleWithdraw('${agent.id}')">Withdraw</button>`;
-    if (isOwner) html += `<button class="detail-action-btn" onclick="toggleEdit('${agent.id}')">Edit</button>`;
+    if (isOwner) html += `<button class="detail-action-btn" id="editBtn-${agent.id}" onclick="toggleEdit('${agent.id}')">Edit Agent</button>`;
     html += `<button class="detail-action-btn" onclick="openShareCard('${agent.id}')">Share PnL</button>`;
     html += `<a class="detail-action-btn" href="/bloodline.html" target="_blank">Bloodline</a>`;
     if (agent.agent_wallet) html += `<a class="detail-action-btn" href="https://solscan.io/account/${agent.agent_wallet}" target="_blank">Solscan</a>`;
@@ -997,8 +1035,10 @@ async function openAgentDetail(id) {
       html += `<div class="withdraw-inline" id="withdrawSection-${agent.id}" style="display:none;">
         <div class="detail-section-title">Withdraw SOL</div>
         <input type="number" id="withdrawAmount-${agent.id}" placeholder="Amount in SOL" step="0.01" min="0.01">
-        <button class="detail-action-btn primary" style="width:100%;" onclick="executeWithdraw('${agent.id}')">Send to my wallet</button>
+        <button class="detail-action-btn primary" style="width:100%;" onclick="executeWithdraw('${agent.id}')">Verify with Phantom</button>
+        <button class="detail-action-btn" style="width:100%;margin-top:6px;" onclick="executeWithdrawMicro('${agent.id}')">Verify with micro-transaction</button>
         <div class="w-status" id="withdrawStatus-${agent.id}"></div>
+        <div id="withdrawMicro-${agent.id}" style="display:none;"></div>
       </div>`;
     }
 
@@ -1030,13 +1070,61 @@ async function openAgentDetail(id) {
           <textarea id="editBio-${agent.id}" maxlength="200" placeholder="Short description of your agent...">${bio.replace(/</g,'&lt;')}</textarea>
         </div>
         <div class="edit-field">
-          <div class="edit-label">DNA</div>
+          <div class="edit-label">Behavior</div>
           ${buildDnaSlider('aggression', dna.aggression || 0.5, agent.id, 0, 1, 0.01)}
           ${buildDnaSlider('patience', dna.patience || 0.5, agent.id, 0, 1, 0.01)}
           ${buildDnaSlider('risk_tolerance', dna.risk_tolerance || 0.5, agent.id, 0, 1, 0.01)}
-          ${buildDnaSlider('sell_profit_pct', dna.sell_profit_pct || 50, agent.id, 5, 1000, 1)}
-          ${buildDnaSlider('sell_loss_pct', dna.sell_loss_pct || 15, agent.id, 1, 100, 1)}
-          ${buildDnaSlider('max_position_pct', dna.max_position_pct || 50, agent.id, 10, 90, 1)}
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Take Profit / Stop Loss</div>
+          ${buildDnaSlider('sell_profit_pct', dna.sell_profit_pct || 50, agent.id, 5, 300, 1)}
+          ${buildDnaSlider('sell_loss_pct', dna.sell_loss_pct || 15, agent.id, 3, 50, 1)}
+          ${buildDnaSlider('trailing_stop_pct', dna.trailing_stop_pct || 20, agent.id, 5, 50, 1)}
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Sell Strategy</div>
+          <select id="editMeta-${agent.id}-sell_strategy" style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid var(--border-strong);color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;">
+            <option value="phased" ${(meta.sell_strategy||'phased')==='phased'?'selected':''}>Phased (recover cost first)</option>
+            <option value="full" ${meta.sell_strategy==='full'?'selected':''}>Full (sell 100% at TP)</option>
+            <option value="tp_levels" ${meta.sell_strategy==='tp_levels'?'selected':''}>TP Levels (partial sells)</option>
+            <option value="trail" ${meta.sell_strategy==='trail'?'selected':''}>Trail Only (no fixed TP)</option>
+          </select>
+        </div>
+        <div class="edit-field" id="editTpLevels-${agent.id}-wrap" style="display:${meta.sell_strategy==='tp_levels'?'block':'none'};">
+          <div class="edit-label">TP Levels (profit% → sell%)</div>
+          <div id="editTpLevels-${agent.id}" style="display:flex;flex-direction:column;gap:6px;">
+            ${(meta.tp_levels||[{pct:50,sell_pct:25},{pct:125,sell_pct:25},{pct:265,sell_pct:25}]).map((lv,i) => `<div style="display:flex;gap:6px;align-items:center;">
+              <input type="number" class="tp-pct-${agent.id}" value="${lv.pct}" min="5" max="1000" style="width:70px;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border-strong);color:var(--text);font-family:var(--font-mono);font-size:11px;text-align:center;" placeholder="%">
+              <span style="color:var(--text-dim);font-size:10px;">→</span>
+              <input type="number" class="tp-sell-${agent.id}" value="${lv.sell_pct}" min="5" max="100" style="width:70px;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--border-strong);color:var(--text);font-family:var(--font-mono);font-size:11px;text-align:center;" placeholder="sell%">
+              <span style="color:var(--text-dim);font-family:var(--font-mono);font-size:9px;">sell</span>
+            </div>`).join('')}
+          </div>
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Position Sizing</div>
+          ${buildDnaSlider('max_position_pct', dna.max_position_pct || 50, agent.id, 1, 90, 1)}
+          ${buildDnaSlider('max_positions', dna.max_positions || 3, agent.id, 1, 8, 1)}
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Filters</div>
+          ${buildDnaSlider('buy_threshold_volume', dna.buy_threshold_volume || 5000, agent.id, 100, 50000, 100)}
+          ${buildDnaSlider('buy_threshold_holders', dna.buy_threshold_holders || 200, agent.id, 50, 5000, 10)}
+          ${buildDnaSlider('min_mcap', dna.min_mcap || 10000, agent.id, 5000, 1000000, 1000)}
+          ${buildDnaSlider('max_mcap', dna.max_mcap || 500000, agent.id, 50000, 5000000, 10000)}
+          ${buildDnaSlider('max_pair_age_hours', dna.max_pair_age_hours || 48, agent.id, 1, 720, 1)}
+        </div>
+        <div class="edit-field">
+          <div class="edit-label" style="display:flex;align-items:center;gap:8px;">
+            Degen Mode
+            <div style="position:relative;width:36px;height:18px;flex-shrink:0;">
+              <input type="checkbox" id="editDna-${agent.id}-degen" ${dna.degen?'checked':''} style="opacity:0;width:0;height:0;position:absolute;">
+              <span style="position:absolute;inset:0;background:${dna.degen?'var(--blood)':'var(--border-strong)'};transition:0.2s;cursor:pointer;" onclick="const cb=this.previousElementSibling;cb.checked=!cb.checked;this.style.background=cb.checked?'var(--blood)':'var(--border-strong)';this.children[0].style.left=cb.checked?'18px':'2px';">
+                <span style="position:absolute;top:2px;left:${dna.degen?'18px':'2px'};width:14px;height:14px;background:var(--text);transition:0.2s;"></span>
+              </span>
+            </div>
+            <span style="font-size:9px;color:var(--text-dim);font-weight:400;letter-spacing:0;">PumpPortal buys, higher risk</span>
+          </div>
         </div>
         <button class="detail-action-btn primary" style="width:100%;" onclick="saveAgentEdit('${agent.id}')">Save Changes</button>
         <div class="edit-status" id="editStatus-${agent.id}"></div>
@@ -1199,6 +1287,54 @@ async function executeWithdraw(agentId) {
   }
 }
 
+async function executeWithdrawMicro(agentId) {
+  const amountEl = document.getElementById(`withdrawAmount-${agentId}`);
+  const statusEl = document.getElementById(`withdrawStatus-${agentId}`);
+  const microEl = document.getElementById(`withdrawMicro-${agentId}`);
+  const amount = parseFloat(amountEl.value);
+  if (!amount || amount <= 0) { statusEl.textContent = 'Enter a valid amount'; statusEl.className = 'w-status error'; return; }
+
+  try {
+    statusEl.textContent = 'Creating verification...'; statusEl.className = 'w-status';
+    const res = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, amount_sol: amount, method: 'micro_tx' }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.textContent = data.error || 'Request failed'; statusEl.className = 'w-status error'; return; }
+
+    microEl.style.display = '';
+    microEl.innerHTML = '<div style="text-align:center;padding:12px 0;">' +
+      '<div style="font-size:10px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">Send exactly</div>' +
+      '<div style="font-family:var(--font-mono);font-size:18px;color:var(--text);font-weight:600;margin-bottom:12px;">' + data.micro_amount + ' SOL</div>' +
+      '<div style="font-size:10px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">To this address</div>' +
+      '<div style="font-family:var(--font-mono);font-size:11px;color:var(--blood-bright);cursor:pointer;word-break:break-all;" onclick="navigator.clipboard.writeText(\'' + data.protocol_wallet + '\');this.textContent=\'copied!\';setTimeout(()=>this.textContent=\'' + data.protocol_wallet + '\',1200)">' + data.protocol_wallet + '</div>' +
+      '</div>';
+
+    statusEl.textContent = 'Waiting for verification...'; statusEl.className = 'w-status';
+    const pollId = setInterval(async () => {
+      try {
+        const r = await fetch('/api/withdraw-status?id=' + data.request_id);
+        const d = await r.json();
+        if (d.status === 'completed') {
+          clearInterval(pollId);
+          statusEl.textContent = 'Withdrawal complete! TX: ' + (d.tx_signature ? d.tx_signature.slice(0,12)+'...' : 'done');
+          statusEl.className = 'w-status ok';
+          microEl.style.display = 'none';
+          amountEl.value = '';
+        } else if (d.status === 'expired' || d.status === 'failed') {
+          clearInterval(pollId);
+          statusEl.textContent = 'Verification expired. Try again.'; statusEl.className = 'w-status error';
+          microEl.style.display = 'none';
+        }
+      } catch {}
+    }, 5000);
+  } catch {
+    statusEl.textContent = 'Network error'; statusEl.className = 'w-status error';
+  }
+}
+
 // ============================================================
 // EDIT AGENT
 // ============================================================
@@ -1243,7 +1379,21 @@ function buildDnaSlider(key, val, agentId, min, max, step) {
 
 function toggleEdit(agentId) {
   const el = document.getElementById(`editSection-${agentId}`);
-  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+  if (!el) return;
+  const opening = el.style.display === 'none';
+  el.style.display = opening ? '' : 'none';
+  const btn = document.getElementById(`editBtn-${agentId}`);
+  if (btn) btn.textContent = opening ? 'Close Edit' : 'Edit Agent';
+  if (opening) {
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  // Bind sell strategy toggle for TP levels visibility
+  const sel = document.getElementById(`editMeta-${agentId}-sell_strategy`);
+  const wrap = document.getElementById(`editTpLevels-${agentId}-wrap`);
+  if (sel && wrap) sel.onchange = () => { wrap.style.display = sel.value === 'tp_levels' ? 'block' : 'none'; };
 }
 
 async function saveAgentEdit(agentId) {
@@ -1254,23 +1404,43 @@ async function saveAgentEdit(agentId) {
   const bio = document.getElementById(`editBio-${agentId}`).value.trim();
 
   const dna = {};
-  ['aggression','patience','risk_tolerance','sell_profit_pct','sell_loss_pct','max_position_pct'].forEach(k => {
+  ['aggression','patience','risk_tolerance','sell_profit_pct','sell_loss_pct','trailing_stop_pct','max_position_pct','max_positions','buy_threshold_volume','buy_threshold_holders','min_mcap','max_mcap','max_pair_age_hours'].forEach(k => {
     const el = document.getElementById(`editDna-${agentId}-${k}`);
     if (el) dna[k] = parseFloat(el.value);
   });
 
-  // Get existing DNA fields we don't edit (thresholds etc)
+  // Degen toggle
+  const degenEl = document.getElementById(`editDna-${agentId}-degen`);
+  if (degenEl) dna.degen = degenEl.checked;
+
+  // Preserve DNA fields we don't edit
   const agent = allAgents.find(a => a.id === agentId);
   if (agent) {
     const oldDna = typeof agent.dna === 'string' ? JSON.parse(agent.dna) : (agent.dna || {});
-    ['buy_threshold_holders','buy_threshold_volume','check_interval_min','degen','min_mcap'].forEach(k => {
-      if (oldDna[k] !== undefined) dna[k] = oldDna[k];
+    ['check_interval_min'].forEach(k => {
+      if (oldDna[k] !== undefined && dna[k] === undefined) dna[k] = oldDna[k];
     });
   }
 
   // Merge with existing meta to preserve avatar/other fields
   const existingMeta = agent?.meta ? (typeof agent.meta === 'string' ? (() => { try { return JSON.parse(agent.meta); } catch { return {}; } })() : agent.meta) : {};
   const meta = { ...existingMeta, bio };
+
+  // Sell strategy
+  const stratEl = document.getElementById(`editMeta-${agentId}-sell_strategy`);
+  if (stratEl) meta.sell_strategy = stratEl.value;
+
+  // TP levels
+  if (meta.sell_strategy === 'tp_levels') {
+    const pcts = document.querySelectorAll(`.tp-pct-${agentId}`);
+    const sells = document.querySelectorAll(`.tp-sell-${agentId}`);
+    const levels = [];
+    pcts.forEach((el, i) => {
+      const pct = parseInt(el.value); const sell_pct = parseInt(sells[i]?.value || 25);
+      if (pct > 0 && sell_pct > 0) levels.push({ pct, sell_pct });
+    });
+    if (levels.length > 0) meta.tp_levels = levels;
+  }
   // If image was uploaded, store reference URL in meta
   if (AGENT_IMAGES[agentId]?.startsWith('/api/agent-image')) meta.image = AGENT_IMAGES[agentId].split('&t=')[0];
 
@@ -1687,7 +1857,7 @@ function tweetShareCard() {
 async function refreshData() { await loadDashboard(); }
 async function refreshEvents() {
   try {
-    const res = await fetch('/api/events?limit=50');
+    const res = await fetch('/api/events?limit=200');
     const data = await res.json();
     allEvents = (data.events || []).filter(e => !e.agent_id?.startsWith('test-'));
     renderActivityFeed();

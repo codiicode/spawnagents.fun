@@ -30,20 +30,24 @@ export async function onRequest(context) {
   let balances = null;
   let tokenData = null;
   let preFetchedCandidates = null;
+  let sellsOnly = false;
   try {
     const body = await context.request.json();
     if (body && body.balances) balances = body.balances;
     if (body && body.tokenData) tokenData = body.tokenData;
     if (body && body.candidates) preFetchedCandidates = body.candidates;
+    if (body && body.sells_only) sellsOnly = true;
   } catch {}
 
-  return await runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, preFetchedCandidates);
+  return await runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, sellsOnly ? [] : preFetchedCandidates, sellsOnly);
 }
 
-async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, preFetchedCandidates) {
+async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances, tokenData, preFetchedCandidates, sellsOnly = false) {
   // Use pre-fetched candidates from Hetzner, fallback to Worker-side discovery
   let candidates = [];
-  if (preFetchedCandidates && preFetchedCandidates.length > 0) {
+  if (sellsOnly) {
+    console.log('Sells-only cycle — skipping discovery');
+  } else if (preFetchedCandidates && preFetchedCandidates.length > 0) {
     candidates = preFetchedCandidates;
     console.log(`Using ${candidates.length} pre-fetched candidates from Hetzner`);
   } else {
@@ -75,7 +79,7 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances,
   console.log(`Market regime: ${JSON.stringify(marketRegime)}`);
 
   const agentsRaw = await db.prepare("SELECT * FROM agents WHERE status = 'alive'").all();
-  let agentsList = agentsRaw.results.slice().sort(() => Math.random() - 0.5).slice(0, 15);
+  let agentsList = agentsRaw.results.slice().sort(() => Math.random() - 0.5);
   if (batchIdx !== null && batchIdx !== undefined) {
     const bi = parseInt(batchIdx);
     const tb = parseInt(totalBatches || "3");
@@ -87,12 +91,25 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances,
   if (balances && Object.keys(balances).length > 0) {
     loadBalanceCache(balances);
     console.log(`Loaded ${Object.keys(balances).length} pre-fetched balances`);
-    // Store balances in KV for portfolio endpoint
+    // Store balances in KV for portfolio endpoint (preserve price data from pnl-recalc)
     if (kv) {
       for (const agent of agentsList) {
         const b = balances[agent.agent_wallet];
         if (b) {
-          await kv.put(`balance:${agent.id}`, JSON.stringify({ sol: b.sol, tokens: b.tokens || [], updated: Date.now() }), { expirationTtl: 600 });
+          // Merge with existing cached prices if available
+          let cached = null;
+          try { const raw = await kv.get(`balance:${agent.id}`); if (raw) cached = JSON.parse(raw); } catch {}
+          const cachedPrices = {};
+          if (cached?.tokens) for (const t of cached.tokens) { if (t.price_native) cachedPrices[t.mint] = { price_native: t.price_native, symbol: t.symbol }; }
+
+          const tokens = (b.tokens || []).map(t => ({
+            mint: t.mint,
+            amount: t.amount,
+            decimals: t.decimals,
+            price_native: cachedPrices[t.mint]?.price_native || 0,
+            symbol: cachedPrices[t.mint]?.symbol || t.mint.slice(0, 6),
+          }));
+          await kv.put(`balance:${agent.id}`, JSON.stringify({ sol: b.sol, tokens, updated: Date.now() }), { expirationTtl: 600 });
         }
       }
     }
@@ -118,7 +135,7 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances,
         await db.batch([
           db.prepare("INSERT INTO trades (agent_id, token_address, action, amount_sol, token_amount, pnl, price_at_trade, tx_signature) VALUES (?, ?, 'sell', ?, ?, 0, 0, ?)").bind(agent.id, sell.token, sell.amount_sol, sell.token_amount || 0, sell.tx_signature),
           db.prepare("UPDATE agents SET total_trades = total_trades + 1, last_trade_at = datetime('now') WHERE id = ?").bind(agent.id),
-          db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)").bind(agent.id, JSON.stringify({ action: "sell", token: sell.symbol, pnl_pct: sell.pnl_pct, tx: sell.tx_signature })),
+          db.prepare("INSERT INTO events (type, agent_id, data) VALUES ('trade', ?, ?)").bind(agent.id, JSON.stringify({ action: "sell", token: sell.symbol, pnl_pct: sell.display_pnl_pct !== undefined ? sell.display_pnl_pct : sell.pnl_pct, tx: sell.tx_signature })),
         ]);
       }
 
@@ -147,5 +164,5 @@ async function runTradingCycle(db, rpcUrl, kv, batchIdx, totalBatches, balances,
 
   // PnL updated by separate recalc-pnl cron step
 
-  return Response.json({ processed: agentsList.length, results });
+  return Response.json({ processed: agentsList.length, mode: sellsOnly ? 'sells_only' : 'full', results });
 }

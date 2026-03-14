@@ -19,14 +19,14 @@ export async function onRequest(context) {
   if (!wallet) return Response.json({ error: "wallet or agent_id required" }, { status: 400 });
 
   try {
-    // Try KV cache first (populated by trade-runner every 3 min)
+    // Try KV cache first (populated by Hetzner pnl-recalc every 10 min)
     let solBalance, tokenBalances;
     const kv = context.env.AGENT_KEYS;
-    const cached = agentId && kv ? await kv.get(`balance:${agentId}`) : null;
-    if (cached) {
-      const c = JSON.parse(cached);
-      solBalance = c.sol;
-      tokenBalances = c.tokens || [];
+    const cachedRaw = agentId && kv ? await kv.get(`balance:${agentId}`) : null;
+    const cachedData = cachedRaw ? JSON.parse(cachedRaw) : null;
+    if (cachedData) {
+      solBalance = cachedData.sol;
+      tokenBalances = cachedData.tokens || [];
     } else {
       [solBalance, tokenBalances] = await Promise.all([
         getBalance(wallet, rpcUrl),
@@ -70,25 +70,44 @@ export async function onRequest(context) {
       }
     } catch {}
 
+    // Build price lookup from KV cache (Hetzner populates this with DexScreener data)
+    const cachedPrices = {};
+    if (cachedData) {
+      for (const t of (cachedData.tokens || [])) {
+        cachedPrices[t.mint] = { price_native: t.price_native || 0, symbol: t.symbol || t.mint.slice(0, 6) };
+      }
+    }
+
     // Look up prices and calculate PnL for each token
     const tokens = [];
     for (const t of tokenBalances) {
-      const data = await getTokenData(t.mint).catch(() => null);
-      const valueUsd = (data?.price_usd || 0) * t.amount;
+      // Use cached price from Hetzner (avoids DexScreener rate limiting from Worker)
+      const cp = cachedPrices[t.mint];
+      let priceNative = cp?.price_native || 0;
+      let symbol = cp?.symbol || t.mint.slice(0, 6);
+      let priceUsd = priceNative * solPrice;
+
+      // Fallback to DexScreener only if no cache
+      if (!cp) {
+        const data = await getTokenData(t.mint).catch(() => null);
+        if (data) {
+          priceUsd = data.price_usd || 0;
+          priceNative = data.price_native || 0;
+          symbol = data.symbol || symbol;
+        }
+      }
+
+      const valueUsd = priceUsd * t.amount;
 
       const info = tokenTradeInfo[t.mint];
       let costBasisSol = 0;
 
       if (info) {
         if (info.hasZeroSells) {
-          // Degen sells didn't record SOL amount — can't compute exact cost basis
-          // Use current native price to estimate cost of remaining tokens
-          if (data?.price_native > 0) {
-            costBasisSol = data.price_native * t.amount;
+          if (priceNative > 0) {
+            costBasisSol = priceNative * t.amount;
           }
-          // If no price_native, costBasisSol stays 0 (no PnL shown)
         } else {
-          // Normal path: cost basis = total bought - total sold
           costBasisSol = info.totalBoughtSol - info.totalSoldSol;
           if (costBasisSol < 0) costBasisSol = 0;
         }
@@ -100,9 +119,9 @@ export async function onRequest(context) {
 
       tokens.push({
         mint: t.mint,
-        symbol: data?.symbol || t.mint.slice(0, 6),
+        symbol,
         amount: t.amount,
-        price_usd: data?.price_usd || 0,
+        price_usd: priceUsd,
         value_usd: valueUsd,
         cost_basis_sol: costBasisSol,
         cost_basis_usd: costBasisUsd,

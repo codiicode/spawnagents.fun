@@ -34,7 +34,7 @@ export async function onRequest(context) {
     if (typeof dna.patience !== 'number' || dna.patience < 0 || dna.patience > 1) errors.push('patience 0-1');
     if (typeof dna.sell_profit_pct !== 'number' || dna.sell_profit_pct < 0 || dna.sell_profit_pct > 1000) errors.push('sell_profit_pct 0-1000');
     if (typeof dna.sell_loss_pct !== 'number' || dna.sell_loss_pct < 1 || dna.sell_loss_pct > 100) errors.push('sell_loss_pct 1-100');
-    if (typeof dna.max_position_pct !== 'number' || dna.max_position_pct < 10 || dna.max_position_pct > 90) errors.push('max_position_pct 10-90');
+    if (typeof dna.max_position_pct !== 'number' || dna.max_position_pct < 1 || dna.max_position_pct > 90) errors.push('max_position_pct 1-90');
     if (errors.length > 0) return Response.json({ error: 'Invalid DNA: ' + errors.join(', ') }, { status: 400 });
 
     // Compute check_interval from aggression

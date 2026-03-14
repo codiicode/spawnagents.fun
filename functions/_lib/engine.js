@@ -16,8 +16,8 @@ async function getSellSlippage(kv, agentId, mint, emergency = false) {
   if (!kv) return emergency ? 40 : 5;
   const key = `sell-fail:${agentId}:${mint}`;
   const fails = parseInt(await kv.get(key) || '0');
-  const maxSlip = emergency ? 50 : 20;
-  const baseSlip = emergency ? 40 : 5;
+  const maxSlip = emergency ? 25 : 20;
+  const baseSlip = emergency ? 15 : 5;
   return Math.min(baseSlip + fails * 5, maxSlip);
 }
 async function trackSellFail(kv, agentId, mint) {
@@ -53,30 +53,32 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
   for (const token of tokenBalances) {
     const tokenData = await getTokenData(token.mint);
     if (!tokenData) {
-      // No DexScreener data = dead/unlisted token → emergency sell
+      // No DexScreener data — check if this is a real position before panic-selling
+      const hasBuys = await db.prepare(
+        "SELECT COUNT(*) as cnt FROM trades WHERE agent_id = ? AND token_address = ? AND action = 'buy'"
+      ).bind(agent.id, token.mint).first();
+
+      if (hasBuys && hasBuys.cnt > 0) {
+        // Real position but DexScreener temporarily missing data — skip, don't panic sell
+        _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: 'no market data but has buy history — holding' });
+        continue;
+      }
+
+      // No buy history = truly unknown token (airdrop/dust) → try to sell
       let result;
-      if (isDegen) {
+      const fallbackQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
+      if (fallbackQuote) {
+        const outSol = parseInt(fallbackQuote.outAmount) / 1e9;
+        result = await executeSell(fallbackQuote, agentPubkey, agentSecret, rpcUrl, {
+          token: token.mint, symbol: token.mint.substring(0,8), reason: 'no market data (unknown token)',
+          pnlPct: -100, outSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
+        });
+      }
+      if (!result || result.action !== 'sell') {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
-          symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
-          pnlPct: -100, tokenAmount: token.amount,
-          estimatedSol: 0,
+          symbol: token.mint.substring(0,8), reason: 'no market data (unknown token)',
+          pnlPct: -100, tokenAmount: token.amount, rawAmount: token.rawAmount, estimatedSol: 0,
         }, kv, agent.id, true);
-      } else {
-        // Try Jupiter, PumpPortal fallback
-        const fallbackQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
-        if (fallbackQuote) {
-          const outSol = parseInt(fallbackQuote.outAmount) / 1e9;
-          result = await executeSell(fallbackQuote, agentPubkey, agentSecret, rpcUrl, {
-            token: token.mint, symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
-            pnlPct: -100, outSol, tokenAmount: token.amount,
-          });
-        }
-        if (!result || result.action !== 'sell') {
-          result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
-            symbol: token.mint.substring(0,8), reason: 'no market data (dead/unlisted token)',
-            pnlPct: -100, tokenAmount: token.amount, estimatedSol: 0,
-          }, kv, agent.id, true);
-        }
       }
       if (result && result.action === 'sell') sellResults.push(result);
       else _debug.sellSkips.push({ mint: token.mint.substring(0,12), reason: `no-data sell failed: ${result?.reason || 'no result'}` });
@@ -84,11 +86,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     }
 
     // === EMERGENCY RUG SELL — bypasses hold time ===
+    // Skip rug sell for pump.fun tokens with positive price action (mc/liq naturally high on bonding curve)
+    const isPumpToken = token.mint.endsWith('pump');
+    const priceUp = (tokenData.price_change_1h || 0) > -20;
     const isRug = (
-      (tokenData.liquidity_usd > 0 && tokenData.liquidity_usd < 1000) ||
+      (tokenData.liquidity_usd > 0 && tokenData.liquidity_usd < 1000 && !(isPumpToken && priceUp)) ||
       (tokenData.price_change_1h < -60) ||
-      (tokenData.volume_1h > 0 && tokenData.liquidity_usd > 0 && tokenData.volume_1h / tokenData.liquidity_usd > 15) ||
-      (tokenData.market_cap > 0 && tokenData.liquidity_usd > 0 && tokenData.market_cap / tokenData.liquidity_usd > 50)
+      (tokenData.volume_1h > 0 && tokenData.liquidity_usd > 0 && tokenData.volume_1h / tokenData.liquidity_usd > 15 && !isPumpToken) ||
+      (tokenData.market_cap > 0 && tokenData.liquidity_usd > 0 && tokenData.market_cap / tokenData.liquidity_usd > 50 && !isPumpToken)
     );
     if (isRug) {
       const rugReason = `EMERGENCY RUG SELL (liq ${Math.round(tokenData.liquidity_usd)}, 1h ${(tokenData.price_change_1h || 0).toFixed(0)}%, mc/liq ${tokenData.liquidity_usd > 0 ? (tokenData.market_cap / tokenData.liquidity_usd).toFixed(0) : '?'}x)`;
@@ -96,7 +101,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (isDegen) {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
           symbol: tokenData.symbol, reason: rugReason,
-          pnlPct: 0, tokenAmount: token.amount,
+          pnlPct: 0, tokenAmount: token.amount, rawAmount: token.rawAmount,
           estimatedSol: (tokenData.price_native || 0) * token.amount,
         }, kv, agent.id, true);
       } else {
@@ -106,14 +111,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           const rugOutSol = parseInt(rugQuote.outAmount) / 1e9;
           result = await executeSell(rugQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol, reason: rugReason,
-            pnlPct: 0, outSol: rugOutSol, tokenAmount: token.amount,
+            pnlPct: 0, outSol: rugOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
         if (!result || result.action !== 'sell') {
           // PumpPortal fallback
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol, reason: rugReason,
-            pnlPct: 0, tokenAmount: token.amount,
+            pnlPct: 0, tokenAmount: token.amount, rawAmount: token.rawAmount,
             estimatedSol: (tokenData.price_native || 0) * token.amount,
           }, kv, agent.id, true);
         }
@@ -131,14 +136,19 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     const minutesHeld = holdCheckRow ? (Date.now() - new Date(holdCheckRow.created_at + 'Z').getTime()) / 60000 : 999;
     const holdTimeMet = minutesHeld >= minHoldMinutes;
 
-    // Auto-sell dust: any position worth less than $10
+    // Auto-sell dust: any position worth less than $10 AND cost basis < $15
+    // Skip dust sell if we invested significantly (prevents selling real positions with stale price data)
     const posValueUsd = (tokenData.price_usd || 0) * token.amount;
-    if (posValueUsd > 0 && posValueUsd < 10) {
+    const quickCostCheck = await db.prepare(
+      "SELECT COALESCE(SUM(amount_sol), 0) as total FROM trades WHERE agent_id = ? AND token_address = ? AND action = 'buy'"
+    ).bind(agent.id, token.mint).first();
+    const costSol = quickCostCheck?.total || 0;
+    if (posValueUsd > 0 && posValueUsd < 10 && costSol < 0.1) {
       let result;
       if (isDegen) {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
           symbol: tokenData.symbol, reason: `dust sell ($${posValueUsd.toFixed(2)})`,
-          pnlPct: 0, tokenAmount: token.amount,
+          pnlPct: 0, tokenAmount: token.amount, rawAmount: token.rawAmount,
           estimatedSol: (tokenData.price_native || 0) * token.amount,
         }, kv, agent.id);
       } else {
@@ -147,7 +157,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           const dustOutSol = parseInt(dustQuote.outAmount) / 1e9;
           result = await executeSell(dustQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol, reason: `dust sell ($${posValueUsd.toFixed(2)})`,
-            pnlPct: 0, outSol: dustOutSol, tokenAmount: token.amount,
+            pnlPct: 0, outSol: dustOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
       }
@@ -162,15 +172,25 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
     // Walk through trades to find the start of the current position
     // When running token balance hits 0 = position was fully closed, reset cost tracking
+    // Skip position reset if any buy has token_amount=0 (unknown amount, not actually zero)
+    const hasUnknownBuyAmount = allTrades.results.some(t => t.action === 'buy' && !t.token_amount);
     let runningTokens = 0;
     let positionStartIdx = 0;
-    for (let i = 0; i < allTrades.results.length; i++) {
-      const t = allTrades.results[i];
-      if (t.action === 'buy') runningTokens += t.token_amount || 0;
-      else if (t.action === 'sell') {
-        runningTokens -= t.token_amount || 0;
-        if (runningTokens <= 0) { runningTokens = 0; positionStartIdx = i + 1; }
+    if (!hasUnknownBuyAmount) {
+      for (let i = 0; i < allTrades.results.length; i++) {
+        const t = allTrades.results[i];
+        if (t.action === 'buy') runningTokens += t.token_amount || 0;
+        else if (t.action === 'sell') {
+          runningTokens -= t.token_amount || 0;
+          if (runningTokens <= 0) { runningTokens = 0; positionStartIdx = i + 1; }
+        }
       }
+    }
+
+    // If DB says position is closed but agent still holds tokens on-chain, position is still open
+    // This handles cases where token_amount was logged incorrectly (e.g. full amount on partial sell)
+    if (positionStartIdx > 0 && token.amount > 0) {
+      positionStartIdx = 0; // re-include all trades — position is NOT closed
     }
 
     // Sum only trades from current position onward
@@ -187,7 +207,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     if (!isDegen) {
       fullQuote = await getJupiterQuote(token.mint, SOL_MINT, token.rawAmount).catch(() => null);
       if (!fullQuote) {
-        // Jupiter failed (rate-limited) — use price estimate like degen, sell via PumpPortal
+        // Jupiter failed (rate-limited) — use price estimate, sell via PumpPortal if needed
         fullOutSol = (tokenData.price_native || 0) * token.amount;
         if (fullOutSol <= 0) fullOutSol = totalBought;
       } else {
@@ -214,6 +234,8 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     const pnlPct = pnlBasis > 0
       ? ((fullOutSol / pnlBasis) - 1) * 100
       : 0;
+    // Display PnL: always vs original investment (for events/activity feed)
+    const displayPnlPct = totalBought > 0 ? (((fullOutSol + totalSold) / totalBought) - 1) * 100 : 0;
 
     // TP: min 20%, degen capped at 80%
     const rawTP = Math.max(20, dna.sell_profit_pct);
@@ -245,25 +267,26 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
       // Find next unhit level that's triggered
       const nextLevel = tpLevels.length > hitsCompleted ? tpLevels[hitsCompleted] : null;
-      // All TP levels exhausted — auto 50% trailing stop on remaining position
+      // All TP levels exhausted — trailing stop on remaining position using agent's trailing_stop_pct
       if (!nextLevel && hitsCompleted >= tpLevels.length && token.amount > 0 && kv) {
         const tpTrailKey = `tptrail:${agent.id}:${token.mint}`;
         const storedPeak = parseFloat(await kv.get(tpTrailKey) || '0');
-        const peak = Math.max(storedPeak, fullOutSol);
-        if (fullOutSol > storedPeak) {
-          await kv.put(tpTrailKey, fullOutSol.toString(), { expirationTtl: 86400 * 7 });
+        const pricePerToken = token.amount > 0 ? fullOutSol / token.amount : 0;
+        const peak = Math.max(storedPeak, pricePerToken);
+        if (pricePerToken > storedPeak) {
+          await kv.put(tpTrailKey, pricePerToken.toString(), { expirationTtl: 86400 * 7 });
         }
-        const dropFromPeak = peak > 0 ? (1 - fullOutSol / peak) * 100 : 0;
-        if (dropFromPeak >= 50 && peak > 0.005) {
-          const reason = `TP trail (all ${tpLevels.length} TPs hit, peak ${peak.toFixed(4)} SOL, now ${fullOutSol.toFixed(4)} SOL, drop ${dropFromPeak.toFixed(0)}% >= 50%)`;
+        const dropFromPeak = peak > 0 ? (1 - pricePerToken / peak) * 100 : 0;
+        if (dropFromPeak >= trailPct && peak > 0) {
+          const reason = `TP trail (all ${tpLevels.length} TPs hit, peak price ${peak.toFixed(8)}, now ${pricePerToken.toFixed(8)}, drop ${dropFromPeak.toFixed(0)}% >= ${trailPct.toFixed(0)}%)`;
           let result;
           if (isDegen) {
             result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
-              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
+              symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount, estimatedSol: fullOutSol,
             }, kv, agent.id);
           } else {
             result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
-              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
             });
           }
           if (result && result.action === 'sell') { sellResults.push(result); await kv.delete(tpTrailKey); await kv.delete(peakKey); await kv.delete(tpKey); continue; }
@@ -272,8 +295,9 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       }
 
       if (nextLevel && pnlPct >= nextLevel.pct) {
-        // sell_pct is % of ORIGINAL bought tokens
-        const sellTokens = totalBoughtTokens * (nextLevel.sell_pct / 100);
+        // sell_pct is % of ORIGINAL bought tokens (fallback to current balance if token_amount wasn't recorded)
+        const referenceTokens = totalBoughtTokens > 0 ? totalBoughtTokens : token.amount;
+        const sellTokens = referenceTokens * (nextLevel.sell_pct / 100);
         const sellFraction = Math.min(sellTokens / token.amount, 1); // fraction of current holding
 
         const isLastLevel = hitsCompleted + 1 >= tpLevels.length;
@@ -284,11 +308,11 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           // Sell everything if close to 100% or last level
           if (isDegen) {
             result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
-              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
+              symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount, estimatedSol: fullOutSol,
             }, kv, agent.id);
           } else {
             result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
-              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+              token: token.mint, symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
             });
           }
           if (result && result.action === 'sell') { sellResults.push(result); if (kv) { await kv.delete(peakKey); await kv.delete(tpKey); } continue; }
@@ -296,7 +320,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           // Partial sell
           if (isDegen) {
             result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, `${Math.round(sellFraction * 100)}%`, {
-              symbol: tokenData.symbol, reason, pnlPct, tokenAmount: sellTokens, estimatedSol: fullOutSol * sellFraction,
+              symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, tokenAmount: sellTokens, estimatedSol: fullOutSol * sellFraction,
             }, kv, agent.id);
           } else {
             const partialRaw = Math.floor(parseInt(token.rawAmount) * sellFraction).toString();
@@ -304,13 +328,15 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
             if (partialQuote) {
               const partialOutSol = parseInt(partialQuote.outAmount) / 1e9;
               result = await executeSell(partialQuote, agentPubkey, agentSecret, rpcUrl, {
-                token: token.mint, symbol: tokenData.symbol, reason, pnlPct, outSol: partialOutSol, tokenAmount: sellTokens,
+                token: token.mint, symbol: tokenData.symbol, reason, pnlPct, displayPnlPct, outSol: partialOutSol, tokenAmount: sellTokens,
               });
             }
           }
           if (result && result.action === 'sell') {
             sellResults.push(result);
             if (tpKey) await kv.put(tpKey, (hitsCompleted + 1).toString(), { expirationTtl: 86400 * 7 });
+            // Reset peak after partial TP sell — prevents profit-protected SL from using stale peak
+            if (peakKey) await kv.delete(peakKey);
           }
           continue;
         }
@@ -324,13 +350,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         if (isDegen) {
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol, reason: `take profit FULL (${pnlPct.toFixed(1)}% >= ${tpThreshold.toFixed(0)}%)`,
-            pnlPct, tokenAmount: token.amount, estimatedSol: fullOutSol,
+            pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount, estimatedSol: fullOutSol,
           }, kv, agent.id);
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol,
             reason: `take profit FULL (${pnlPct.toFixed(1)}% >= ${tpThreshold.toFixed(0)}%)`,
-            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
         if (result && result.action === 'sell') sellResults.push(result);
@@ -347,7 +373,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (isDegen) {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, `${Math.round(sellPct * 100)}%`, {
           symbol: tokenData.symbol, reason: `take profit (recover cost ${Math.round(sellPct * 100)}%)`,
-          pnlPct, tokenAmount: partialAmount, estimatedSol: fullOutSol * sellPct,
+          pnlPct, displayPnlPct, tokenAmount: partialAmount, estimatedSol: fullOutSol * sellPct,
         }, kv, agent.id);
       } else {
         const partialRaw = Math.floor(parseInt(token.rawAmount) * sellPct).toString();
@@ -357,12 +383,12 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           result = await executeSell(partialQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol,
             reason: `take profit (recover cost ${Math.round(sellPct * 100)}%)`,
-            pnlPct, outSol: partialOutSol, tokenAmount: partialAmount,
+            pnlPct, displayPnlPct, outSol: partialOutSol, tokenAmount: partialAmount,
           });
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol, reason: 'take profit (full, no partial quote)',
-            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
       }
@@ -389,45 +415,46 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
         if (isDegen) {
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol, reason: beReason,
-            pnlPct, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount,
             estimatedSol: fullOutSol,
           }, kv, agent.id);
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol, reason: beReason,
-            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
         if (result && result.action === 'sell') sellResults.push(result);
         continue;
       }
 
-      // Track SOL value peak for house money positions
+      // Track price-per-token peak for house money positions
       const valuePeakKey = `vpeak:${agent.id}:${token.mint}`;
       const storedValuePeak = parseFloat(await kv.get(valuePeakKey) || '0');
-      const valuePeak = Math.max(storedValuePeak, fullOutSol);
-      if (fullOutSol > storedValuePeak) {
-        await kv.put(valuePeakKey, fullOutSol.toString(), { expirationTtl: 86400 * 7 });
+      const pricePerToken = token.amount > 0 ? fullOutSol / token.amount : 0;
+      const valuePeak = Math.max(storedValuePeak, pricePerToken);
+      if (pricePerToken > storedValuePeak) {
+        await kv.put(valuePeakKey, pricePerToken.toString(), { expirationTtl: 86400 * 7 });
       }
 
-      const dropFromPeak = valuePeak > 0 ? (1 - fullOutSol / valuePeak) * 100 : 0;
+      const dropFromPeak = valuePeak > 0 ? (1 - pricePerToken / valuePeak) * 100 : 0;
 
-      if (dropFromPeak >= trailPct && valuePeak > 0.01) {
+      if (dropFromPeak >= trailPct && valuePeak > 0) {
         await kv.delete(peakKey);
         await kv.delete(valuePeakKey);
         await kv.delete(breakevenKey);
-        const trailReason = `house money trail (peak ${valuePeak.toFixed(4)} SOL, now ${fullOutSol.toFixed(4)} SOL, drop ${dropFromPeak.toFixed(0)}% >= ${trailPct.toFixed(0)}%)`;
+        const trailReason = `house money trail (peak price ${valuePeak.toFixed(8)}, now ${pricePerToken.toFixed(8)}, drop ${dropFromPeak.toFixed(0)}% >= ${trailPct.toFixed(0)}%)`;
         let result;
         if (isDegen) {
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol, reason: trailReason,
-            pnlPct, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount,
             estimatedSol: fullOutSol,
           }, kv, agent.id);
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol, reason: trailReason,
-            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
         if (result && result.action === 'sell') sellResults.push(result);
@@ -442,7 +469,10 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     }
     const baseSL = -Math.max(15, dna.sell_loss_pct);
     let effectiveSL = baseSL;
-    if (kv && currentPeak > 30) {
+    // Only apply profit-protected SL if agent does NOT have active TP levels
+    // TP levels handle exits — profit-protected SL would interfere after partial sells
+    const hasActiveTPLevels = tpLevels && kv && parseInt(await kv.get(`tphit:${agent.id}:${token.mint}`) || '0') < tpLevels.length;
+    if (kv && currentPeak > 30 && !hasActiveTPLevels) {
       const protectedPnl = currentPeak * (1 - trailPct / 100);
       if (protectedPnl > effectiveSL) effectiveSL = protectedPnl;
     }
@@ -456,13 +486,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
       if (isDegen) {
         result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
           symbol: tokenData.symbol, reason: slReason,
-          pnlPct, tokenAmount: token.amount,
+          pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount,
           estimatedSol: fullOutSol,
         }, kv, agent.id);
       } else {
         result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
           token: token.mint, symbol: tokenData.symbol, reason: slReason,
-          pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+          pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
         });
       }
       if (result && result.action === 'sell') sellResults.push(result);
@@ -480,14 +510,14 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           result = await executeDegenSell(agentPubkey, agentSecret, rpcUrl, token.mint, '100%', {
             symbol: tokenData.symbol,
             reason: `stale ${Math.round(minHeld)}m, ${pnlPct > 0 ? '+' : ''}${pnlPct.toFixed(1)}%`,
-            pnlPct, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, tokenAmount: token.amount, rawAmount: token.rawAmount,
             estimatedSol: fullOutSol,
           }, kv, agent.id);
         } else {
           result = await executeSell(fullQuote, agentPubkey, agentSecret, rpcUrl, {
             token: token.mint, symbol: tokenData.symbol,
             reason: `stale ${Math.round(minHeld)}m, ${pnlPct > 0 ? '+' : ''}${pnlPct.toFixed(1)}%`,
-            pnlPct, outSol: fullOutSol, tokenAmount: token.amount,
+            pnlPct, displayPnlPct, outSol: fullOutSol, tokenAmount: token.amount, rawAmount: token.rawAmount,
           });
         }
         if (result && result.action === 'sell') sellResults.push(result);
@@ -591,12 +621,13 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
     '6EEWHJBFbF4jQtXTn1NyGoA7WawF7W8fy1GQyvhqpump',  // CRYPTOHOUSE (rug)
     '53bYXw3o1TDkLLN2Q71im3HxETGDa3PTR4LpQVKKpump',  // TRUMPKIM (rug)
     '7wCX9qadjWgPWW6gp2SGQ3EKzV3W6zEMmzuUL8rdpump',  // baNana (rug)
+    '7cm68eCKr59aCMbn8mKTMxNMNhZrwwqDYe9kA32cpump',  // LOCKDRIP (honeypot)
   ]);
 
   // Symbol blacklist: repeated rug names that get relaunched with new mints
-  const SYMBOL_BLACKLIST = new Set(['BOI', 'ONO', 'OIL', 'CRYPTOHOUSE', 'TRUMPKIM', 'baNana']);
+  const SYMBOL_BLACKLIST = new Set(['BOI', 'ONO', 'OIL', 'CRYPTOHOUSE', 'TRUMPKIM', 'baNana', 'LOCKDRIP']);
 
-  // Cross-agent limit: max 2 agents can hold the same token
+  // Cross-agent limit: max 8 agents can hold the same token
   const crowdedRows = await db.prepare(
     `SELECT token_address FROM (
        SELECT agent_id, token_address,
@@ -604,7 +635,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
        FROM trades
        WHERE agent_id IN (SELECT id FROM agents WHERE status = 'alive') AND agent_id != ?
        GROUP BY agent_id, token_address HAVING net > 0
-     ) GROUP BY token_address HAVING COUNT(DISTINCT agent_id) >= 2`
+     ) GROUP BY token_address HAVING COUNT(DISTINCT agent_id) >= 8`
   ).bind(agent.id).all();
   const crowdedTokens = new Set(crowdedRows.results.map(r => r.token_address));
 
@@ -746,7 +777,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
 
         const txSig = await signAndSendSwapTx(ppTx, agentSecret, rpcUrl);
 
-        // Query on-chain balance to record actual token_amount (tx already confirmed by signAndSend)
+        // Estimate token_amount from price (cache-based getTokenBalances may return stale data)
         let tokenAmount = 0;
         try {
           await new Promise(r => setTimeout(r, 2000));
@@ -754,6 +785,11 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
           const bought = postBuyBalances.find(b => b.mint === t.address);
           if (bought) tokenAmount = bought.amount;
         } catch {}
+        // Fallback: estimate from price if on-chain query returned stale cache
+        if (tokenAmount <= 0 && t.price_native > 0) {
+          tokenAmount = tradeAmountSol / t.price_native;
+          console.log(`Agent ${agent.id}: estimated token_amount=${tokenAmount.toFixed(0)} for ${t.symbol} (price_native=${t.price_native})`);
+        }
         if (tokenAmount <= 0) console.warn(`Agent ${agent.id}: token_amount=0 after degen buy of ${t.symbol}, tx=${txSig}`);
 
         return {
@@ -791,6 +827,7 @@ export async function processAgent(agent, db, rpcUrl, agentSecret, agentPubkey, 
               const bought = postBuyBalances.find(b => b.mint === t.address);
               if (bought) tokenAmount = bought.amount;
             } catch {}
+            if (tokenAmount <= 0 && t.price_native > 0) tokenAmount = tradeAmountSol / t.price_native;
             return {
               sells: sellResults, action: 'buy', token: t.address, symbol: t.symbol,
               reason: `PumpPortal fallback | score ${t.score.toFixed(1)}`,
@@ -928,19 +965,27 @@ let _currentKv = null, _currentAgentId = null;
 async function executeSell(quote, pubkey, secret, rpcUrl, info, kv, agentId) {
   if (!kv) kv = _currentKv;
   if (!agentId) agentId = _currentAgentId;
-  // Try Jupiter if we have a quote
-  if (quote) {
-    const swapTx = await getJupiterSwapTx(quote, pubkey).catch(() => null);
-    if (swapTx) {
+  // Try Jupiter with retry (increasing slippage: 1% → 3% → 5%)
+  if (info.token && (info.rawAmount || info.tokenAmount)) {
+    const slippageAttempts = [100, 300, 500];
+    const rawAmt = info.rawAmount || info.tokenAmount;
+    for (let i = 0; i < slippageAttempts.length; i++) {
+      const bps = slippageAttempts[i];
       try {
+        const retryQuote = i === 0 && quote ? quote : await getJupiterQuote(info.token, SOL_MINT, rawAmt, bps);
+        if (!retryQuote) continue;
+        const swapTx = await getJupiterSwapTx(retryQuote, pubkey).catch(() => null);
+        if (!swapTx) continue;
         const txSig = await signAndSendSwapTx(swapTx, secret, rpcUrl);
         return {
           action: 'sell', token: info.token, symbol: info.symbol, reason: info.reason,
-          pnl_pct: info.pnlPct, amount_sol: info.outSol, token_amount: info.tokenAmount,
+          pnl_pct: info.pnlPct, display_pnl_pct: info.displayPnlPct,
+          amount_sol: info.outSol, token_amount: info.tokenAmount,
           tx_signature: txSig,
         };
       } catch (e) {
-        console.error(`Jupiter sell failed for ${info.symbol}:`, e.message);
+        console.error(`Jupiter sell attempt ${i + 1} failed for ${info.symbol} (${bps}bps):`, e.message);
+        if (i < slippageAttempts.length - 1) continue;
       }
     }
   }
@@ -948,42 +993,53 @@ async function executeSell(quote, pubkey, secret, rpcUrl, info, kv, agentId) {
   if (info.token && info.token.endsWith('pump')) {
     return executeDegenSell(pubkey, secret, rpcUrl, info.token, '100%', {
       symbol: info.symbol, reason: info.reason,
-      pnlPct: info.pnlPct, tokenAmount: info.tokenAmount,
+      pnlPct: info.pnlPct, displayPnlPct: info.displayPnlPct, tokenAmount: info.tokenAmount,
       estimatedSol: info.outSol || 0,
     }, kv, agentId);
   }
-  return { action: 'hold', reason: 'sell failed (no jupiter, not pump token)' };
+  return { action: 'hold', reason: 'sell failed (jupiter 3 attempts + not pump token)' };
 }
 
-// Degen sell via PumpPortal
+// Degen sell via PumpPortal (retries with increasing slippage in same cycle)
 async function executeDegenSell(pubkey, secret, rpcUrl, mint, _label, info, kv, agentId, emergency = false) {
-  const slippage = await getSellSlippage(kv, agentId, mint, emergency);
-  try {
-    const ppTx = await getPumpPortalTx(pubkey, 'sell', mint, info.tokenAmount, {
-      denominatedInSol: false,
-      slippage,
-      pool: 'auto',
-    });
-    if (!ppTx) {
-      await trackSellFail(kv, agentId, mint);
-      return { action: 'hold', reason: `pumpportal sell tx failed (slippage ${slippage}%)` };
-    }
+  const baseSlippage = await getSellSlippage(kv, agentId, mint, emergency);
+  const maxSlip = emergency ? 25 : 25;
+  const attempts = [baseSlippage, Math.min(baseSlippage + 10, maxSlip), Math.min(baseSlippage + 20, maxSlip)];
 
-    const txSig = await signAndSendSwapTx(ppTx, secret, rpcUrl);
-    await clearSellFails(kv, agentId, mint);
-    return {
-      action: 'sell',
-      token: mint,
-      symbol: info.symbol,
-      reason: `DEGEN | ${info.reason}`,
-      pnl_pct: info.pnlPct,
-      amount_sol: info.estimatedSol || 0,
-      token_amount: info.tokenAmount,
-      tx_signature: txSig,
-    };
-  } catch (e) {
-    console.error(`Degen sell failed for ${info.symbol} (slippage ${slippage}%):`, e.message);
-    await trackSellFail(kv, agentId, mint);
-    return { action: 'hold', reason: `degen sell failed (slippage ${slippage}%): ${e.message}` };
+  for (let i = 0; i < attempts.length; i++) {
+    const slippage = attempts[i];
+    try {
+      const ppTx = await getPumpPortalTx(pubkey, 'sell', mint, info.tokenAmount, {
+        denominatedInSol: false,
+        slippage,
+        pool: 'auto',
+      });
+      if (!ppTx) {
+        if (i < attempts.length - 1) continue;
+        await trackSellFail(kv, agentId, mint);
+        return { action: 'hold', reason: `pumpportal sell tx failed (slippage ${slippage}%)` };
+      }
+
+      const txSig = await signAndSendSwapTx(ppTx, secret, rpcUrl);
+      await clearSellFails(kv, agentId, mint);
+      const rawEstimate = info.estimatedSol || 0;
+      const discountedSol = rawEstimate * 0.65;
+      return {
+        action: 'sell',
+        token: mint,
+        symbol: info.symbol,
+        reason: `DEGEN | ${info.reason}`,
+        pnl_pct: info.pnlPct,
+        display_pnl_pct: info.displayPnlPct,
+        amount_sol: discountedSol,
+        token_amount: info.tokenAmount,
+        tx_signature: txSig,
+      };
+    } catch (e) {
+      console.error(`Degen sell attempt ${i+1}/3 for ${info.symbol} (slippage ${slippage}%):`, e.message);
+      if (i < attempts.length - 1) continue;
+      await trackSellFail(kv, agentId, mint);
+      return { action: 'hold', reason: `degen sell failed after 3 attempts (slippage ${slippage}%): ${e.message}` };
+    }
   }
 }

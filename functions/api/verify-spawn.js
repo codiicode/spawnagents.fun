@@ -16,6 +16,9 @@ export async function onRequest(context) {
   const { spawn_id } = body;
   if (!spawn_id) return Response.json({ error: 'Missing spawn_id' }, { status: 400 });
 
+  // Admin force-confirm: skip payment verification
+  const isAdmin = context.request.headers.get('x-cron-secret') === context.env.CRON_SECRET;
+
   const pending = await db.prepare("SELECT * FROM pending_spawns WHERE id = ? AND status = 'pending'").bind(spawn_id).first();
   if (!pending) return Response.json({ error: 'Spawn request not found or already processed' }, { status: 404 });
 
@@ -26,69 +29,76 @@ export async function onRequest(context) {
     return Response.json({ status: 'expired', reason: 'Spawn request expired (30 min)' });
   }
 
-  // === VERIFY $SPAWN TOKEN PAYMENT ===
+  // === VERIFY PAYMENTS (skip if admin force-confirm) ===
   let tokenVerified = false;
-  if (!pending.spawn_cost || pending.spawn_cost <= 0) {
-    tokenVerified = true;
-  } else {
-    const tokenResult = await verifyTokenTransfer(pending.owner_wallet, protocolWallet, SPAWN_MINT, pending.spawn_cost, rpcUrl);
-    tokenVerified = tokenResult.verified;
-  }
-
-  if (!tokenVerified) {
-    return Response.json({
-      status: 'pending',
-      checks: { token: false, sol: false },
-      reason: `Waiting for ${pending.spawn_cost.toLocaleString()} $SPAWN tokens`,
-    });
-  }
-
-  // === VERIFY SOL PAYMENT (micro-amount matching) ===
   let solVerified = false;
   let solTxSig = null;
 
-  const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolWallet, { limit: 15 }]);
+  if (isAdmin) {
+    tokenVerified = true;
+    solVerified = true;
+    solTxSig = 'admin-force-confirm';
+  } else {
+    // === VERIFY $SPAWN TOKEN PAYMENT ===
+    if (!pending.spawn_cost || pending.spawn_cost <= 0) {
+      tokenVerified = true;
+    } else {
+      const tokenResult = await verifyTokenTransfer(pending.owner_wallet, protocolWallet, SPAWN_MINT, pending.spawn_cost, rpcUrl);
+      tokenVerified = tokenResult.verified;
+    }
 
-  if (recentSigs?.length > 0) {
-    for (const sig of recentSigs) {
-      if (sig.err) continue;
+    if (!tokenVerified) {
+      return Response.json({
+        status: 'pending',
+        checks: { token: false, sol: false },
+        reason: `Waiting for ${pending.spawn_cost.toLocaleString()} $SPAWN tokens`,
+      });
+    }
 
-      const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
-      if (!tx?.meta) continue;
+    // === VERIFY SOL PAYMENT (micro-amount matching) ===
+    const recentSigs = await rpcCall(rpcUrl, 'getSignaturesForAddress', [protocolWallet, { limit: 15 }]);
 
-      const accounts = tx.transaction.message.accountKeys;
-      let protoIdx = -1;
-      for (let i = 0; i < accounts.length; i++) {
-        const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
-        if (pk === protocolWallet) { protoIdx = i; break; }
-      }
-      if (protoIdx < 0) continue;
+    if (recentSigs?.length > 0) {
+      for (const sig of recentSigs) {
+        if (sig.err) continue;
 
-      const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
+        const tx = await rpcCall(rpcUrl, 'getTransaction', [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }]);
+        if (!tx?.meta) continue;
 
-      // Skip micro amounts from login/withdrawal (< 0.5 SOL)
-      if (solReceived < 0.5) continue;
+        const accounts = tx.transaction.message.accountKeys;
+        let protoIdx = -1;
+        for (let i = 0; i < accounts.length; i++) {
+          const pk = typeof accounts[i] === 'string' ? accounts[i] : accounts[i].pubkey;
+          if (pk === protocolWallet) { protoIdx = i; break; }
+        }
+        if (protoIdx < 0) continue;
 
-      // Match within 0.5% tolerance
-      if (Math.abs(solReceived - pending.sol_amount) <= pending.sol_amount * 0.005) {
-        const sender = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+        const solReceived = (tx.meta.postBalances[protoIdx] - tx.meta.preBalances[protoIdx]) / 1e9;
 
-        // Verify sender is the owner
-        if (sender === pending.owner_wallet) {
-          solVerified = true;
-          solTxSig = sig.signature;
-          break;
+        // Skip micro amounts from login/withdrawal (< 0.5 SOL)
+        if (solReceived < 0.5) continue;
+
+        // Match within 0.5% tolerance
+        if (Math.abs(solReceived - pending.sol_amount) <= pending.sol_amount * 0.005) {
+          const sender = typeof accounts[0] === 'string' ? accounts[0] : accounts[0].pubkey;
+
+          // Verify sender is the owner
+          if (sender === pending.owner_wallet) {
+            solVerified = true;
+            solTxSig = sig.signature;
+            break;
+          }
         }
       }
     }
-  }
 
-  if (!solVerified) {
-    return Response.json({
-      status: 'pending',
-      checks: { token: tokenVerified, sol: false },
-      reason: `Waiting for SOL payment (${pending.sol_amount} SOL)`,
-    });
+    if (!solVerified) {
+      return Response.json({
+        status: 'pending',
+        checks: { token: tokenVerified, sol: false },
+        reason: `Waiting for SOL payment (${pending.sol_amount} SOL)`,
+      });
+    }
   }
 
   // === BOTH VERIFIED — CREATE CHILD AGENT ===
@@ -143,19 +153,22 @@ export async function onRequest(context) {
     return Response.json({ error: `Funding failed: ${e.message}` }, { status: 500 });
   }
 
-  // Inherit parent's image/avatar meta
+  // Inherit avatar from ancestor chain (walk up to genesis)
   let childMeta = null;
-  if (parent.meta) {
+  let cur = parent;
+  while (cur) {
     try {
-      const pm = typeof parent.meta === 'string' ? JSON.parse(parent.meta) : parent.meta;
-      if (pm.avatar || pm.image) childMeta = JSON.stringify({ avatar: pm.avatar || pm.image });
+      const cm = cur.meta ? (typeof cur.meta === 'string' ? JSON.parse(cur.meta) : cur.meta) : {};
+      if (cm.avatar || cm.image) { childMeta = JSON.stringify({ avatar: cm.avatar || cm.image }); break; }
     } catch {}
+    if (!cur.parent_id) break;
+    cur = await db.prepare("SELECT meta, parent_id FROM agents WHERE id = ?").bind(cur.parent_id).first();
   }
 
   // Insert child agent + spawn record + event, update pending status
   await db.batch([
     db.prepare(
-      "INSERT INTO agents (id, name, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood, meta) VALUES (?, ?, ?, ?, ?, ?, ?, 'alive', ?, ?, ?)"
+      "INSERT INTO agents (id, name, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, spawn_cost_blood, meta, pnl_mode) VALUES (?, ?, ?, ?, ?, ?, ?, 'alive', ?, ?, ?, 'trades')"
     ).bind(childId, childName, pending.parent_id, childGen, pending.owner_wallet, keypair.publicKey, JSON.stringify(childDna), tradingCapital, pending.spawn_cost, childMeta),
     db.prepare(
       "INSERT INTO spawns (parent_id, child_id, blood_burned, mutation_log) VALUES (?, ?, ?, ?)"

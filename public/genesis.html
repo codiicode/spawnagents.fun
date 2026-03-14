@@ -1534,7 +1534,7 @@ function agentCard(g, priceLabel) {
 
   return `<div class="agent-card ${st === "claimed" ? "claimed" : ""}" data-pnl="${g.total_pnl || 0}">
     <div class="agent-card-head">
-      <div class="agent-name">${g.name || g.id}</div>
+      <a class="agent-name" href="/agent.html?id=${g.id}" style="text-decoration:none;color:inherit">${g.name || g.id}</a>
       ${isDegen && g.available ? '<div class="agent-status available" style="color:#ff4444;border-color:#ff4444;">degen</div>' : `<div class="agent-status ${st}">${st}</div>`}
     </div>
     ${img ? `<img class="agent-img" src="${img}" alt="${g.name || g.id}" loading="lazy">` : ''}
@@ -1585,7 +1585,7 @@ function agentCard(g, priceLabel) {
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<button class="withdraw-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-wallet="${g.agent_wallet || ''}" onclick="initWithdraw(this)">Withdraw</button>` : ''}
     ${!g.available && connectedWallet && connectedWallet === g.owner_wallet ? `<a href="/lab/?edit=${g.id}" class="withdraw-btn" style="text-align:center;text-decoration:none;display:block;margin-top:6px;">Edit Agent</a>` : ''}
     ${!g.available && (g.total_pnl || 0) >= 0.4 ? (() => {
-      const cc = (allAgentsData || []).filter(a => a.parent_id === g.id).length;
+      const cc = (allAgentsData || []).filter(a => a.parent_id === g.id && a.status !== 'dead').length;
       if (cc >= 5) return `<button class="reproduce-btn" disabled style="opacity:0.4;cursor:not-allowed;">Max reproductions reached (${cc}/5)</button>`;
       return `<button class="reproduce-btn" data-agent="${g.id}" data-name="${g.name || g.id}" data-owner="${g.owner_wallet || ''}" data-pnl="${g.total_pnl || 0}" data-gen="${g.generation || 0}" onclick="initSpawn(this)">Reproduce (${cc}/5)</button>`;
     })() : ''}
@@ -1706,7 +1706,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   lastGenesisData = data;
   renderAgents(data);
   loadPortfolios(data);
-  loadCustomAgents();
+  await loadCustomAgents();
+  // Auto-open spawn modal if ?spawn=agentId is in URL
+  const spawnParam = new URLSearchParams(window.location.search).get('spawn');
+  if (spawnParam) {
+    const spawnBtn = document.querySelector(`.reproduce-btn[data-agent="${spawnParam}"]`);
+    if (spawnBtn) spawnBtn.click();
+  }
 });
 
 async function loadCustomAgents() {

@@ -151,11 +151,11 @@ let _jupiterApiKey = '';
 export function setJupiterApiKey(key) { _jupiterApiKey = key; }
 
 // Get Jupiter quote
-export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit) {
+export async function getJupiterQuote(inputMint, outputMint, amountSmallestUnit, slippageBps = 100) {
   const headers = {};
   if (_jupiterApiKey) headers['x-api-key'] = _jupiterApiKey;
   const res = await fetch(
-    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=100`,
+    `${JUPITER_API}/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amountSmallestUnit}&slippageBps=${slippageBps}`,
     { headers }
   );
   if (!res.ok) return null;

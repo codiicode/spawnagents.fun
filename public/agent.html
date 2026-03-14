@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Profile — SPAWN</title>
+  <meta name="description" content="Agent profile on SPAWN — autonomous trading agents evolving on Solana.">
+  <link rel="icon" href="/S.jpg" type="image/jpeg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0608;
+      --surface: rgba(180, 30, 50, 0.04);
+      --surface-hover: rgba(180, 30, 50, 0.08);
+      --border: rgba(180, 30, 50, 0.12);
+      --border-strong: rgba(180, 30, 50, 0.25);
+      --blood: #c41e3a;
+      --blood-bright: #e63950;
+      --blood-deep: #8b1528;
+      --blood-dim: rgba(196, 30, 58, 0.15);
+      --text: #ede8ea;
+      --text-muted: #9e9396;
+      --text-dim: #6b5f63;
+      --green: #4a9e6a;
+      --red: #c44040;
+      --font-display: 'Cinzel', serif;
+      --font-body: 'Sora', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; scrollbar-width: thin; scrollbar-color: var(--blood-deep) var(--bg); }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .vignette {
+      position: fixed; inset: 0; pointer-events: none; z-index: 9998;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(8, 4, 6, 0.6) 100%);
+    }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: 52px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 clamp(20px, 4vw, 48px);
+      background: rgba(8, 5, 10, 0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-left { display: flex; align-items: center; gap: 16px; }
+
+    .nav-back {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 18px;
+      line-height: 1;
+      transition: color 0.2s;
+      font-family: var(--font-mono);
+    }
+    .nav-back:hover { color: var(--text); }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.25em;
+      color: var(--blood);
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 76px clamp(16px, 4vw, 48px) 80px;
+    }
+
+    .state-msg {
+      text-align: center;
+      padding: 120px 20px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .agent-header {
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease forwards;
+      display: flex;
+      gap: clamp(20px, 4vw, 32px);
+      align-items: flex-start;
+    }
+
+    .agent-avatar-wrap {
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .agent-avatar {
+      width: clamp(80px, 15vw, 120px);
+      height: clamp(80px, 15vw, 120px);
+      object-fit: cover;
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      display: block;
+      position: relative;
+      z-index: 1;
+    }
+
+    .agent-avatar-wrap::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, var(--blood), transparent 60%);
+      opacity: 0.2;
+      z-index: 0;
+      filter: blur(8px);
+    }
+
+    .agent-avatar-placeholder {
+      width: clamp(80px, 15vw, 120px);
+      height: clamp(80px, 15vw, 120px);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      background: var(--blood-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: clamp(24px, 5vw, 36px);
+      font-weight: 700;
+      color: var(--blood);
+      position: relative;
+      z-index: 1;
+    }
+
+    .agent-header-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .agent-name-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .agent-name {
+      font-family: var(--font-display);
+      font-size: clamp(24px, 5vw, 38px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text);
+    }
+
+    .gen-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--blood);
+      border: 1px solid var(--border-strong);
+      padding: 3px 10px;
+      white-space: nowrap;
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+    .status-dot.alive { background: var(--green); box-shadow: 0 0 8px rgba(74, 158, 106, 0.5); }
+    .status-dot.dead { background: var(--red); box-shadow: 0 0 8px rgba(196, 64, 64, 0.5); }
+
+    .agent-wallet-link {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.2s;
+      word-break: break-all;
+    }
+    .agent-wallet-link:hover { color: var(--blood); }
+
+    .agent-meta-line {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .agent-meta-line span { font-family: var(--font-mono); font-size: 11px; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.1s forwards;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 18px 16px;
+      transition: border-color 0.2s;
+    }
+    .stat-card:hover { border-color: var(--border-strong); }
+
+    .stat-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .stat-value.positive { color: var(--green); }
+    .stat-value.negative { color: var(--red); }
+
+    .chart-section {
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.2s forwards;
+    }
+
+    .section-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--blood);
+      margin-bottom: 14px;
+    }
+
+    .chart-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #pnl-chart { width: 100%; display: block; }
+
+    .chart-tooltip {
+      display: none;
+      position: absolute;
+      background: rgba(10, 6, 8, 0.95);
+      border: 1px solid var(--border-strong);
+      padding: 8px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text);
+      pointer-events: none;
+      z-index: 10;
+      white-space: nowrap;
+    }
+    .chart-tooltip .tt-time { color: var(--text-dim); font-size: 10px; margin-bottom: 2px; }
+
+    .chart-live-dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-left: 8px;
+      animation: livePulse 1.5s ease-in-out infinite;
+      vertical-align: middle;
+    }
+    @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .dna-section {
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.3s forwards;
+    }
+
+    .dna-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: clamp(20px, 3vw, 32px);
+    }
+
+    .dna-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    .dna-row {
+      display: grid;
+      grid-template-columns: 140px 1fr 50px;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .dna-row:last-child { border-bottom: none; }
+
+    .dna-label {
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: capitalize;
+    }
+
+    .dna-bar {
+      height: 6px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .dna-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--blood);
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .dna-val {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      text-align: right;
+    }
+
+    .trades-section {
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.4s forwards;
+    }
+
+    .trades-list {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      max-height: 500px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--blood-deep) transparent;
+    }
+
+    .trade-row {
+      display: grid;
+      grid-template-columns: 100px 60px 1fr 90px 40px;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      transition: background 0.15s;
+    }
+    .trade-row:last-child { border-bottom: none; }
+    .trade-row:hover { background: var(--surface-hover); }
+
+    .trade-time { color: var(--text-dim); font-size: 10px; }
+
+    .trade-badge {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      text-align: center;
+      font-weight: 600;
+    }
+    .trade-badge.buy { color: var(--red); border: 1px solid rgba(196, 64, 64, 0.3); }
+    .trade-badge.sell { color: var(--green); border: 1px solid rgba(74, 158, 106, 0.3); }
+
+    .trade-token { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .trade-sol { color: var(--text); text-align: right; }
+    .trade-tx a { color: var(--text-dim); text-decoration: none; font-size: 10px; transition: color 0.2s; }
+    .trade-tx a:hover { color: var(--blood); }
+
+    .trades-empty {
+      text-align: center;
+      padding: 40px 20px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .family-section {
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.5s forwards;
+    }
+
+    .family-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .family-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      text-decoration: none;
+      transition: border-color 0.2s, background 0.2s;
+      display: block;
+    }
+    .family-card:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+
+    .family-card-name {
+      font-family: var(--font-display);
+      font-size: 14px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .family-card-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      display: flex;
+      gap: 12px;
+    }
+
+    .family-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .parent-block { margin-bottom: 20px; }
+
+    .share-section {
+      text-align: center;
+      margin-bottom: 40px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.6s forwards;
+    }
+
+    .share-btn {
+      display: inline-block;
+      border: 1px solid var(--border-strong);
+      color: var(--text-muted);
+      padding: 10px 28px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      transition: all 0.25s;
+    }
+    .share-btn:hover {
+      border-color: var(--blood);
+      color: var(--text);
+      background: var(--blood-dim);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .agent-avatar, .agent-avatar-placeholder { width: 72px !important; height: 72px !important; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .trade-row { grid-template-columns: 70px 50px 1fr 70px 30px; gap: 6px; padding: 8px 10px; font-size: 10px; }
+      .dna-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 420px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .stat-value { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="vignette"></div>
+
+  <nav>
+    <div class="nav-left">
+      <a href="javascript:history.back()" class="nav-back" title="Back">&larr;</a>
+      <a href="/" class="nav-logo">SPAWN</a>
+    </div>
+  </nav>
+
+  <div class="container" id="app">
+    <div class="state-msg" id="loading-state">Loading agent data...</div>
+  </div>
+
+  <script>
+  (function() {
+    const AGENT_IMAGES = {
+      'the-hawk':'/hawk.jpg','the-phantom':'/phantom.jpg','the-viper':'/viper.jpg',
+      'the-beast':'/the-beast.jpg','the-berserker':'/the-berserker.jpg','the-bull':'/the-bull.jpg',
+      'the-colossus':'/the-colossus.jpg','the-jackal':'/the-jackal.jpg','the-oracle':'/the-oracle.jpg',
+      'the-serpent':'/the-serpent.jpg','the-shark':'/the-shark.jpg','the-specter':'/the-specter.jpg',
+      'the-turtle':'/the-turtle.jpg','the-wolf':'/the-wolf.jpg','the-wraith':'/the-wraith.jpg',
+      'the-monk':'/the-monk.jpg','the-gambler':'/the-gambler.jpg','the-sniper':'/the-sniper.jpg',
+      'the-surgeon':'/the-surgeon.jpg',
+      'agent_9beb5312':'/the-falcon.jpg','agent_29f951ee':'/the-wraith-spawn.jpg',
+      'agent_42f44230':'/the-packrunner.jpg',
+      'agent_6d124cb9':'/the-bunker.jpg',
+    };
+
+    function getAgentImage(id, meta) {
+      if (AGENT_IMAGES[id]) return AGENT_IMAGES[id];
+      if (meta && (meta.image || meta.avatar)) return meta.image || meta.avatar;
+      return null;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const agentId = params.get('id');
+    const app = document.getElementById('app');
+
+    if (!agentId) {
+      app.innerHTML = '<div class="state-msg">No agent ID provided.</div>';
+      return;
+    }
+
+    // Live chart data — starts from NOW, accumulates via polling
+    let chartPoints = [];
+    let chartCanvas, chartCtx;
+    let chartStartTime = Date.now();
+    let initialPnl = null;
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return 'never';
+      const diff = Date.now() - new Date(dateStr + 'Z').getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + 'm ago';
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return hrs + 'h ago';
+      const days = Math.floor(hrs / 24);
+      if (days < 30) return days + 'd ago';
+      return Math.floor(days / 30) + 'mo ago';
+    }
+
+    function daysSince(dateStr) {
+      if (!dateStr) return 0;
+      return Math.floor((Date.now() - new Date(dateStr + 'Z').getTime()) / 86400000);
+    }
+
+    function truncAddr(addr) {
+      if (!addr) return '---';
+      return addr.slice(0, 6) + '...' + addr.slice(-4);
+    }
+
+    function formatSol(val) {
+      if (val === null || val === undefined) return '0.0000';
+      return parseFloat(val).toFixed(4);
+    }
+
+    function esc(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    async function loadProfile(isRefresh) {
+      try {
+        const res = await fetch('/api/agent-profile?id=' + encodeURIComponent(agentId));
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to load agent');
+        }
+        const data = await res.json();
+
+        // Load PnL history from server + append live point
+        const pnl = data.currentPnl || 0;
+        if (initialPnl === null) {
+          // First load — use server history
+          const history = data.pnlHistory || [];
+          if (history.length > 0) {
+            chartPoints = history.map(function(h) { return { time: h.t, pnl: h.v }; });
+            initialPnl = chartPoints[0].pnl;
+            chartStartTime = chartPoints[0].time;
+          } else {
+            initialPnl = pnl;
+            chartStartTime = Date.now();
+            chartPoints = [{ time: chartStartTime, pnl: pnl }];
+          }
+          // Add current as latest point
+          chartPoints.push({ time: Date.now(), pnl: pnl });
+        } else {
+          chartPoints.push({ time: Date.now(), pnl: pnl });
+          if (chartPoints.length > 500) chartPoints.shift();
+        }
+
+        render(data);
+
+        if (!isRefresh) {
+          setupChart();
+        } else {
+          redrawChart();
+        }
+      } catch (e) {
+        if (!document.querySelector('.agent-header')) {
+          app.innerHTML = '<div class="state-msg">' + e.message + '</div>';
+        }
+      }
+    }
+
+    function render(data) {
+      const a = data.agent;
+      const pnl = a.total_pnl || 0;
+      const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+      const pnlSign = pnl >= 0 ? '+' : '';
+      const statusClass = a.status === 'alive' ? 'alive' : 'dead';
+      const age = daysSince(a.born_at);
+
+      let html = '';
+
+      // HEADER
+      var avatarImg = getAgentImage(a.id, a.meta);
+      html += '<div class="agent-header">';
+      html += '<div class="agent-avatar-wrap">';
+      if (avatarImg) {
+        html += '<img class="agent-avatar" src="' + esc(avatarImg) + '" alt="' + esc(a.name || a.id) + '">';
+      } else {
+        html += '<div class="agent-avatar-placeholder">' + esc((a.name || a.id).charAt(0).toUpperCase()) + '</div>';
+      }
+      html += '</div>';
+      html += '<div class="agent-header-info">';
+      html += '<div class="agent-name-row">';
+      html += '<span class="agent-name">' + esc(a.name || a.id) + '</span>';
+      html += '<span class="gen-badge">GEN ' + (a.generation || 0) + '</span>';
+      html += '<span class="status-dot ' + statusClass + '" title="' + a.status + '"></span>';
+      html += '</div>';
+      html += '<a class="agent-wallet-link" href="https://solscan.io/account/' + esc(a.agent_wallet) + '" target="_blank" rel="noopener">' + truncAddr(a.agent_wallet) + '</a>';
+      html += '<div class="agent-meta-line">Born ' + age + ' days ago</div>';
+      html += '<div class="agent-meta-line">Owner: <span>' + truncAddr(a.owner_wallet) + '</span></div>';
+      html += '</div></div>';
+
+      // STATS
+      var royaltiesEarned = a.total_royalties_received || 0;
+      var royaltiesPaid = a.total_royalties_paid || 0;
+      var hasRoyalties = royaltiesEarned > 0 || royaltiesPaid > 0;
+      html += '<div class="stats-grid"' + (hasRoyalties ? ' style="grid-template-columns:repeat(2,1fr)"' : '') + '>';
+      html += '<div class="stat-card"><div class="stat-label">Total PnL</div><div class="stat-value ' + pnlClass + '">' + pnlSign + formatSol(pnl) + ' SOL</div></div>';
+      html += '<div class="stat-card"><div class="stat-label">Total Trades</div><div class="stat-value">' + (a.total_trades || 0) + '</div></div>';
+      html += '<div class="stat-card"><div class="stat-label">Age</div><div class="stat-value">' + age + 'd</div></div>';
+      if (royaltiesEarned > 0) {
+        html += '<div class="stat-card"><div class="stat-label">Royalties Earned</div><div class="stat-value positive">' + formatSol(royaltiesEarned) + ' SOL</div></div>';
+      }
+      if (royaltiesPaid > 0) {
+        html += '<div class="stat-card"><div class="stat-label">Royalties Paid</div><div class="stat-value">' + formatSol(royaltiesPaid) + ' SOL</div></div>';
+      }
+      html += '</div>';
+
+      // CHART
+      html += '<div class="chart-section">';
+      html += '<div class="section-label">PnL History<span class="chart-live-dot"></span></div>';
+      html += '<div class="chart-container">';
+      html += '<canvas id="pnl-chart" height="280"></canvas>';
+      html += '<div class="chart-tooltip" id="chart-tooltip"><div class="tt-time"></div><div class="tt-val"></div></div>';
+      html += '</div></div>';
+
+      // DNA RADAR
+      const dna = a.dna || {};
+      if (Object.keys(dna).length > 0) {
+        html += '<div class="dna-section">';
+        html += '<div class="section-label">DNA Profile</div>';
+        html += '<div class="dna-block" style="display:flex;justify-content:center;padding:24px;">';
+        html += '<canvas id="radar-canvas" width="220" height="220"></canvas>';
+        html += '</div></div>';
+      }
+
+      // TRADES
+      html += '<div class="trades-section">';
+      html += '<div class="section-label">Trade History</div>';
+      const trades = data.trades || [];
+      if (trades.length > 0) {
+        html += '<div class="trades-list">';
+        for (const t of trades) {
+          const badgeClass = t.action === 'buy' ? 'buy' : 'sell';
+          html += '<div class="trade-row">';
+          html += '<div class="trade-time">' + timeAgo(t.created_at) + '</div>';
+          html += '<div class="trade-badge ' + badgeClass + '">' + t.action.toUpperCase() + '</div>';
+          var ticker = t.symbol ? '$' + t.symbol : '$' + t.token_address.slice(0, 4).toUpperCase();
+          html += '<div class="trade-token" title="' + esc(t.token_address) + '">' + esc(ticker) + '</div>';
+          html += '<div class="trade-sol">' + formatSol(t.amount_sol) + ' SOL</div>';
+          html += '<div class="trade-tx">';
+          if (t.tx_signature) {
+            html += '<a href="https://solscan.io/tx/' + esc(t.tx_signature) + '" target="_blank" rel="noopener">tx</a>';
+          }
+          html += '</div></div>';
+        }
+        html += '</div>';
+      } else {
+        html += '<div class="trades-list"><div class="trades-empty">No trades yet...</div></div>';
+      }
+      html += '</div>';
+
+      // FAMILY
+      const hasParent = data.parent;
+      const hasChildren = data.children && data.children.length > 0;
+      if (hasParent || hasChildren) {
+        html += '<div class="family-section">';
+        html += '<div class="section-label">Lineage</div>';
+
+        if (hasParent) {
+          html += '<div class="parent-block">';
+          html += '<div class="family-label">Parent</div>';
+          html += '<a href="/agent.html?id=' + esc(data.parent.id) + '" class="family-card">';
+          html += '<div class="family-card-name">' + esc(data.parent.name || data.parent.id) + '</div>';
+          html += '</a></div>';
+        }
+
+        if (hasChildren) {
+          html += '<div class="family-label">Children</div>';
+          html += '<div class="family-grid">';
+          for (const c of data.children) {
+            const cPnl = c.total_pnl || 0;
+            const cClass = cPnl >= 0 ? 'positive' : 'negative';
+            html += '<a href="/agent.html?id=' + esc(c.id) + '" class="family-card">';
+            html += '<div class="family-card-name">' + esc(c.name || c.id) + '</div>';
+            html += '<div class="family-card-meta">';
+            html += '<span>' + c.status + '</span>';
+            html += '<span class="' + cClass + '">' + (cPnl >= 0 ? '+' : '') + formatSol(cPnl) + ' SOL</span>';
+            html += '</div></a>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      // SHARE
+      const shareText = (a.name || a.id) + ' on SPAWN: ' + pnlSign + formatSol(pnl) + ' SOL PnL, ' + (a.total_trades || 0) + ' trades, ' + (data.winRate || 0) + '% win rate';
+      const shareUrl = 'https://spawnagents.fun/agent.html?id=' + encodeURIComponent(a.id);
+      const tweetUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText) + '&url=' + encodeURIComponent(shareUrl);
+      html += '<div class="share-section">';
+      html += '<a href="' + tweetUrl + '" target="_blank" rel="noopener" class="share-btn">Share on X</a>';
+      html += '</div>';
+
+      document.title = (a.name || a.id) + ' — SPAWN';
+      app.innerHTML = html;
+
+      // Draw DNA radar after DOM update
+      const radarCanvas = document.getElementById('radar-canvas');
+      if (radarCanvas && Object.keys(dna).length > 0) {
+        drawRadarChart(radarCanvas, dna);
+      }
+    }
+
+    function drawRadarChart(canvas, dna) {
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = 220;
+      const h = canvas.height = 220;
+      const cx = w/2, cy = h/2, r = 80;
+      const params = [
+        { key: 'aggression', label: 'AGG', max: 1 },
+        { key: 'patience', label: 'PAT', max: 1 },
+        { key: 'risk_tolerance', label: 'RISK', max: 1 },
+        { key: 'sell_profit_pct', label: 'TP%', max: 200 },
+        { key: 'sell_loss_pct', label: 'SL%', max: 50 },
+        { key: 'max_position_pct', label: 'POS%', max: 80 },
+      ];
+      const n = params.length;
+      const angleStep = (Math.PI * 2) / n;
+
+      ctx.strokeStyle = 'rgba(180,30,50,0.1)';
+      ctx.lineWidth = 1;
+      for (var ring = 1; ring <= 4; ring++) {
+        ctx.beginPath();
+        var rr = r * ring / 4;
+        for (var i = 0; i <= n; i++) {
+          var a = i * angleStep - Math.PI/2;
+          var x = cx + rr * Math.cos(a);
+          var y = cy + rr * Math.sin(a);
+          i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(180,30,50,0.15)';
+      for (var i = 0; i < n; i++) {
+        var a = i * angleStep - Math.PI/2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a));
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      params.forEach(function(p, i) {
+        var val = Math.min((dna[p.key] || 0) / p.max, 1);
+        var a = i * angleStep - Math.PI/2;
+        var x = cx + r * val * Math.cos(a);
+        var y = cy + r * val * Math.sin(a);
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(196,30,58,0.15)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(196,30,58,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#c41e3a';
+      params.forEach(function(p, i) {
+        var val = Math.min((dna[p.key] || 0) / p.max, 1);
+        var a = i * angleStep - Math.PI/2;
+        var x = cx + r * val * Math.cos(a);
+        var y = cy + r * val * Math.sin(a);
+        ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+        var lx = cx + (r + 18) * Math.cos(a);
+        var ly = cy + (r + 18) * Math.sin(a);
+        ctx.font = '9px "JetBrains Mono"';
+        ctx.fillStyle = '#6b5f63';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.label, lx, ly);
+        ctx.fillStyle = '#c41e3a';
+      });
+    }
+
+    // ---- LIVE CHART ----
+    function setupChart() {
+      chartCanvas = document.getElementById('pnl-chart');
+      if (!chartCanvas) return;
+      chartCtx = chartCanvas.getContext('2d');
+      resizeChart();
+      window.addEventListener('resize', function() { resizeChart(); drawChart(); });
+
+      // Animate initial draw
+      let progress = 0;
+      function animate() {
+        progress += 0.03;
+        if (progress > 1) progress = 1;
+        drawChart(progress);
+        if (progress < 1) requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+
+      chartCanvas.addEventListener('mousemove', handleChartHover);
+      chartCanvas.addEventListener('mouseleave', function() {
+        var tt = document.getElementById('chart-tooltip');
+        if (tt) tt.style.display = 'none';
+        drawChart();
+      });
+    }
+
+    function resizeChart() {
+      if (!chartCanvas) return;
+      var rect = chartCanvas.parentElement.getBoundingClientRect();
+      var w = rect.width - 40;
+      var dpr = window.devicePixelRatio || 1;
+      chartCanvas.width = w * dpr;
+      chartCanvas.height = 280 * dpr;
+      chartCanvas.style.width = w + 'px';
+      chartCanvas.style.height = '280px';
+      chartCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function redrawChart() {
+      chartCanvas = document.getElementById('pnl-chart');
+      if (!chartCanvas) return;
+      chartCtx = chartCanvas.getContext('2d');
+      resizeChart();
+      drawChart();
+      chartCanvas.addEventListener('mousemove', handleChartHover);
+      chartCanvas.addEventListener('mouseleave', function() {
+        var tt = document.getElementById('chart-tooltip');
+        if (tt) tt.style.display = 'none';
+        drawChart();
+      });
+    }
+
+    function drawChart(progress) {
+      if (!chartCtx || chartPoints.length < 1) return;
+      if (progress === undefined) progress = 1;
+
+      var ctx = chartCtx;
+      var w = chartCanvas.width / (window.devicePixelRatio || 1);
+      var h = chartCanvas.height / (window.devicePixelRatio || 1);
+
+      var pad = { top: 20, right: 20, bottom: 30, left: 60 };
+      var cw = w - pad.left - pad.right;
+      var ch = h - pad.top - pad.bottom;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // If only 1 point, draw a flat line
+      var data = chartPoints;
+      if (data.length === 1) {
+        data = [data[0], { time: Date.now(), pnl: data[0].pnl }];
+      }
+
+      var vals = data.map(function(d) { return d.pnl; });
+      var minV = Math.min.apply(null, vals);
+      var maxV = Math.max.apply(null, vals);
+      if (minV === maxV) { minV -= 0.01; maxV += 0.01; }
+      var yPad = (maxV - minV) * 0.1;
+      var yMin = minV - yPad;
+      var yMax = maxV + yPad;
+
+      var tMin = data[0].time;
+      var tMax = data[data.length - 1].time;
+      if (tMin === tMax) tMax = tMin + 60000;
+
+      function xPos(t) { return pad.left + ((t - tMin) / (tMax - tMin)) * cw; }
+      function yPos(v) { return pad.top + ch - ((v - yMin) / (yMax - yMin)) * ch; }
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(180, 30, 50, 0.06)';
+      ctx.lineWidth = 1;
+      for (var i = 0; i <= 5; i++) {
+        var y = pad.top + (ch / 5) * i;
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(w - pad.right, y);
+        ctx.stroke();
+      }
+
+      // Initial capital line (dashed)
+      if (initialPnl !== null) {
+        var initY = yPos(initialPnl);
+        if (initY > pad.top && initY < pad.top + ch) {
+          ctx.strokeStyle = 'rgba(180, 30, 50, 0.2)';
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(pad.left, initY);
+          ctx.lineTo(w - pad.right, initY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = '9px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#6b5f63';
+          ctx.textAlign = 'left';
+          ctx.fillText('start', w - pad.right + 4, initY + 3);
+        }
+      }
+
+      // Y-axis labels
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#6b5f63';
+      ctx.textAlign = 'right';
+      for (var i = 0; i <= 5; i++) {
+        var v = yMax - ((yMax - yMin) / 5) * i;
+        var y = pad.top + (ch / 5) * i;
+        ctx.fillText(v.toFixed(3), pad.left - 8, y + 3);
+      }
+
+      // X-axis labels (absolute time)
+      ctx.textAlign = 'center';
+      var labelCount = Math.min(data.length, 6);
+      for (var i = 0; i < labelCount; i++) {
+        var idx = Math.round((i / (labelCount - 1)) * (data.length - 1));
+        var x = xPos(data[idx].time);
+        var dt = new Date(data[idx].time);
+        var label = dt.getHours().toString().padStart(2,'0') + ':' + dt.getMinutes().toString().padStart(2,'0');
+        ctx.fillText(label, x, h - 8);
+      }
+
+      // Points to draw based on progress
+      var pointsToDraw = Math.ceil(data.length * progress);
+      if (pointsToDraw < 2) pointsToDraw = 2;
+      if (pointsToDraw > data.length) pointsToDraw = data.length;
+
+      var pts = [];
+      for (var i = 0; i < pointsToDraw; i++) {
+        pts.push({ x: xPos(data[i].time), y: yPos(data[i].pnl) });
+      }
+
+      // Color based on gain/loss from start
+      var finalPnl = data[pointsToDraw - 1].pnl;
+      var lineColor = finalPnl >= initialPnl ? '#4a9e6a' : '#c44040';
+      var glowColor = finalPnl >= initialPnl ? 'rgba(74, 158, 106, 0.3)' : 'rgba(196, 64, 64, 0.3)';
+      var gradTop = finalPnl >= initialPnl ? 'rgba(74, 158, 106, 0.15)' : 'rgba(196, 64, 64, 0.15)';
+      var gradBot = finalPnl >= initialPnl ? 'rgba(74, 158, 106, 0.0)' : 'rgba(196, 64, 64, 0.0)';
+
+      // Glow + line
+      ctx.save();
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length; i++) {
+        var cpx = (pts[i - 1].x + pts[i].x) / 2;
+        ctx.bezierCurveTo(cpx, pts[i - 1].y, cpx, pts[i].y, pts[i].x, pts[i].y);
+      }
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+
+      // Fill gradient under line
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (var i = 1; i < pts.length; i++) {
+        var cpx = (pts[i - 1].x + pts[i].x) / 2;
+        ctx.bezierCurveTo(cpx, pts[i - 1].y, cpx, pts[i].y, pts[i].x, pts[i].y);
+      }
+      ctx.lineTo(pts[pts.length - 1].x, pad.top + ch);
+      ctx.lineTo(pts[0].x, pad.top + ch);
+      ctx.closePath();
+      var gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      gradient.addColorStop(0, gradTop);
+      gradient.addColorStop(1, gradBot);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Live dot at end
+      if (progress >= 1) {
+        var lastPt = pts[pts.length - 1];
+        ctx.beginPath();
+        ctx.arc(lastPt.x, lastPt.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(lastPt.x, lastPt.y, 7, 0, Math.PI * 2);
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.4;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    function handleChartHover(e) {
+      if (!chartCanvas || chartPoints.length < 1) return;
+      var rect = chartCanvas.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var w = rect.width;
+      var pad = { left: 60, right: 20 };
+      var cw = w - pad.left - pad.right;
+
+      var data = chartPoints.length === 1 ? [chartPoints[0], { time: Date.now(), pnl: chartPoints[0].pnl }] : chartPoints;
+      var ratio = (mx - pad.left) / cw;
+      var idx = Math.round(ratio * (data.length - 1));
+      if (idx < 0 || idx >= data.length) return;
+
+      var d = data[idx];
+      var tt = document.getElementById('chart-tooltip');
+      if (!tt) return;
+
+      var elapsed = Math.floor((d.time - chartStartTime) / 1000);
+      var mins = Math.floor(elapsed / 60);
+      var secs = elapsed % 60;
+      var timeLabel = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+
+      tt.style.display = 'block';
+      tt.querySelector('.tt-time').textContent = '+' + timeLabel;
+      tt.querySelector('.tt-val').textContent = d.pnl.toFixed(4) + ' SOL';
+      tt.querySelector('.tt-val').style.color = d.pnl >= initialPnl ? '#4a9e6a' : '#c44040';
+
+      var tx = e.clientX - rect.left + 16;
+      if (tx + 140 > w) tx = e.clientX - rect.left - 150;
+      tt.style.left = tx + 'px';
+      tt.style.top = (e.clientY - rect.top - 40) + 'px';
+    }
+
+    // Initial load
+    loadProfile(false);
+
+    // Poll every 30s
+    setInterval(function() { loadProfile(true); }, 30000);
+
+  })();
+  </script>
+</body>
+</html>

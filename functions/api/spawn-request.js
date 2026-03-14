@@ -24,7 +24,7 @@ export async function onRequest(context) {
   }
 
   // Max 5 children per agent
-  const childCount = await db.prepare('SELECT COUNT(*) as cnt FROM agents WHERE parent_id = ?').bind(parent_id).first();
+  const childCount = await db.prepare("SELECT COUNT(*) as cnt FROM agents WHERE parent_id = ? AND status != 'dead'").bind(parent_id).first();
   if ((childCount?.cnt || 0) >= 5) {
     return Response.json({ error: 'Max reproductions reached (5/5)' }, { status: 400 });
   }

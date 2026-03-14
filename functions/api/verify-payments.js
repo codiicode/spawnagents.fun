@@ -203,7 +203,7 @@ export async function onRequest(context) {
         ).bind(ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta, pr.agent_id).run();
       } else {
         await db.prepare(
-          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?)"
+          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, name, meta, pnl_mode) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, ?, ?, 'trades')"
         ).bind(pr.agent_id, ownerWallet, keypair.publicKey, JSON.stringify(dna), tradingCapital, agentName, agentMeta).run();
       }
 
@@ -279,7 +279,7 @@ export async function onRequest(context) {
         ).bind(pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital, pf.agent_id).run();
       } else {
         await db.prepare(
-          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?)"
+          "INSERT INTO agents (id, parent_id, generation, owner_wallet, agent_wallet, dna, status, initial_capital, pnl_mode) VALUES (?, NULL, 0, ?, ?, ?, 'alive', ?, 'trades')"
         ).bind(pf.agent_id, pf.buyer_wallet, agentPubkey, JSON.stringify(dna), tradingCapital).run();
       }
 

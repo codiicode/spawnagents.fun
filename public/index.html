@@ -507,6 +507,90 @@
 
     .footer-links { display: flex; gap: 20px; }
 
+    /* === LEADERBOARD === */
+    .lb-section {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: clamp(40px, 6vw, 60px) clamp(20px, 4vw, 48px);
+    }
+    .lb-title {
+      font-family: var(--font-display);
+      font-size: 17px;
+      font-weight: 500;
+      color: var(--text);
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+    .lb-list {
+      border: 1px solid var(--border);
+    }
+    .lb-item {
+      display: grid;
+      grid-template-columns: 32px 1fr auto auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      transition: background 0.2s;
+    }
+    .lb-item:last-child { border-bottom: none; }
+    .lb-item:hover { background: var(--surface-hover); }
+    .lb-item.lb-top { background: var(--surface); }
+    .lb-rank {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+    .lb-top .lb-rank { color: var(--blood); font-weight: 600; }
+    .lb-name {
+      color: var(--text);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .lb-trades {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: right;
+    }
+    .lb-pnl {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      text-align: right;
+      min-width: 80px;
+    }
+    .lb-pnl.positive { color: var(--green); }
+    .lb-pnl.negative { color: var(--red); }
+    .lb-empty {
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 20px 16px;
+    }
+    .lb-filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lb-filter {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .lb-filter:hover { color: var(--text); border-color: var(--border-strong); }
+    .lb-filter.active { color: var(--blood); border-color: var(--blood); background: var(--surface); }
+
     /* === LIVE ACTIVITY === */
     .activity-section {
       max-width: 900px;
@@ -958,6 +1042,19 @@
   </div>
 </div>
 
+<!-- LEADERBOARD -->
+<hr class="section-divider">
+<div class="lb-section">
+  <div class="lb-title">Leaderboard</div>
+  <div class="lb-filters">
+    <button class="lb-filter active" data-period="all" onclick="setLbPeriod('all')">All Time</button>
+    <button class="lb-filter" data-period="24h" onclick="setLbPeriod('24h')">24 Hours</button>
+  </div>
+  <div class="lb-list" id="leaderboardList">
+    <div class="lb-empty">Loading...</div>
+  </div>
+</div>
+
 <!-- LIVE ACTIVITY -->
 <hr class="section-divider">
 <div style="position:relative;overflow:hidden;height:80px;">
@@ -1004,6 +1101,37 @@
     }
   } catch {}
 })();
+
+// === LEADERBOARD ===
+let lbPeriod = 'all';
+async function loadLeaderboard() {
+  try {
+    const r = await fetch('/api/leaderboard?period=' + lbPeriod);
+    if (!r.ok) return;
+    const d = await r.json();
+    const list = document.getElementById('leaderboardList');
+    if (!d.leaderboard?.length) { list.innerHTML = '<div class="lb-empty">No agents competing yet...</div>'; return; }
+    const top10 = d.leaderboard.slice(0, 10);
+    list.innerHTML = top10.map((a, i) => {
+      const pnl = a.total_pnl || 0;
+      const cls = pnl >= 0 ? 'positive' : 'negative';
+      const sign = pnl >= 0 ? '+' : '';
+      return `<a href="/agent.html?id=${a.id}" class="lb-item${i === 0 ? ' lb-top' : ''}" style="text-decoration:none;color:inherit;cursor:pointer">
+        <div class="lb-rank">#${i + 1}</div>
+        <div class="lb-name">${a.name || a.id}</div>
+        <div class="lb-trades">${(a.total_trades || 0).toLocaleString()} trades</div>
+        <div class="lb-pnl ${cls}">${sign}${pnl.toFixed(2)} SOL</div>
+      </a>`;
+    }).join('');
+  } catch {}
+}
+function setLbPeriod(p) {
+  lbPeriod = p;
+  document.querySelectorAll('.lb-filter').forEach(b => b.classList.toggle('active', b.dataset.period === p));
+  loadLeaderboard();
+}
+loadLeaderboard();
+setInterval(loadLeaderboard, 30000);
 
 // ============================================================
 // MOBILE MENU

@@ -47,12 +47,12 @@ export async function onRequest(context) {
 
     while (currentId && depth < maxGen && share > 0.002) {
       const parent = await db.prepare(
-        "SELECT id, parent_id, owner_wallet, status FROM agents WHERE id = ?"
+        "SELECT id, parent_id, owner_wallet, agent_wallet, status FROM agents WHERE id = ?"
       ).bind(currentId).first();
       if (!parent || !parent.owner_wallet) break;
 
       const TREASURY = '4EtGKSvtteZNafiYTnxRggjMsmazCY5iZEikqTbGgmAc';
-      const destination = parent.status === 'dead' ? TREASURY : parent.owner_wallet;
+      const destination = parent.status === 'dead' ? TREASURY : parent.agent_wallet;
 
       // If no grandparent (or last in chain), give 100% of remaining share
       const hasNextAncestor = parent.parent_id && depth + 1 < maxGen;
@@ -69,8 +69,21 @@ export async function onRequest(context) {
             "INSERT INTO events (type, agent_id, data) VALUES ('royalty', ?, ?)"
           ).bind(agent.id, JSON.stringify({
             from: agent.id, to: parent.id, to_wallet: destination,
-            amount: payout, depth: depth + 1, tx,
+            amount: payout, depth: depth + 1, tx, direction: 'paid',
           })),
+          // Log event for the RECEIVING agent too
+          db.prepare(
+            "INSERT INTO events (type, agent_id, data) VALUES ('royalty', ?, ?)"
+          ).bind(parent.id, JSON.stringify({
+            from: agent.id, to: parent.id, to_wallet: destination,
+            amount: payout, depth: depth + 1, tx, direction: 'received',
+          })),
+          db.prepare(
+            "UPDATE agents SET total_royalties_paid = total_royalties_paid + ? WHERE id = ?"
+          ).bind(payout, agent.id),
+          db.prepare(
+            "UPDATE agents SET total_royalties_received = total_royalties_received + ? WHERE id = ?"
+          ).bind(payout, parent.id),
         ]);
         results.push({ from: agent.id, to: parent.id, amount: payout, tx });
         totalPaid += payout;
